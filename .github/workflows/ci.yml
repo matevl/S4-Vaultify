@@ -1,0 +1,35 @@
+name: Rust CI
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+
+    - name: Install dependencies
+      run: rustup target add x86_64-unknown-linux-gnu
+
+    - name: Check formatting
+      run: cargo fmt -- --check
+
+    - name: Build project
+      run: cargo build --release
+
+    - name: Run tests
+      run: cargo test
