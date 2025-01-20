@@ -32,7 +32,7 @@ jobs:
             javascriptcoregtk-4.1-dev \
             libsoup-3.0-dev \
             webkit2gtk-4.1-dev \
-            pkg-config --libs --cflags libxdo
+            libxdo3
 
       - name: Set PKG_CONFIG_PATH
         run: |
