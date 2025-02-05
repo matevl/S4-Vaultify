@@ -26,3 +26,4 @@ pub fn save_binary(contents: &[u8]) {
 
     file.write_all(contents).unwrap();
 }
+
