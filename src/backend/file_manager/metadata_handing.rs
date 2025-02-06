@@ -5,44 +5,44 @@ use std::path::Path;
 #[derive(Debug)]
 pub enum FType {
     // Image
-    Jpg,    // image/jpeg
-    Png,    // image/png
-    Gif,    // image/gif
-    Webp,   // image/webp
-    Cr2,    // image/x-canon-cr2
-    Tif,    // image/tiff
-    Bmp,    // image/bmp
-    Heif,   // image/heif
-    Avif,   // image/avif
-    Jxr,    // image/vnd.ms-photo
-    Psd,    // image/vnd.adobe.photoshop
-    Ico,    // image/vnd.microsoft.icon
-    Ora,    // image/openraster
-    Djvu,   // image/vnd.djvu
+    Jpg,  // image/jpeg
+    Png,  // image/png
+    Gif,  // image/gif
+    Webp, // image/webp
+    Cr2,  // image/x-canon-cr2
+    Tif,  // image/tiff
+    Bmp,  // image/bmp
+    Heif, // image/heif
+    Avif, // image/avif
+    Jxr,  // image/vnd.ms-photo
+    Psd,  // image/vnd.adobe.photoshop
+    Ico,  // image/vnd.microsoft.icon
+    Ora,  // image/openraster
+    Djvu, // image/vnd.djvu
 
     // Vidéo
-    Mp4,    // video/mp4
-    M4v,    // video/x-m4v
-    Mkv,    // video/x-matroska
-    Webm,   // video/webm
-    Mov,    // video/quicktime
-    Avi,    // video/x-msvideo
-    Wmv,    // video/x-ms-wmv
-    Mpg,    // video/mpeg
-    Flv,    // video/x-flv
+    Mp4,  // video/mp4
+    M4v,  // video/x-m4v
+    Mkv,  // video/x-matroska
+    Webm, // video/webm
+    Mov,  // video/quicktime
+    Avi,  // video/x-msvideo
+    Wmv,  // video/x-ms-wmv
+    Mpg,  // video/mpeg
+    Flv,  // video/x-flv
 
     // Audio
-    Mid,    // audio/midi
-    Mp3,    // audio/mpeg
-    M4a,    // audio/m4a
-    Ogg,    // audio/ogg
-    Flac,   // audio/x-flac
-    Wav,    // audio/x-wav
-    Amr,    // audio/amr
-    Aac,    // audio/aac
-    Aiff,   // audio/x-aiff
-    Dsf,    // audio/x-dsf
-    Ape,    // audio/x-ape
+    Mid,  // audio/midi
+    Mp3,  // audio/mpeg
+    M4a,  // audio/m4a
+    Ogg,  // audio/ogg
+    Flac, // audio/x-flac
+    Wav,  // audio/x-wav
+    Amr,  // audio/amr
+    Aac,  // audio/aac
+    Aiff, // audio/x-aiff
+    Dsf,  // audio/x-dsf
+    Ape,  // audio/x-ape
 
     // Archive
     Epub,   // application/epub+zip
@@ -76,37 +76,37 @@ pub enum FType {
     Par2,   // application/x-par2
 
     // Book
-    Mobi,   // application/x-mobipocket-ebook
+    Mobi, // application/x-mobipocket-ebook
 
     // Documents
-    Doc,    // application/msword
-    Docx,   // application/vnd.openxmlformats-officedocument.wordprocessingml.document
-    Xls,    // application/vnd.ms-excel
-    Xlsx,   // application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-    Ppt,    // application/vnd.ms-powerpoint
-    Pptx,   // application/vnd.openxmlformats-officedocument.presentationml.presentation
-    Odt,    // application/vnd.oasis.opendocument.text
-    Ods,    // application/vnd.oasis.opendocument.spreadsheet
-    Odp,    // application/vnd.oasis.opendocument.presentation
+    Doc,  // application/msword
+    Docx, // application/vnd.openxmlformats-officedocument.wordprocessingml.document
+    Xls,  // application/vnd.ms-excel
+    Xlsx, // application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+    Ppt,  // application/vnd.ms-powerpoint
+    Pptx, // application/vnd.openxmlformats-officedocument.presentationml.presentation
+    Odt,  // application/vnd.oasis.opendocument.text
+    Ods,  // application/vnd.oasis.opendocument.spreadsheet
+    Odp,  // application/vnd.oasis.opendocument.presentation
 
     // Font
-    Woff,   // application/font-woff
-    Woff2,  // application/font-woff
-    Ttf,    // application/font-sfnt
-    Otf,    // application/font-sfnt
+    Woff,  // application/font-woff
+    Woff2, // application/font-woff
+    Ttf,   // application/font-sfnt
+    Otf,   // application/font-sfnt
 
     // Application
-    Wasm,   // application/wasm
-    Exe,    // application/vnd.microsoft.portable-executable
-    Dll,    // application/vnd.microsoft.portable-executable
-    Elf,    // application/x-executable
-    Bc,     // application/llvm
-    Mach,   // application/x-mach-binary
-    Class,  // application/java
-    Dex,    // application/vnd.android.dex
-    Dey,    // application/vnd.android.dey
-    Der,    // application/x-x509-ca-cert
-    Obj,    // application/x-executable
+    Wasm,  // application/wasm
+    Exe,   // application/vnd.microsoft.portable-executable
+    Dll,   // application/vnd.microsoft.portable-executable
+    Elf,   // application/x-executable
+    Bc,    // application/llvm
+    Mach,  // application/x-mach-binary
+    Class, // application/java
+    Dex,   // application/vnd.android.dex
+    Dey,   // application/vnd.android.dey
+    Der,   // application/x-x509-ca-cert
+    Obj,   // application/x-executable
     Unknown,
 }
 
@@ -118,9 +118,7 @@ fn read_initial_bytes<P: AsRef<Path>>(file_path: P, num_bytes: usize) -> io::Res
     Ok(buffer)
 }
 
-
 pub fn detect_type<P: AsRef<Path>>(file_path: P) -> FType {
-
     if let Ok(buffer) = read_initial_bytes(file_path, 16) {
         if let Some(kind) = infer::get(&buffer) {
             match kind.mime_type() {
@@ -200,11 +198,15 @@ pub fn detect_type<P: AsRef<Path>>(file_path: P) -> FType {
 
                 // Documents
                 "application/msword" => FType::Doc,
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => FType::Docx,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
+                    FType::Docx
+                }
                 "application/vnd.ms-excel" => FType::Xls,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => FType::Xlsx,
                 "application/vnd.ms-powerpoint" => FType::Ppt,
-                "application/vnd.openxmlformats-officedocument.presentationml.presentation" => FType::Pptx,
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation" => {
+                    FType::Pptx
+                }
                 "application/vnd.oasis.opendocument.text" => FType::Odt,
                 "application/vnd.oasis.opendocument.spreadsheet" => FType::Ods,
                 "application/vnd.oasis.opendocument.presentation" => FType::Odp,
@@ -232,7 +234,4 @@ pub fn detect_type<P: AsRef<Path>>(file_path: P) -> FType {
     } else {
         FType::Unknown
     }
-
-
 }
-
