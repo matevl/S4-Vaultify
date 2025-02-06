@@ -15,7 +15,11 @@ bcrypt = "0.12"
 rand = "0.9.0"
 =======
 rand = "0.8.5"
+<<<<<<< HEAD
 >>>>>>> 1855d9e (open file in bin + save + rand namegen for bin)
+=======
+infer = "0.3"
+>>>>>>> 2e05f3b (adding all types using infer lib)
 
 [features]
 default = ["desktop"]
