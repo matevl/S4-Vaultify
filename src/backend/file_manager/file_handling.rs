@@ -5,7 +5,7 @@ use std::path::Path;
 
 fn binary_namegen() -> String {
     let mut rng = rand::thread_rng();
-    let id:u32 = rng.gen();
+    let id: u32 = rng.gen();
     format!("bin_{}.v", id)
 }
 
@@ -23,6 +23,6 @@ fn save_binary(contents: &[u8]) {
             .join("binary_files")
             .join(format!("bin{}", binary_namegen())),
     )
-        .unwrap();
+    .unwrap();
     file.write_all(contents).unwrap();
 }
