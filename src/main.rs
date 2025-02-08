@@ -1,6 +1,8 @@
+use s4_vaultify::backend::file_manager::metadata_handing::{
+    detect_type, md_treatment, read_initial_bytes,
+};
 use std::env;
 use std::error::Error;
-use s4_vaultify::backend::file_manager::metadata_handing::{detect_type, md_treatment, read_initial_bytes};
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("DEBUG: Début de la fonction main.");
@@ -13,7 +15,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         //"/Users/lothaire/RustroverProjects/S4-Vaultify/test-files/file_example_JPG_100kB.jpg"
         //"/Users/lothaire/RustroverProjects/S4-Vaultify/test-files/file_example_TIFF_1MB.tiff"
         "/Users/lothaire/RustroverProjects/S4-Vaultify/test-files/sample1.heic"
-
     };
     println!("DEBUG: Chemin du fichier : {}", file_path);
 
