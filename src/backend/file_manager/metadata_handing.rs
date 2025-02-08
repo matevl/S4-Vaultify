@@ -112,7 +112,7 @@ pub enum FType {
 
 pub fn process_file<P: AsRef<Path>>(file_path: P) -> io::Result<()> {
     let buffer = read_initial_bytes(&file_path, 16000)?;
-    let file_type =detect_type(&buffer);
+    let file_type = detect_type(&buffer);
     md_treatment(&buffer, file_type);
 
     Ok(())
@@ -125,131 +125,133 @@ pub fn read_initial_bytes<P: AsRef<Path>>(file_path: P, num_bytes: usize) -> io:
     Ok(buffer)
 }
 
-pub fn detect_type(buffer:&Vec<u8>) -> FType {
-        if let Some(kind) = infer::get(buffer) {
-            match kind.mime_type() {
-                // Image
-                "image/jpeg" => FType::Jpg,
-                "image/png" => FType::Png,
-                "image/gif" => FType::Gif,
-                "image/webp" => FType::Webp,
-                "image/x-canon-cr2" => FType::Cr2,
-                "image/tiff" => FType::Tif,
-                "image/bmp" => FType::Bmp,
-                "image/heif" => FType::Heif,
-                "image/avif" => FType::Avif,
-                "image/vnd.ms-photo" => FType::Jxr,
-                "image/vnd.adobe.photoshop" => FType::Psd,
-                "image/vnd.microsoft.icon" => FType::Ico,
-                "image/openraster" => FType::Ora,
-                "image/vnd.djvu" => FType::Djvu,
+pub fn detect_type(buffer: &Vec<u8>) -> FType {
+    if let Some(kind) = infer::get(buffer) {
+        match kind.mime_type() {
+            // Image
+            "image/jpeg" => FType::Jpg,
+            "image/png" => FType::Png,
+            "image/gif" => FType::Gif,
+            "image/webp" => FType::Webp,
+            "image/x-canon-cr2" => FType::Cr2,
+            "image/tiff" => FType::Tif,
+            "image/bmp" => FType::Bmp,
+            "image/heif" => FType::Heif,
+            "image/avif" => FType::Avif,
+            "image/vnd.ms-photo" => FType::Jxr,
+            "image/vnd.adobe.photoshop" => FType::Psd,
+            "image/vnd.microsoft.icon" => FType::Ico,
+            "image/openraster" => FType::Ora,
+            "image/vnd.djvu" => FType::Djvu,
 
-                // Vidéo
-                "video/mp4" => FType::Mp4,
-                "video/x-m4v" => FType::M4v,
-                "video/x-matroska" => FType::Mkv,
-                "video/webm" => FType::Webm,
-                "video/quicktime" => FType::Mov,
-                "video/x-msvideo" => FType::Avi,
-                "video/x-ms-wmv" => FType::Wmv,
-                "video/mpeg" => FType::Mpg,
-                "video/x-flv" => FType::Flv,
+            // Vidéo
+            "video/mp4" => FType::Mp4,
+            "video/x-m4v" => FType::M4v,
+            "video/x-matroska" => FType::Mkv,
+            "video/webm" => FType::Webm,
+            "video/quicktime" => FType::Mov,
+            "video/x-msvideo" => FType::Avi,
+            "video/x-ms-wmv" => FType::Wmv,
+            "video/mpeg" => FType::Mpg,
+            "video/x-flv" => FType::Flv,
 
-                // Audio
-                "audio/midi" => FType::Mid,
-                "audio/mpeg" => FType::Mp3,
-                "audio/m4a" => FType::M4a,
-                "audio/ogg" => FType::Ogg,
-                "audio/x-flac" => FType::Flac,
-                "audio/x-wav" => FType::Wav,
-                "audio/amr" => FType::Amr,
-                "audio/aac" => FType::Aac,
-                "audio/x-aiff" => FType::Aiff,
-                "audio/x-dsf" => FType::Dsf,
-                "audio/x-ape" => FType::Ape,
+            // Audio
+            "audio/midi" => FType::Mid,
+            "audio/mpeg" => FType::Mp3,
+            "audio/m4a" => FType::M4a,
+            "audio/ogg" => FType::Ogg,
+            "audio/x-flac" => FType::Flac,
+            "audio/x-wav" => FType::Wav,
+            "audio/amr" => FType::Amr,
+            "audio/aac" => FType::Aac,
+            "audio/x-aiff" => FType::Aiff,
+            "audio/x-dsf" => FType::Dsf,
+            "audio/x-ape" => FType::Ape,
 
-                // Archive
-                "application/epub+zip" => FType::Epub,
-                "application/zip" => FType::Zip,
-                "application/x-tar" => FType::Tar,
-                "application/vnd.rar" => FType::Rar,
-                "application/gzip" => FType::Gz,
-                "application/x-bzip2" => FType::Bz2,
-                "application/vnd.bzip3" => FType::Bz3,
-                "application/x-7z-compressed" => FType::SevenZ,
-                "application/x-xz" => FType::Xz,
-                "application/pdf" => FType::Pdf,
-                "application/x-shockwave-flash" => FType::Swf,
-                "application/rtf" => FType::Rtf,
-                "application/octet-stream" => FType::Eot,
-                "application/postscript" => FType::Ps,
-                "application/vnd.sqlite3" => FType::Sqlite,
-                "application/x-nintendo-nes-rom" => FType::Nes,
-                "application/x-google-chrome-extension" => FType::Crx,
-                "application/vnd.ms-cab-compressed" => FType::Cab,
-                "application/vnd.debian.binary-package" => FType::Deb,
-                "application/x-unix-archive" => FType::Ar,
-                "application/x-compress" => FType::Z,
-                "application/x-lzip" => FType::Lz,
-                "application/x-rpm" => FType::Rpm,
-                "application/dicom" => FType::Dcm,
-                "application/zstd" => FType::Zst,
-                "application/x-lz4" => FType::Lz4,
-                "application/x-ole-storage" => FType::Msi,
-                "application/x-cpio" => FType::Cpio,
-                "application/x-par2" => FType::Par2,
+            // Archive
+            "application/epub+zip" => FType::Epub,
+            "application/zip" => FType::Zip,
+            "application/x-tar" => FType::Tar,
+            "application/vnd.rar" => FType::Rar,
+            "application/gzip" => FType::Gz,
+            "application/x-bzip2" => FType::Bz2,
+            "application/vnd.bzip3" => FType::Bz3,
+            "application/x-7z-compressed" => FType::SevenZ,
+            "application/x-xz" => FType::Xz,
+            "application/pdf" => FType::Pdf,
+            "application/x-shockwave-flash" => FType::Swf,
+            "application/rtf" => FType::Rtf,
+            "application/octet-stream" => FType::Eot,
+            "application/postscript" => FType::Ps,
+            "application/vnd.sqlite3" => FType::Sqlite,
+            "application/x-nintendo-nes-rom" => FType::Nes,
+            "application/x-google-chrome-extension" => FType::Crx,
+            "application/vnd.ms-cab-compressed" => FType::Cab,
+            "application/vnd.debian.binary-package" => FType::Deb,
+            "application/x-unix-archive" => FType::Ar,
+            "application/x-compress" => FType::Z,
+            "application/x-lzip" => FType::Lz,
+            "application/x-rpm" => FType::Rpm,
+            "application/dicom" => FType::Dcm,
+            "application/zstd" => FType::Zst,
+            "application/x-lz4" => FType::Lz4,
+            "application/x-ole-storage" => FType::Msi,
+            "application/x-cpio" => FType::Cpio,
+            "application/x-par2" => FType::Par2,
 
-                // Book
-                "application/x-mobipocket-ebook" => FType::Mobi,
+            // Book
+            "application/x-mobipocket-ebook" => FType::Mobi,
 
-                // Documents
-                "application/msword" => FType::Doc,
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
-                    FType::Docx
-                }
-                "application/vnd.ms-excel" => FType::Xls,
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => FType::Xlsx,
-                "application/vnd.ms-powerpoint" => FType::Ppt,
-                "application/vnd.openxmlformats-officedocument.presentationml.presentation" => {
-                    FType::Pptx
-                }
-                "application/vnd.oasis.opendocument.text" => FType::Odt,
-                "application/vnd.oasis.opendocument.spreadsheet" => FType::Ods,
-                "application/vnd.oasis.opendocument.presentation" => FType::Odp,
-
-                // Font
-                "application/font-woff" => FType::Woff,
-                "application/font-woff2" => FType::Woff2,
-                "application/font-sfnt" => FType::Ttf,
-
-                // Application
-                "application/wasm" => FType::Wasm,
-                "application/vnd.microsoft.portable-executable" => FType::Exe,
-                "application/x-executable" => FType::Elf,
-                "application/llvm" => FType::Bc,
-                "application/x-mach-binary" => FType::Mach,
-                "application/java" => FType::Class,
-                "application/vnd.android.dex" => FType::Dex,
-                "application/vnd.android.dey" => FType::Dey,
-                "application/x-x509-ca-cert" => FType::Der,
-                _ => FType::Elf,
+            // Documents
+            "application/msword" => FType::Doc,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
+                FType::Docx
             }
-        } else {
-            FType::Unknown
+            "application/vnd.ms-excel" => FType::Xls,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => FType::Xlsx,
+            "application/vnd.ms-powerpoint" => FType::Ppt,
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation" => {
+                FType::Pptx
+            }
+            "application/vnd.oasis.opendocument.text" => FType::Odt,
+            "application/vnd.oasis.opendocument.spreadsheet" => FType::Ods,
+            "application/vnd.oasis.opendocument.presentation" => FType::Odp,
+
+            // Font
+            "application/font-woff" => FType::Woff,
+            "application/font-woff2" => FType::Woff2,
+            "application/font-sfnt" => FType::Ttf,
+
+            // Application
+            "application/wasm" => FType::Wasm,
+            "application/vnd.microsoft.portable-executable" => FType::Exe,
+            "application/x-executable" => FType::Elf,
+            "application/llvm" => FType::Bc,
+            "application/x-mach-binary" => FType::Mach,
+            "application/java" => FType::Class,
+            "application/vnd.android.dex" => FType::Dex,
+            "application/vnd.android.dey" => FType::Dey,
+            "application/x-x509-ca-cert" => FType::Der,
+            _ => FType::Elf,
         }
+    } else {
+        FType::Unknown
+    }
 }
 
-
-pub fn md_treatment (buffer:&Vec<u8>, ext: FType)-> Result<(), Box<dyn std::error::Error>> {
-    if matches!(ext, FType::Tif | FType::Jpg | FType::Heif | FType::Png){
-            let exifreader = exif::Reader::new();
-            let mut cursor = Cursor::new(buffer);
-            let exif = exifreader.read_from_container(&mut cursor)?;
-            for f in exif.fields() {
-                println!("{} {} {}",
-                         f.tag, f.ifd_num, f.display_value().with_unit(&exif));
-            }
+pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::error::Error>> {
+    if matches!(ext, FType::Tif | FType::Jpg | FType::Heif | FType::Png) {
+        let exifreader = exif::Reader::new();
+        let mut cursor = Cursor::new(buffer);
+        let exif = exifreader.read_from_container(&mut cursor)?;
+        for f in exif.fields() {
+            println!(
+                "{} {} {}",
+                f.tag,
+                f.ifd_num,
+                f.display_value().with_unit(&exif)
+            );
         }
-    Ok(())
     }
-
+    Ok(())
+}
