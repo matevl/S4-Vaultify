@@ -8,8 +8,9 @@ edition = "2021"
 
 [dependencies]
 dioxus = { version = "0.6.0", features = [] }
-rand = "0.8.5"
-infer = "0.3"
+rand = "0.9"
+infer = "0.19"
+kamadak-exif = "0.6.1"
 
 [features]
 default = ["desktop"]

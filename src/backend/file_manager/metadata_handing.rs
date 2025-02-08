@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{self, Read};
+use std::io::{self, Cursor, Read};
 use std::path::Path;
 
 #[derive(Debug)]
@@ -110,7 +110,14 @@ pub enum FType {
     Unknown,
 }
 
-fn read_initial_bytes<P: AsRef<Path>>(file_path: P, num_bytes: usize) -> io::Result<Vec<u8>> {
+pub fn process_file<P: AsRef<Path>>(file_path: P) -> io::Result<()> {
+    let buffer = read_initial_bytes(&file_path, 16000)?;
+    let file_type =detect_type(&buffer);
+    md_treatment(&buffer, file_type);
+
+    Ok(())
+}
+pub fn read_initial_bytes<P: AsRef<Path>>(file_path: P, num_bytes: usize) -> io::Result<Vec<u8>> {
     let mut file = File::open(file_path)?;
     let mut buffer = vec![0; num_bytes];
     let useful_bytes = file.read(&mut buffer)?;
@@ -118,9 +125,8 @@ fn read_initial_bytes<P: AsRef<Path>>(file_path: P, num_bytes: usize) -> io::Res
     Ok(buffer)
 }
 
-pub fn detect_type<P: AsRef<Path>>(file_path: P) -> FType {
-    if let Ok(buffer) = read_initial_bytes(file_path, 16) {
-        if let Some(kind) = infer::get(&buffer) {
+pub fn detect_type(buffer:&Vec<u8>) -> FType {
+        if let Some(kind) = infer::get(buffer) {
             match kind.mime_type() {
                 // Image
                 "image/jpeg" => FType::Jpg,
@@ -231,7 +237,19 @@ pub fn detect_type<P: AsRef<Path>>(file_path: P) -> FType {
         } else {
             FType::Unknown
         }
-    } else {
-        FType::Unknown
-    }
 }
+
+
+pub fn md_treatment (buffer:&Vec<u8>, ext: FType)-> Result<(), Box<dyn std::error::Error>> {
+    if matches!(ext, FType::Tif | FType::Jpg | FType::Heif | FType::Png){
+            let exifreader = exif::Reader::new();
+            let mut cursor = Cursor::new(buffer);
+            let exif = exifreader.read_from_container(&mut cursor)?;
+            for f in exif.fields() {
+                println!("{} {} {}",
+                         f.tag, f.ifd_num, f.display_value().with_unit(&exif));
+            }
+        }
+    Ok(())
+    }
+
