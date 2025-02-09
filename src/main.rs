@@ -1,6 +1,4 @@
-use s4_vaultify::backend::file_manager::metadata_handing::{
-    detect_type, md_treatment, read_initial_bytes,
-};
+use s4_vaultify::backend::file_manager::metadata_handing::{detect_type, md_treatment, read_bytes};
 use std::env;
 use std::error::Error;
 
@@ -12,15 +10,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     let file_path = if args.len() > 1 {
         &args[1]
     } else {
-        //"/Users/lothaire/RustroverProjects/S4-Vaultify/test-files/file_example_JPG_100kB.jpg"
+        //"/Users/lothaire/RustroverProjects/S4-Vaultify/test-files/3198359_14_articlemedium_jnpobyrne_20210731_-2_1_.jpg"
         //"/Users/lothaire/RustroverProjects/S4-Vaultify/test-files/file_example_TIFF_1MB.tiff"
-        "/Users/lothaire/RustroverProjects/S4-Vaultify/test-files/sample1.heic"
+        //"/Users/lothaire/Document/photos/IMG_1204.HEIC"
+        //"/Users/lothaire/Desktop/vidéo-collée.png"
+        //"/Users/lothaire/Desktop/Enregistrement de l’écran 2024-10-13 à 15.41.25.mov"
+        "/Users/lothaire/RustroverProjects/S4-Vaultify/test-files/file_example_MP4_480_1_5MG.mp4"
     };
     println!("DEBUG: Chemin du fichier : {}", file_path);
 
     // Lecture des premiers octets du fichier.
     println!("DEBUG: Lecture des premiers octets du fichier.");
-    let buffer = read_initial_bytes(file_path, 16000000000000)?;
+    let buffer = read_bytes(file_path)?;
     println!("DEBUG: {} octets lus.", buffer.len());
 
     // Détection du type de fichier à partir du buffer.

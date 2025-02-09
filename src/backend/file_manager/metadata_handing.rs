@@ -1,6 +1,10 @@
+use crate::backend::file_manager::file_handling::open_file_binary;
+use exif::Reader;
+use ffmpeg_next;
 use std::fs::File;
-use std::io::{self, Cursor, Read};
+use std::io::{self, Cursor, Read, Write};
 use std::path::Path;
+use tempfile::NamedTempFile;
 
 #[derive(Debug)]
 pub enum FType {
@@ -110,19 +114,18 @@ pub enum FType {
     Unknown,
 }
 
-pub fn process_file<P: AsRef<Path>>(file_path: P) -> io::Result<()> {
-    let buffer = read_initial_bytes(&file_path, 16000)?;
+pub fn process_file<P: AsRef<Path>>(file_path: &Path) {
+    let buffer = open_file_binary(file_path);
     let file_type = detect_type(&buffer);
     md_treatment(&buffer, file_type);
-
-    Ok(())
 }
-pub fn read_initial_bytes<P: AsRef<Path>>(file_path: P, num_bytes: usize) -> io::Result<Vec<u8>> {
-    let mut file = File::open(file_path)?;
-    let mut buffer = vec![0; num_bytes];
-    let useful_bytes = file.read(&mut buffer)?;
-    buffer.truncate(useful_bytes);
-    Ok(buffer)
+pub fn read_bytes<P: AsRef<Path>>(file_path: P) -> io::Result<Vec<u8>> {
+    //initially was reading only 16 first byte to get the magic numbers
+    // but it turned out we needed to read everything to ensure md field finding
+    let mut file = File::open(file_path).unwrap();
+    let mut contents = Vec::new();
+    file.read_to_end(&mut contents).unwrap();
+    Ok(contents)
 }
 
 pub fn detect_type(buffer: &Vec<u8>) -> FType {
@@ -240,18 +243,58 @@ pub fn detect_type(buffer: &Vec<u8>) -> FType {
 }
 
 pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::error::Error>> {
-    if matches!(ext, FType::Tif | FType::Jpg | FType::Heif | FType::Png) {
-        let exifreader = exif::Reader::new();
-        let mut cursor = Cursor::new(buffer);
-        let exif = exifreader.read_from_container(&mut cursor)?;
-        for f in exif.fields() {
-            println!(
-                "{} {} {}",
-                f.tag,
-                f.ifd_num,
-                f.display_value().with_unit(&exif)
-            );
+    match ext {
+        FType::Tif | FType::Jpg | FType::Heif | FType::Png => {
+            //We can read those format if the md field is not broken
+            let exifreader = Reader::new();
+            let mut cursor = Cursor::new(&buffer);
+            let exif = exifreader.read_from_container(&mut cursor)?;
+            //Debug
+            for f in exif.fields() {
+                println!(
+                    "{} {} {}",
+                    f.tag,
+                    f.ifd_num,
+                    f.display_value().with_unit(&exif)
+                );
+            }
         }
+
+        FType::Mp4
+        | FType::M4v
+        | FType::Mkv
+        | FType::Webm
+        | FType::Mov
+        | FType::Avi
+        | FType::Wmv
+        | FType::Mpg
+        | FType::Flv => {
+            //Works for mp4 and mov for sure
+            ffmpeg_next::init()?;
+
+            let mut temp_file = NamedTempFile::new()?;
+            temp_file.write_all(&buffer)?;
+            let temp_path = temp_file
+                .path()
+                .to_str()
+                .ok_or("Invalid temporary file path")?;
+
+            let mut ictx = ffmpeg_next::format::input(&temp_path)?;
+            //Debug
+            println!("Métadonnées du format:");
+            for (key, value) in ictx.metadata().iter() {
+                println!("  {}: {}", key, value);
+            }
+
+            for (index, stream) in ictx.streams().enumerate() {
+                println!("\nStream {}:", index);
+                println!("  Métadonnées:");
+                for (key, value) in stream.metadata().iter() {
+                    println!("    {}: {}", key, value);
+                }
+            }
+        }
+        _ => {}
     }
     Ok(())
 }
