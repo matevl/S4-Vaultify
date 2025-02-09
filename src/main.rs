@@ -15,7 +15,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         //"/Users/lothaire/Document/photos/IMG_1204.HEIC"
         //"/Users/lothaire/Desktop/vidéo-collée.png"
         //"/Users/lothaire/Desktop/Enregistrement de l’écran 2024-10-13 à 15.41.25.mov"
-        "/Users/lothaire/RustroverProjects/S4-Vaultify/test-files/file_example_MP4_480_1_5MG.mp4"
+        //"/Users/lothaire/RustroverProjects/S4-Vaultify/test-files/file_example_MP4_480_1_5MG.mp4"
+        "/Users/lothaire/RustroverProjects/S4-Vaultify/test-files/file_example_MP3_700KB.mp3"
     };
     println!("DEBUG: Chemin du fichier : {}", file_path);
 

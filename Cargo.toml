@@ -13,6 +13,7 @@ infer = "0.19"
 kamadak-exif = "0.6.1"
 ffmpeg-next = "7.1.0"
 tempfile = "3.16.0"
+lofty = "0.22.2"
 
 [features]
 default = ["desktop"]

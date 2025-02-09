@@ -5,6 +5,8 @@ use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
 use std::path::Path;
 use tempfile::NamedTempFile;
+use lofty::file::TaggedFileExt;
+use lofty::probe::Probe;
 
 #[derive(Debug)]
 pub enum FType {
@@ -294,6 +296,30 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::err
                 }
             }
         }
+        FType::Mid
+        | FType::Mp3
+        | FType::M4a
+        | FType::Ogg
+        | FType::Flac
+        | FType::Wav
+        | FType::Amr
+        | FType::Aac
+        | FType::Aiff
+        | FType::Dsf
+        | FType::Ape => {
+
+            let mut cursor = Cursor::new(&buffer);
+            let tagged_file = Probe::new(cursor).read()?;
+            // Get the primary tag (ID3v2 in this case) (doc)
+            let id3v2 = tagged_file.primary_tag();
+
+            // If the primary tag doesn't exist, or the tag types
+            // don't matter, the first tag can be retrieved (doc)
+            let unknown_first_tag = tagged_file.first_tag();
+
+
+    }
+
         _ => {}
     }
     Ok(())
