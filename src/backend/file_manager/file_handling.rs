@@ -9,7 +9,7 @@ fn binary_namegen() -> String {
     format!("bin_{}.v", id)
 }
 
-fn open_file_binary(path: &Path) -> Vec<u8> {
+pub fn open_file_binary(path: &Path) -> Vec<u8> {
     let mut file = File::open(path).unwrap();
     let mut contents = Vec::new();
     file.read_to_end(&mut contents).unwrap();

@@ -11,6 +11,8 @@ dioxus = { version = "0.6.0", features = [] }
 rand = "0.9"
 infer = "0.19"
 kamadak-exif = "0.6.1"
+ffmpeg-next = "7.1.0"
+tempfile = "3.16.0"
 
 [features]
 default = ["desktop"]
