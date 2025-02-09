@@ -1,4 +1,3 @@
-
 #[derive(PartialEq)]
 #[allow(dead_code)]
 pub enum ErrorType {
