@@ -23,15 +23,6 @@ impl UserInput {
     pub fn get_email(&self) -> &str {
         &self.email
     }
-
-    pub fn get_hash_password(&self, sel: u32) -> String {
-        let cost = if sel >= 4 && sel <= 31 {
-            sel
-        } else {
-            DEFAULT_COST
-        };
-        hash(&self.password, cost).expect("Failed to hash password")
-    }
 }
 
 /**
@@ -42,20 +33,16 @@ impl UserInput {
 struct UserData {
     hash_email: String,
     hash_pw: String,
-    salt_email: u32,
-    salt_pw: u32,
     permissions: Permissions,
 }
 
 impl UserData {
     fn new(email: String, password: String, permissions: Permissions) -> UserData {
-        let salt_email = rand::rng().random_range(4..=31);
-        let salt_pw = rand::rng().random_range(4..=31);
+        let cost_email = rand::rng().random_range(4..=31);
+        let cost_pw = rand::rng().random_range(4..=31);
         UserData {
-            hash_email: hash(&email, salt_email).expect("Failed to hash password"),
-            hash_pw: hash(&password, salt_pw).expect("Failed to hash password"),
-            salt_email,
-            salt_pw,
+            hash_email: hash(&email, cost_email).expect("Failed to hash password"),
+            hash_pw: hash(&password, cost_pw).expect("Failed to hash password"),
             permissions,
         }
     }
@@ -64,12 +51,6 @@ impl UserData {
     }
     fn get_hash_pw(&self) -> &str {
         &self.hash_pw
-    }
-    fn get_salt_email(&self) -> u32 {
-        self.salt_email
-    }
-    fn get_salt_pw(&self) -> u32 {
-        self.salt_pw
     }
     fn get_permissions(&self) -> &Permissions {
         &self.permissions
@@ -111,11 +92,7 @@ impl JWT {
     pub fn get_hash_pw(&self) -> &str {
         &self.user_data.hash_pw
     }
-
-    pub fn get_salt_email(&self) -> u32 {
-        self.user_data.get_salt_email()
-    }
-
+    
     pub fn get_exp(&self) -> usize {
         self.exp
     }
