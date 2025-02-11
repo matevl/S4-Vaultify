@@ -1,9 +1,10 @@
+use crate::error_manager::ErrorType;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub enum Permissions {
-    Reading,
-    Writing,
-    Admin,
+    Reading = 0,
+    Writing = 1,
+    Admin = 2,
 }
 
 pub struct User {
@@ -58,4 +59,12 @@ impl JWT {
             .as_secs() as usize;
         now > self.exp
     }
+
+    pub fn kill(&mut self) {
+        self.exp = 0;
+    }
+}
+
+pub fn local_log_in(user: &User) -> Result<JWT, Err()> {
+    Err(ErrorType::LoginError)
 }

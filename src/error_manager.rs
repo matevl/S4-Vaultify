@@ -3,6 +3,7 @@
 pub enum ErrorType {
     ArgumentError,
     TypeFilesError,
+    LoginError,
     ErrorTypeError, // If the error cached is not the one excepted
 }
 
@@ -11,6 +12,7 @@ impl core::fmt::Display for ErrorType {
         match self {
             ErrorType::ArgumentError => write!(f, "ArgumentError"),
             ErrorType::TypeFilesError => write!(f, "TypeFilesError"),
+            ErrorType::LoginError => write!(f, "LoginError"),
             ErrorType::ErrorTypeError => write!(f, "ErrorTypeError"),
         }
     }
