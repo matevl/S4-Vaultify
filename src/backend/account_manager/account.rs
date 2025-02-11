@@ -2,7 +2,6 @@ use crate::error_manager::ErrorType;
 use bcrypt::{hash, DEFAULT_COST};
 use rand::Rng;
 use serde_json::{Deserializer, Serializer};
-use std::io::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub enum Permissions {
@@ -50,8 +49,8 @@ struct UserData {
 
 impl UserData {
     fn new(email: String, password: String, permissions: Permissions) -> UserData {
-        let salt_email = rand::thread_rng().gen_range(4..=31);
-        let salt_pw = rand::thread_rng().gen_range(4..=31);
+        let salt_email = rand::rng().random_range(4..=31);
+        let salt_pw = rand::rng().random_range(4..=31);
         UserData {
             hash_email: hash(&email, salt_email).expect("Failed to hash password"),
             hash_pw: hash(&password, salt_pw).expect("Failed to hash password"),
@@ -82,7 +81,7 @@ impl UserData {
  * In case of error the validity of this token could be remove
  */
 
-struct JWT {
+pub struct JWT {
     email: String,
     user_data: UserData,
     exp: usize,
