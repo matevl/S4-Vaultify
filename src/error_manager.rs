@@ -23,3 +23,5 @@ impl core::fmt::Debug for ErrorType {
         write!(f, "{}", self)
     }
 }
+
+impl std::error::Error for ErrorType {}

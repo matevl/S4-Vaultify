@@ -1,8 +1,9 @@
 use crate::error_manager::ErrorType;
-use std::time::{SystemTime, UNIX_EPOCH};
-use serde_json::{Serializer, Deserializer};
 use bcrypt::{hash, DEFAULT_COST};
 use rand::Rng;
+use serde_json::{Deserializer, Serializer};
+use std::io::Error;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub enum Permissions {
     Reading = 0,
@@ -25,17 +26,26 @@ impl UserInput {
     }
 
     pub fn get_hash_password(&self, sel: u32) -> String {
-        let cost = if sel >= 4 && sel <= 31 { sel } else { DEFAULT_COST };
+        let cost = if sel >= 4 && sel <= 31 {
+            sel
+        } else {
+            DEFAULT_COST
+        };
         hash(&self.password, cost).expect("Failed to hash password")
     }
 }
+
+/**
+ * All the nada that related to a specific User
+ * If it matches with a user, it will be encapsulated by a JWT
+ */
 
 struct UserData {
     hash_email: String,
     hash_pw: String,
     salt_email: u32,
     salt_pw: u32,
-    permissions: Permissions
+    permissions: Permissions,
 }
 
 impl UserData {
@@ -43,16 +53,14 @@ impl UserData {
         let salt_email = rand::thread_rng().gen_range(4..=31);
         let salt_pw = rand::thread_rng().gen_range(4..=31);
         UserData {
-            hash_email: hash(&email, salt_email)
-                .expect("Failed to hash password"),
-            hash_pw: hash(&password, salt_pw)
-                .expect("Failed to hash password"),
+            hash_email: hash(&email, salt_email).expect("Failed to hash password"),
+            hash_pw: hash(&password, salt_pw).expect("Failed to hash password"),
             salt_email,
             salt_pw,
-            permissions
+            permissions,
         }
     }
-    fn get_hash_email(&self) ->  &str {
+    fn get_hash_email(&self) -> &str {
         &self.hash_email
     }
     fn get_hash_pw(&self) -> &str {
@@ -69,19 +77,22 @@ impl UserData {
     }
 }
 
+/**
+ * Encapsulation of UserData for logged Users
+ * In case of error the validity of this token could be remove
+ */
+
 struct JWT {
-    id: i32,
-    permissions: Permissions,
-    hash_pw : String,
+    email: String,
+    user_data: UserData,
     exp: usize,
 }
 
 impl JWT {
-    pub fn new(id: i32, permissions: Permissions, hash_pw: String) -> JWT {
+    pub fn new(user_data: UserData, email: String) -> JWT {
         JWT {
-            id,
-            permissions,
-            hash_pw,
+            email,
+            user_data,
             exp: {
                 (SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -91,15 +102,19 @@ impl JWT {
             },
         }
     }
-    pub fn get_id(&self) -> i32 {
-        self.id
+    pub fn get_email(&self) -> &str {
+        &self.email
     }
     pub fn get_permissions(&self) -> &Permissions {
-        &self.permissions
+        &self.user_data.permissions
     }
 
     pub fn get_hash_pw(&self) -> &str {
-        &self.hash_pw
+        &self.user_data.hash_pw
+    }
+
+    pub fn get_salt_email(&self) -> u32 {
+        self.user_data.get_salt_email()
     }
 
     pub fn get_exp(&self) -> usize {
@@ -119,8 +134,6 @@ impl JWT {
     }
 }
 
-pub fn local_log_in(user: &UserInput) -> Result<JWT, Err()> {
-
-    
-    Err(ErrorType::LoginError)
+pub fn local_log_in(user: &UserInput) -> Result<JWT, Box<dyn std::error::Error>> {
+    Err(Box::new(ErrorType::LoginError))
 }
