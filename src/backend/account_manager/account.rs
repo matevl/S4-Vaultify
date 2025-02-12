@@ -2,8 +2,7 @@ use crate::backend::USERS_DATA;
 use crate::error_manager::ErrorType;
 use bcrypt::hash;
 use rand::Rng;
-use serde::de::{EnumAccess, Error};
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Serialize};
 use std::io::Read;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -40,7 +39,7 @@ impl<'de> Deserialize<'de> for Perms {
             4 => Ok(Perms::Admin),
             2 => Ok(Perms::Write),
             1 => Ok(Perms::Read),
-            _ => Err(serde::de::Error::custom("Invalid perms")),
+            _ => Err(de::Error::custom("Invalid perms")),
         }
     }
 }
@@ -82,17 +81,17 @@ impl UserInput {
 struct UserData {
     hash_email: String,
     hash_pw: String,
-    permissions: Perms,
+    perms: Perms,
 }
 
 impl UserData {
-    fn new(email: String, password: String, permissions: Perms) -> UserData {
+    fn new(email: String, password: String, perms: Perms) -> UserData {
         let cost_email = rand::rng().random_range(4..=31);
         let cost_pw = rand::rng().random_range(4..=31);
         UserData {
             hash_email: hash(&email, cost_email).expect("Failed to hash password"),
             hash_pw: hash(&password, cost_pw).expect("Failed to hash password"),
-            permissions,
+            perms,
         }
     }
     fn get_hash_email(&self) -> &str {
@@ -102,11 +101,11 @@ impl UserData {
         &self.hash_pw
     }
     fn get_permissions(&self) -> &Perms {
-        &self.permissions
+        &self.perms
     }
 }
 
-impl<'de> Deserialize<'_> for UserData {
+impl<'de> Deserialize<'de> for UserData {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -115,24 +114,26 @@ impl<'de> Deserialize<'_> for UserData {
         let hash_email = map
             .get("hash_email")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| serde_json::Error::custom("Missing or invalid hash_email"))?
+            .ok_or_else(|| de::Error::custom("Missing or invalid hash_email"))?
             .to_string();
 
         let hash_pw = map
             .get("hash_pw")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| serde_json::Error::custom("Missing or invalid hash_pw"))?
+            .ok_or_else(|| de::Error::custom("Missing or invalid hash_pw"))?
             .to_string();
 
-        let permissions = map
-            .get("permissions")
-            .ok_or_else(|| serde_json::Error::custom("Missing permissions"))?
-            .deserialize::<Perms>()?;
+        let perms = map
+            .get("perms")
+            .ok_or_else(|| de::Error::custom("Missing permissions"))
+            .and_then(|v| {
+                serde_json::from_value(v.clone()).map_err(de::Error::custom)
+            })?;
 
         Ok(UserData {
             hash_email,
             hash_pw,
-            permissions,
+            perms,
         })
     }
 }
@@ -166,7 +167,7 @@ impl JWT {
         &self.email
     }
     pub fn get_permissions(&self) -> &Perms {
-        &self.user_data.permissions
+        &self.user_data.perms
     }
 
     pub fn get_hash_pw(&self) -> &str {
