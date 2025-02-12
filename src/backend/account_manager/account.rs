@@ -2,7 +2,8 @@ use crate::backend::USERS_DATA;
 use crate::error_manager::ErrorType;
 use bcrypt::hash;
 use rand::Rng;
-use serde::{de, Deserialize, Serialize};
+use serde::ser::SerializeStruct;
+use serde::{de, Deserialize, Serialize, Serializer};
 use std::io::Read;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -126,15 +127,27 @@ impl<'de> Deserialize<'de> for UserData {
         let perms = map
             .get("perms")
             .ok_or_else(|| de::Error::custom("Missing permissions"))
-            .and_then(|v| {
-                serde_json::from_value(v.clone()).map_err(de::Error::custom)
-            })?;
+            .and_then(|v| serde_json::from_value(v.clone()).map_err(de::Error::custom))?;
 
         Ok(UserData {
             hash_email,
             hash_pw,
             perms,
         })
+    }
+}
+
+impl Serialize for UserData {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("UserData", 3)?;
+        state.serialize_field("hash_email", &self.hash_email)?;
+        state.serialize_field("hash_pw", &self.hash_pw)?;
+        state.serialize_field("perms", &self.perms)?;
+
+        state.end()
     }
 }
 
@@ -201,7 +214,7 @@ pub fn load_users_data() -> Vec<UserData> {
 
     file.read_to_string(&mut contents)
         .expect("Unable to read file");
-    //serde_json::from_str(&contents).expect("Unable to parse JSON")
+    let res = serde_json::from_str(&contents).expect("Unable to parse JSON");
 
-    vec![]
+    res
 }
