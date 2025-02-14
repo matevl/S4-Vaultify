@@ -1,6 +1,6 @@
 use crate::backend::USERS_DATA;
 use crate::error_manager::ErrorType;
-use bcrypt::hash;
+use bcrypt::{hash, verify};
 use rand::Rng;
 use serde::ser::SerializeStruct;
 use serde::{de, Deserialize, Serialize, Serializer};
@@ -48,7 +48,7 @@ impl<'de> Deserialize<'de> for Perms {
 impl Serialize for Perms {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: Serializer,
     {
         let value: u8 = match self {
             Perms::Admin => 4,
@@ -103,6 +103,17 @@ impl UserData {
     }
     fn get_permissions(&self) -> &Perms {
         &self.perms
+    }
+}
+
+impl Clone for UserData {
+    fn clone(&self) -> UserData {
+        let perms = match &self.perms {
+            Perms::Admin => Perms::Admin,
+            Perms::Write => Perms::Write,
+            Perms::Read => Perms::Read,
+        };
+        UserData::new(self.hash_email.clone(), self.hash_pw.clone(), perms)
     }
 }
 
@@ -204,7 +215,22 @@ impl JWT {
     }
 }
 
-pub fn local_log_in(user: &UserInput) -> Result<JWT, Box<dyn std::error::Error>> {
+pub fn local_log_in(
+    user: &UserInput,
+    users_data: Vec<UserData>,
+) -> Result<JWT, Box<dyn std::error::Error>> {
+    for data in users_data {
+        match verify(&data.hash_email, &user.email) {
+            Ok(true) => match verify(&data.hash_pw, &user.password) {
+                Ok(true) => {
+                    return Ok(JWT::new(data.clone(), user.email.clone()));
+                }
+                _ => continue,
+            },
+            _ => continue,
+        }
+    }
+
     Err(Box::new(ErrorType::LoginError))
 }
 
