@@ -4,11 +4,11 @@ use bcrypt::{hash, verify};
 use rand::Rng;
 use serde::ser::SerializeStruct;
 use serde::{de, Deserialize, Serialize, Serializer};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
-enum Perms {
+pub enum Perms {
     Admin,
     Write,
     Read,
@@ -60,17 +60,13 @@ impl Serialize for Perms {
 }
 
 pub struct UserInput {
-    email: String,
-    password: String,
+    pub email: String,
+    pub password: String,
 }
 
 impl UserInput {
     pub fn new(email: String, password: String) -> UserInput {
         UserInput { email, password }
-    }
-
-    pub fn get_email(&self) -> &str {
-        &self.email
     }
 }
 
@@ -79,19 +75,19 @@ impl UserInput {
  * If it matches with a user, it will be encapsulated by a JWT
  */
 
-struct UserData {
+pub struct UserData {
     hash_email: String,
     hash_pw: String,
     perms: Perms,
 }
 
 impl UserData {
-    fn new(email: String, password: String, perms: Perms) -> UserData {
+    pub fn new(email: &String, password: &String, perms: Perms) -> UserData {
         let cost_email = rand::rng().random_range(4..=31);
         let cost_pw = rand::rng().random_range(4..=31);
         UserData {
-            hash_email: hash(&email, cost_email).expect("Failed to hash password"),
-            hash_pw: hash(&password, cost_pw).expect("Failed to hash password"),
+            hash_email: hash(&email.clone(), cost_email).expect("Failed to hash password"),
+            hash_pw: hash(&password.clone(), cost_pw).expect("Failed to hash password"),
             perms,
         }
     }
@@ -113,7 +109,7 @@ impl Clone for UserData {
             Perms::Write => Perms::Write,
             Perms::Read => Perms::Read,
         };
-        UserData::new(self.hash_email.clone(), self.hash_pw.clone(), perms)
+        UserData::new(&self.hash_email, &self.hash_pw, perms)
     }
 }
 
@@ -190,14 +186,9 @@ impl JWT {
     pub fn get_email(&self) -> &str {
         &self.email
     }
-    pub fn get_permissions(&self) -> &Perms {
-        &self.user_data.perms
+    pub fn get_data(&self) -> &UserData {
+        &self.user_data
     }
-
-    pub fn get_hash_pw(&self) -> &str {
-        &self.user_data.hash_pw
-    }
-
     pub fn get_exp(&self) -> usize {
         self.exp
     }
@@ -234,13 +225,27 @@ pub fn local_log_in(
     Err(Box::new(ErrorType::LoginError))
 }
 
-pub fn load_users_data() -> Vec<UserData> {
-    let mut file = std::fs::File::open(USERS_DATA).expect("Unable to open file");
+pub fn load_users_data(path: &str) -> Vec<UserData> {
+    let mut path = path.to_string();
+    path.push_str(USERS_DATA);
+
+    let mut file = std::fs::File::open(path).expect("Unable to open file");
     let mut contents = String::new();
 
     file.read_to_string(&mut contents)
         .expect("Unable to read file");
-    let res = serde_json::from_str(&contents).expect("Unable to parse JSON");
+    let users_data = serde_json::from_str(&contents).expect("Unable to parse JSON");
 
-    res
+    users_data
+}
+
+pub fn sava_users_data(users_data: &Vec<UserData>, path: &str) {
+    let mut path = path.to_string();
+    path.push_str(USERS_DATA);
+
+    let content = serde_json::to_string(users_data).expect("Unable to serialize user data");
+    let mut file = std::fs::File::open(path).expect("Unable to open file");
+
+    file.write_all(&content.as_bytes())
+        .expect("Unable to write file");
 }
