@@ -6,6 +6,7 @@ use serde::ser::SerializeStruct;
 use serde::{de, Deserialize, Serialize, Serializer};
 use std::io::{Read, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
+use s4_vaultify::error_manager::ErrorType;
 
 #[derive(Debug)]
 pub enum Perms {
