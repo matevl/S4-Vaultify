@@ -1,7 +1,7 @@
 use ring::pbkdf2;
 use ring::rand::{SystemRandom, SecureRandom};
-use data_encoding::HEXUPPER;
 use std::num::NonZeroU32;
+
 
 pub fn derive_key(password: &str, salt: &[u8], iterations: u32) -> Vec<u8> {
     let mut key = vec![0; 32]; // AES-256 requires a 32-byte key
@@ -18,6 +18,8 @@ pub fn derive_key(password: &str, salt: &[u8], iterations: u32) -> Vec<u8> {
     key
 }
 
+
 pub fn display_key_hex(key: &[u8]) {
-    println!("Clé AES-256 dérivée: {}", HEXUPPER.encode(key));
+    let hex_key: String = key.iter().map(|byte| format!("{:02X}", byte)).collect();
+    println!("Clé AES-256 dérivée: {}", hex_key);
 }
