@@ -91,13 +91,13 @@ impl UserData {
             perms,
         }
     }
-    fn get_hash_email(&self) -> &str {
+    pub fn get_hash_email(&self) -> &str {
         &self.hash_email
     }
-    fn get_hash_pw(&self) -> &str {
+    pub fn get_hash_pw(&self) -> &str {
         &self.hash_pw
     }
-    fn get_permissions(&self) -> &Perms {
+    pub fn get_permissions(&self) -> &Perms {
         &self.perms
     }
 }
