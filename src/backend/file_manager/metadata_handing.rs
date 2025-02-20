@@ -1,12 +1,17 @@
 use crate::backend::file_manager::file_handling::open_file_binary;
+use dioxus::prelude::ReadableVecExt;
 use exif::Reader;
 use ffmpeg_next;
 use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
 use std::path::Path;
+use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
+use symphonia::core::errors::Error;
+use symphonia::core::formats::FormatOptions;
+use symphonia::core::io::MediaSourceStream;
+use symphonia::core::meta::MetadataOptions;
+use symphonia::core::probe::Hint;
 use tempfile::NamedTempFile;
-use lofty::file::TaggedFileExt;
-use lofty::probe::Probe;
 
 #[derive(Debug)]
 pub enum FType {
@@ -119,14 +124,14 @@ pub enum FType {
 pub fn process_file<P: AsRef<Path>>(file_path: &Path) {
     let buffer = open_file_binary(file_path);
     let file_type = detect_type(&buffer);
-    md_treatment(&buffer, file_type);
+    md_treatment_buffer(&buffer, file_type);
 }
 pub fn read_bytes<P: AsRef<Path>>(file_path: P) -> io::Result<Vec<u8>> {
     //initially was reading only 16 first byte to get the magic numbers
     // but it turned out we needed to read everything to ensure md field finding
-    let mut file = File::open(file_path).unwrap();
+    let mut file = File::open(file_path)?;
     let mut contents = Vec::new();
-    file.read_to_end(&mut contents).unwrap();
+    file.read_to_end(&mut contents)?;
     Ok(contents)
 }
 
@@ -244,7 +249,7 @@ pub fn detect_type(buffer: &Vec<u8>) -> FType {
     }
 }
 
-pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::error::Error>> {
+pub fn md_treatment_buffer(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::error::Error>> {
     match ext {
         FType::Tif | FType::Jpg | FType::Heif | FType::Png => {
             //We can read those format if the md field is not broken
@@ -270,9 +275,21 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::err
         | FType::Avi
         | FType::Wmv
         | FType::Mpg
-        | FType::Flv => {
+        | FType::Flv
+        //FType::Mid not supported
+        | FType::Mp3
+        | FType::M4a
+        | FType::Ogg
+        | FType::Flac
+        | FType::Wav
+        //| FType::Amr not supported
+        | FType::Aac
+        | FType::Aiff
+        | FType::Dsf
+        | FType::Ape=> {
             //Works for mp4 and mov for sure
             ffmpeg_next::init()?;
+
 
             let mut temp_file = NamedTempFile::new()?;
             temp_file.write_all(&buffer)?;
@@ -281,8 +298,13 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::err
                 .to_str()
                 .ok_or("Invalid temporary file path")?;
 
-            let mut ictx = ffmpeg_next::format::input(&temp_path)?;
+            let  ictx = ffmpeg_next::format::input(&temp_path)?;
             //Debug
+
+            println!("Buffer length: {}", buffer.len());
+            println!("Temporary file path: {}", temp_path);
+
+
             println!("Métadonnées du format:");
             for (key, value) in ictx.metadata().iter() {
                 println!("  {}: {}", key, value);
@@ -296,29 +318,7 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::err
                 }
             }
         }
-        FType::Mid
-        | FType::Mp3
-        | FType::M4a
-        | FType::Ogg
-        | FType::Flac
-        | FType::Wav
-        | FType::Amr
-        | FType::Aac
-        | FType::Aiff
-        | FType::Dsf
-        | FType::Ape => {
 
-            let mut cursor = Cursor::new(&buffer);
-            let tagged_file = Probe::new(cursor).read()?;
-            // Get the primary tag (ID3v2 in this case) (doc)
-            let id3v2 = tagged_file.primary_tag();
-
-            // If the primary tag doesn't exist, or the tag types
-            // don't matter, the first tag can be retrieved (doc)
-            let unknown_first_tag = tagged_file.first_tag();
-
-
-    }
 
         _ => {}
     }
