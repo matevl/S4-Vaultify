@@ -76,13 +76,6 @@ pub fn TextEditor() -> Element {
             *show = true;
         }
 
-        // Masquer la notification après 3 secondes
-        let show_notification_clone_inner = Rc::clone(&show_notification_clone);
-        spawn_local(async move {
-            gloo_timers::future::TimeoutFuture(3000) ;// 3000 ms
-            let mut show = show_notification_clone_inner.borrow_mut();
-            *show = false;
-        });
     };
 
 
@@ -99,7 +92,7 @@ pub fn TextEditor() -> Element {
 
             // Zone de texte
             textarea {
-                style: "width: 50%; height: 20px; padding: 0.5rem; font-size: 1rem;",
+                style: "width: 50%; height: 20px; padding: 0.5rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 5px; resize: none;",
                 placeholder: "E-Mail",
                 value: "{input_email.borrow()}",
                 oninput: move |evt| {
@@ -121,7 +114,7 @@ pub fn TextEditor() -> Element {
 
 
             textarea {
-                style: "width: 50%; height: 20px; padding: 0.5rem; font-size: 1rem;",
+                style: "width: 50%; height: 20px; padding: 0.5rem; font-size: 1rem; border-radius: 5px; resize: none;",
                 placeholder: "Mot-de-passe",
                 value: "{input_email.borrow()}",
                 oninput: move |evt| {
