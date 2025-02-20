@@ -3,6 +3,12 @@ use crate::error_manager::ErrorType;
 use account_manager::account::*;
 use std::fs::{create_dir, exists, File};
 
+/**
+ * This function init a vault at a
+ * specific path and assign the given user
+ * as administrator
+ */
+
 pub fn init_vault(user: &JWT, path: &str) -> Result<(), Box<dyn std::error::Error>> {
     match { create_dir(&path) } {
         Err(_) => return Err(Box::new(ErrorType::ArgumentError)),
@@ -20,6 +26,12 @@ pub fn init_vault(user: &JWT, path: &str) -> Result<(), Box<dyn std::error::Erro
     Ok(())
 }
 
+/**
+ * This function load a vault using
+ * the users logged in Vaultify,
+ * and give the environment needed
+ * to work.
+ */
 pub fn load_vault(user: &JWT, path: &str) -> Result<VaultEnv, Box<dyn std::error::Error>> {
     match exists(path) {
         Ok(true) => {
@@ -35,6 +47,11 @@ pub fn load_vault(user: &JWT, path: &str) -> Result<VaultEnv, Box<dyn std::error
         _ => Err(Box::new(ErrorType::ArgumentError)),
     }
 }
+
+/**
+ * This function is uses to init the config directory
+ * (.vault)
+ */
 
 fn init_config_vault(path: &str) {
     let mut path_config_root = path.to_string().clone();
@@ -53,6 +70,7 @@ fn init_config_vault(path: &str) {
 
 /**
  * MAIN CONFIG OF THE SOFTWARE
+ * to be sure that it exist
  */
 fn init_config_vaultify() {
     match exists(VAULTIFY_CONFIG) {

@@ -11,6 +11,12 @@ const VAULT_USERS_DIR: &str = ".vault/users/";
 const USERS_DATA: &str = "users_data.json";
 const VAULTIFY_CONFIG: &str = "~/.vaultify/";
 
+/**
+ * This struct contained the env of the current vault.
+ * @users_data - All the users in the vault
+ * @vault_path - The path of the vault
+ * @logged_users - The current logged account
+ */
 pub struct VaultEnv {
     pub users_data: Vec<UserData>,
     pub vault_path: String,

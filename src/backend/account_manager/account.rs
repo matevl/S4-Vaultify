@@ -7,13 +7,17 @@ use serde::{de, Deserialize, Serialize, Serializer};
 use std::io::{Read, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/**
+ * This Enum is useful to handle
+ * permission verification
+ */
 #[derive(Debug)]
 pub enum Perms {
     Admin,
     Write,
     Read,
 }
-
+#[allow(dead_code)]
 impl Perms {
     fn can_read(&self) -> bool {
         matches!(self, Perms::Admin | Perms::Write | Perms::Read)
@@ -59,6 +63,9 @@ impl Serialize for Perms {
     }
 }
 
+/**
+ * Just an abstraction of input give on the GUI
+ */
 pub struct UserInput {
     pub email: String,
     pub password: String,
@@ -71,7 +78,7 @@ impl UserInput {
 }
 
 /**
- * All the nada that related to a specific User
+ * All the dada that are link to a specific User
  * If it matches with a user, it will be encapsulated by a JWT
  */
 
@@ -160,7 +167,7 @@ impl Serialize for UserData {
 
 /**
  * Encapsulation of UserData for logged Users
- * In case of error the validity of this token could be remove
+ * In case of error the validity of this token could be removed
  */
 
 pub struct JWT {
@@ -168,7 +175,7 @@ pub struct JWT {
     user_data: UserData,
     exp: usize,
 }
-
+#[allow(dead_code)]
 impl JWT {
     pub fn new(user_data: UserData, email: String) -> JWT {
         JWT {
