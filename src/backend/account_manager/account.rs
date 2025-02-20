@@ -7,7 +7,6 @@ use serde::{de, Deserialize, Serialize, Serializer};
 use std::io::{Read, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-
 #[derive(Debug)]
 pub enum Perms {
     Admin,
