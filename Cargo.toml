@@ -8,6 +8,12 @@ edition = "2021"
 
 [dependencies]
 dioxus = { version = "0.6.0", features = [] }
+web-sys = { version = "0.3.77", features = ["HtmlTextAreaElement","Window", "Blob", "Url", "Document","Navigator","Clipboard"] }
+js-sys = "0.3.77"
+wasm-bindgen = "0.2.100"
+regex = "1.11.1"
+wasm-bindgen-futures = "0.4.50"
+gloo-timers = { version = "0.3"}
 
 [features]
 default = ["desktop"]

@@ -1,7 +1,18 @@
 /* App-wide styling */
+.container {
+    display: flex;
+    flex-direction: column; /* Aligne les éléments verticalement */
+    gap: 10px; /* Espacement entre les éléments */
+    width: 300px;
+    margin: 0 auto;
+    background: #ffffff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
 body {
-    background-color: #0f1116;
-    color: #ffffff;
+    background-color: #021433;
+    color: #000000;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     margin: 20px;
 }
@@ -39,7 +50,7 @@ body {
 }
 
 #header {
-    max-width: 1200px;
+    max-width: 750px;
 }
 
 
