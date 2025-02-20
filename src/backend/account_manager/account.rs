@@ -206,6 +206,10 @@ impl JWT {
     }
 }
 
+/**
+ * Give the local JWT so it will be used for
+ */
+
 pub fn local_log_in(
     user: &UserInput,
     users_data: Vec<UserData>,
@@ -225,6 +229,33 @@ pub fn local_log_in(
     Err(Box::new(ErrorType::LoginError))
 }
 
+/**
+ * This function use the account Logged and
+ * generate and JWT if it is in the vault database
+ */
+
+pub fn log_to_vault(
+    local_jwt: &JWT,
+    users_data: &Vec<UserData>,
+) -> Result<JWT, Box<dyn std::error::Error>> {
+    for data in users_data {
+        match verify(&data.hash_email, &local_jwt.user_data.get_hash_email()) {
+            Ok(true) => match verify(&data.hash_pw, &local_jwt.user_data.get_hash_pw()) {
+                Ok(true) => {
+                    return Ok(JWT::new(data.clone(), local_jwt.email.clone()));
+                }
+                _ => continue,
+            },
+            _ => continue,
+        }
+    }
+
+    Err(Box::new(ErrorType::LoginError))
+}
+
+/**
+ * Could load data from local users or user in a vault
+ */
 pub fn load_users_data(path: &str) -> Vec<UserData> {
     let mut path = path.to_string();
     path.push_str(USERS_DATA);
@@ -239,6 +270,9 @@ pub fn load_users_data(path: &str) -> Vec<UserData> {
     users_data
 }
 
+/**
+ * Could save data from local users or user in a vault
+ */
 pub fn sava_users_data(users_data: &Vec<UserData>, path: &str) {
     let mut path = path.to_string();
     path.push_str(USERS_DATA);
