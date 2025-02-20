@@ -49,7 +49,7 @@ pub fn load_vault(user: &JWT, path: &str) -> Result<VaultEnv, Box<dyn std::error
 }
 
 /**
- * This function is uses to init the config directory
+ * This function is uses to init the config directory of a vault
  * (.vault)
  */
 
@@ -76,6 +76,17 @@ fn init_config_vaultify() {
     match exists(VAULTIFY_CONFIG) {
         Ok(true) => {}
         Ok(false) => create_dir(VAULTIFY_CONFIG).expect("Could not create folder"),
+        Err(_) => {
+            panic!("Could not find config file");
+        }
+    }
+    let mut path = VAULTIFY_CONFIG.to_string();
+    path.push_str(USERS_DATA);
+    match exists(&path) {
+        Ok(true) => {}
+        Ok(false) => {
+            File::create(&path).expect("Could not create folder");
+        }
         Err(_) => {
             panic!("Could not find config file");
         }

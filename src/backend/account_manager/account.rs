@@ -290,3 +290,26 @@ pub fn sava_users_data(users_data: &Vec<UserData>, path: &str) {
     file.write_all(&content.as_bytes())
         .expect("Unable to write file");
 }
+
+fn add_user_to_data(
+    user_input: UserInput,
+    users_data: &mut Vec<UserData>,
+    perms: Perms,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for data in users_data {
+        match verify(&user_input.email, &data.hash_email) {
+            Ok(true) => {
+                return Err(Box::new(ErrorType::ArgumentError));
+            }
+            _ => {}
+        }
+    }
+
+    users_data.add(UserData::new(
+        &user_input.email,
+        &user_input.password,
+        perms,
+    ));
+
+    Ok(())
+}
