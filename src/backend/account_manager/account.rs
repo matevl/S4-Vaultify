@@ -296,7 +296,7 @@ fn add_user_to_data(
     users_data: &mut Vec<UserData>,
     perms: Perms,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    for data in users_data {
+    for data in users_data.iter() {
         match verify(&user_input.email, &data.hash_email) {
             Ok(true) => {
                 return Err(Box::new(ErrorType::ArgumentError));
@@ -304,8 +304,7 @@ fn add_user_to_data(
             _ => {}
         }
     }
-
-    users_data.add(UserData::new(
+    users_data.push(UserData::new(
         &user_input.email,
         &user_input.password,
         perms,
