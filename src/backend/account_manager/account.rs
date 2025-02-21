@@ -7,13 +7,17 @@ use serde::{de, Deserialize, Serialize, Serializer};
 use std::io::{Read, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/**
+ * This Enum is useful to handle
+ * permission verification
+ */
 #[derive(Debug)]
 pub enum Perms {
     Admin,
     Write,
     Read,
 }
-
+#[allow(dead_code)]
 impl Perms {
     fn can_read(&self) -> bool {
         matches!(self, Perms::Admin | Perms::Write | Perms::Read)
@@ -59,6 +63,9 @@ impl Serialize for Perms {
     }
 }
 
+/**
+ * Just an abstraction of input give on the GUI
+ */
 pub struct UserInput {
     pub email: String,
     pub password: String,
@@ -71,7 +78,7 @@ impl UserInput {
 }
 
 /**
- * All the nada that related to a specific User
+ * All the dada that are link to a specific User
  * If it matches with a user, it will be encapsulated by a JWT
  */
 
@@ -160,7 +167,7 @@ impl Serialize for UserData {
 
 /**
  * Encapsulation of UserData for logged Users
- * In case of error the validity of this token could be remove
+ * In case of error the validity of this token could be removed
  */
 
 pub struct JWT {
@@ -168,7 +175,7 @@ pub struct JWT {
     user_data: UserData,
     exp: usize,
 }
-
+#[allow(dead_code)]
 impl JWT {
     pub fn new(user_data: UserData, email: String) -> JWT {
         JWT {
@@ -206,6 +213,10 @@ impl JWT {
     }
 }
 
+/**
+ * Give the local JWT so it will be used for
+ */
+
 pub fn local_log_in(
     user: &UserInput,
     users_data: Vec<UserData>,
@@ -225,6 +236,33 @@ pub fn local_log_in(
     Err(Box::new(ErrorType::LoginError))
 }
 
+/**
+ * This function use the account Logged and
+ * generate and JWT if it is in the vault database
+ */
+
+pub fn log_to_vault(
+    local_jwt: &JWT,
+    users_data: &Vec<UserData>,
+) -> Result<JWT, Box<dyn std::error::Error>> {
+    for data in users_data {
+        match verify(&data.hash_email, &local_jwt.user_data.get_hash_email()) {
+            Ok(true) => match verify(&data.hash_pw, &local_jwt.user_data.get_hash_pw()) {
+                Ok(true) => {
+                    return Ok(JWT::new(data.clone(), local_jwt.email.clone()));
+                }
+                _ => continue,
+            },
+            _ => continue,
+        }
+    }
+
+    Err(Box::new(ErrorType::LoginError))
+}
+
+/**
+ * Could load data from local users or user in a vault
+ */
 pub fn load_users_data(path: &str) -> Vec<UserData> {
     let mut path = path.to_string();
     path.push_str(USERS_DATA);
@@ -239,6 +277,9 @@ pub fn load_users_data(path: &str) -> Vec<UserData> {
     users_data
 }
 
+/**
+ * Could save data from local users or user in a vault
+ */
 pub fn sava_users_data(users_data: &Vec<UserData>, path: &str) {
     let mut path = path.to_string();
     path.push_str(USERS_DATA);
@@ -248,4 +289,26 @@ pub fn sava_users_data(users_data: &Vec<UserData>, path: &str) {
 
     file.write_all(&content.as_bytes())
         .expect("Unable to write file");
+}
+
+fn add_user_to_data(
+    user_input: UserInput,
+    users_data: &mut Vec<UserData>,
+    perms: Perms,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for data in users_data.iter() {
+        match verify(&user_input.email, &data.hash_email) {
+            Ok(true) => {
+                return Err(Box::new(ErrorType::ArgumentError));
+            }
+            _ => {}
+        }
+    }
+    users_data.push(UserData::new(
+        &user_input.email,
+        &user_input.password,
+        perms,
+    ));
+
+    Ok(())
 }
