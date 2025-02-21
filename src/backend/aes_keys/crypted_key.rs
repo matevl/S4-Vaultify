@@ -1,9 +1,11 @@
-use ring::pbkdf2;
-use sha2::{Digest, Sha256};
-use std::env;
-use std::fs;
-use std::num::NonZeroU32;
+// Importing the necessary libraries
+use ring::pbkdf2; // For password-based key derivation (PBKDF2)
+use sha2::{Digest, Sha256}; // For SHA256 hashing
+use std::env; // For accessing environment variables
+use std::fs; // For file management
+use std::num::NonZeroU32; // For working with non-zero integers
 
+// Definition of the S-Box used in AES for byte substitution
 const S_BOX: [u8; 256] = [
     0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76,
     0xCA, 0x82, 0xC9, 0x7D, 0xFA, 0x59, 0x47, 0xF0, 0xAD, 0xD4, 0xA2, 0xAF, 0x9C, 0xA4, 0x72, 0xC0,
@@ -23,6 +25,7 @@ const S_BOX: [u8; 256] = [
     0x8C, 0xA1, 0x89, 0x0D, 0xBF, 0xE6, 0x42, 0x68, 0x41, 0x99, 0x2D, 0x0F, 0xB0, 0x54, 0xBB, 0x16,
 ];
 
+// Definition of the RCON constants used in AES key expansion
 const RCON: [[u8; 4]; 7] = [
     [0x01, 0x00, 0x00, 0x00],
     [0x02, 0x00, 0x00, 0x00],
@@ -33,10 +36,12 @@ const RCON: [[u8; 4]; 7] = [
     [0x40, 0x00, 0x00, 0x00],
 ];
 
+// Function that performs a circular rotation on a word (an array of 4 bytes)
 pub fn rot_word(word: [u8; 4]) -> [u8; 4] {
     [word[1], word[2], word[3], word[0]]
 }
 
+// Function that applies the S-Box to each byte of a word
 pub fn sub_word(word: [u8; 4]) -> [u8; 4] {
     [
         S_BOX[word[0] as usize],
@@ -46,21 +51,26 @@ pub fn sub_word(word: [u8; 4]) -> [u8; 4] {
     ]
 }
 
+// Function that performs the XOR operation between two words
 pub fn xor_words(a: [u8; 4], b: [u8; 4]) -> [u8; 4] {
     [a[0] ^ b[0], a[1] ^ b[1], a[2] ^ b[2], a[3] ^ b[3]]
 }
 
+// AES-256 key expansion function (256-bit key)
+// Generates a vector of round keys as 4x4 matrices
 pub fn key_expansion(key: &[u8]) -> Vec<[[u8; 4]; 4]> {
-    const NK: usize = 8;
-    const NR: usize = 14;
-    const NB: usize = 4;
+    const NK: usize = 8;   // Number of words in the key (256 bits / 32 bits)
+    const NR: usize = 14;  // Number of rounds for AES-256
+    const NB: usize = 4;   // Number of columns in the state
     let total_words = NB * (NR + 1);
     let mut words: Vec<[u8; 4]> = Vec::with_capacity(total_words);
 
+    // Initialize the first words with the initial key
     for i in 0..NK {
         words.push([key[4 * i], key[4 * i + 1], key[4 * i + 2], key[4 * i + 3]]);
     }
 
+    // Expand the remaining words of the key
     for i in NK..total_words {
         let mut temp = words[i - 1];
         if i % NK == 0 {
@@ -74,6 +84,7 @@ pub fn key_expansion(key: &[u8]) -> Vec<[[u8; 4]; 4]> {
         words.push(word);
     }
 
+    // Transform the generated words into 4x4 matrices corresponding to round keys
     let mut round_keys: Vec<[[u8; 4]; 4]> = Vec::with_capacity(NR + 1);
     for round in 0..(NR + 1) {
         let mut round_key = [[0u8; 4]; 4];
@@ -87,6 +98,7 @@ pub fn key_expansion(key: &[u8]) -> Vec<[[u8; 4]; 4]> {
     round_keys
 }
 
+// Function that applies the SubBytes transformation on the state (byte substitution)
 pub fn sub_bytes(state: &mut [[u8; 4]; 4]) {
     for r in 0..4 {
         for c in 0..4 {
@@ -95,12 +107,14 @@ pub fn sub_bytes(state: &mut [[u8; 4]; 4]) {
     }
 }
 
+// Function that performs the ShiftRows transformation on the state (row shifting)
 pub fn shift_rows(state: &mut [[u8; 4]; 4]) {
-    state[1].rotate_left(1);
-    state[2].rotate_left(2);
-    state[3].rotate_left(3);
+    state[1].rotate_left(1); // Shift the second row one position to the left
+    state[2].rotate_left(2); // Shift the third row two positions to the left
+    state[3].rotate_left(3); // Shift the fourth row three positions to the left
 }
 
+// Function that multiplies a byte by 2 in GF(2^8)
 pub fn xtime(x: u8) -> u8 {
     if x & 0x80 != 0 {
         (x << 1) ^ 0x1b
@@ -109,6 +123,7 @@ pub fn xtime(x: u8) -> u8 {
     }
 }
 
+// Function that performs the MixColumns transformation on the state (mixing columns)
 pub fn mix_columns(state: &mut [[u8; 4]; 4]) {
     for c in 0..4 {
         let a0 = state[0][c];
@@ -128,6 +143,7 @@ pub fn mix_columns(state: &mut [[u8; 4]; 4]) {
     }
 }
 
+// Function that adds the round key to the state using XOR
 pub fn add_round_key(state: &mut [[u8; 4]; 4], round_key: &[[u8; 4]; 4]) {
     for r in 0..4 {
         for c in 0..4 {
@@ -136,6 +152,7 @@ pub fn add_round_key(state: &mut [[u8; 4]; 4], round_key: &[[u8; 4]; 4]) {
     }
 }
 
+// Function that converts a 16-byte block into a 4x4 state matrix
 pub fn block_to_state(block: &[u8]) -> [[u8; 4]; 4] {
     let mut state = [[0u8; 4]; 4];
     for i in 0..16 {
@@ -144,6 +161,7 @@ pub fn block_to_state(block: &[u8]) -> [[u8; 4]; 4] {
     state
 }
 
+// Function that converts a state (4x4 matrix) into a 16-byte block
 pub fn state_to_block(state: &[[u8; 4]; 4]) -> [u8; 16] {
     let mut block = [0u8; 16];
     for i in 0..16 {
@@ -152,19 +170,23 @@ pub fn state_to_block(state: &[[u8; 4]; 4]) -> [u8; 16] {
     block
 }
 
+// Function that encrypts a 16-byte block using the generated round keys
 pub fn encrypt_block(block: &[u8], round_keys: &Vec<[[u8; 4]; 4]>) -> [u8; 16] {
-    let nr = 14; // AES-256
+    let nr = 14; // Number of rounds for AES-256
     let mut state = block_to_state(block);
 
+    // First round: add the initial key
     add_round_key(&mut state, &round_keys[0]);
 
+    // Intermediate rounds
     for round in 1..nr {
-        sub_bytes(&mut state);
-        shift_rows(&mut state);
-        mix_columns(&mut state);
-        add_round_key(&mut state, &round_keys[round]);
+        sub_bytes(&mut state);     // Byte substitution
+        shift_rows(&mut state);      // Row shifting
+        mix_columns(&mut state);     // Column mixing
+        add_round_key(&mut state, &round_keys[round]); // Add the round key
     }
 
+    // Final round (without mix_columns)
     sub_bytes(&mut state);
     shift_rows(&mut state);
     add_round_key(&mut state, &round_keys[nr]);
@@ -172,6 +194,7 @@ pub fn encrypt_block(block: &[u8], round_keys: &Vec<[[u8; 4]; 4]>) -> [u8; 16] {
     state_to_block(&state)
 }
 
+// Function that adds PKCS#7 padding to a vector of bytes to reach the block size
 pub fn pkcs7_pad(data: &mut Vec<u8>, block_size: usize) {
     let pad_len = block_size - (data.len() % block_size);
     data.extend(std::iter::repeat(pad_len as u8).take(pad_len));

@@ -1,8 +1,11 @@
-use ring::pbkdf2;
-use sha2::{Digest, Sha256};
-use std::env;
-use std::fs;
-use std::num::NonZeroU32;
+// Importation des bibliothèques nécessaires
+use ring::pbkdf2; // Bibliothèque pour PBKDF2 (Password-Based Key Derivation Function 2)
+use sha2::{Digest, Sha256}; // Bibliothèque pour le hachage SHA256
+use std::env; // Pour accéder aux variables d'environnement
+use std::fs; // Pour la gestion des fichiers
+use std::num::NonZeroU32; // Pour les entiers non nuls
+
+// Définition de la S-Box utilisée dans AES
 const S_BOX: [u8; 256] = [
     0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76,
     0xCA, 0x82, 0xC9, 0x7D, 0xFA, 0x59, 0x47, 0xF0, 0xAD, 0xD4, 0xA2, 0xAF, 0x9C, 0xA4, 0x72, 0xC0,
@@ -22,6 +25,7 @@ const S_BOX: [u8; 256] = [
     0x8C, 0xA1, 0x89, 0x0D, 0xBF, 0xE6, 0x42, 0x68, 0x41, 0x99, 0x2D, 0x0F, 0xB0, 0x54, 0xBB, 0x16,
 ];
 
+// Définition de l'inverse de la S-Box utilisée pour la décryption
 const INV_S_BOX: [u8; 256] = [
     0x52, 0x09, 0x6A, 0xD5, 0x30, 0x36, 0xA5, 0x38, 0xBF, 0x40, 0xA3, 0x9E, 0x81, 0xF3, 0xD7, 0xFB,
     0x7C, 0xE3, 0x39, 0x82, 0x9B, 0x2F, 0xFF, 0x87, 0x34, 0x8E, 0x43, 0x44, 0xC4, 0xDE, 0xE9, 0xCB,
@@ -41,6 +45,7 @@ const INV_S_BOX: [u8; 256] = [
     0x17, 0x2B, 0x04, 0x7E, 0xBA, 0x77, 0xD6, 0x26, 0xE1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0C, 0x7D,
 ];
 
+// Définition des constantes RCON utilisées dans l'expansion de clé AES
 const RCON: [[u8; 4]; 7] = [
     [0x01, 0x00, 0x00, 0x00],
     [0x02, 0x00, 0x00, 0x00],
@@ -51,10 +56,12 @@ const RCON: [[u8; 4]; 7] = [
     [0x40, 0x00, 0x00, 0x00],
 ];
 
+// Fonction qui effectue une rotation circulaire d'un mot (tableau de 4 octets)
 pub fn rot_word(word: [u8; 4]) -> [u8; 4] {
     [word[1], word[2], word[3], word[0]]
 }
 
+// Fonction qui applique la S-Box à chaque octet d'un mot
 pub fn sub_word(word: [u8; 4]) -> [u8; 4] {
     [
         S_BOX[word[0] as usize],
@@ -64,21 +71,26 @@ pub fn sub_word(word: [u8; 4]) -> [u8; 4] {
     ]
 }
 
+// Fonction qui réalise l'opération XOR entre deux mots
 pub fn xor_words(a: [u8; 4], b: [u8; 4]) -> [u8; 4] {
     [a[0] ^ b[0], a[1] ^ b[1], a[2] ^ b[2], a[3] ^ b[3]]
 }
 
+// Fonction d'expansion de clé pour AES-256 (clé de 256 bits)
+// Renvoie un vecteur contenant les clés de ronde
 pub fn key_expansion(key: &[u8]) -> Vec<[[u8; 4]; 4]> {
-    const NK: usize = 8;
-    const NR: usize = 14;
-    const NB: usize = 4;
+    const NK: usize = 8;   // Nombre de mots dans la clé (256 bits / 32 bits par mot)
+    const NR: usize = 14;  // Nombre de rondes pour AES-256
+    const NB: usize = 4;   // Nombre de colonnes de l'état
     let total_words = NB * (NR + 1);
     let mut words: Vec<[u8; 4]> = Vec::with_capacity(total_words);
 
+    // Initialisation des premiers mots avec la clé d'origine
     for i in 0..NK {
         words.push([key[4 * i], key[4 * i + 1], key[4 * i + 2], key[4 * i + 3]]);
     }
 
+    // Génération des mots restants de l'expansion de clé
     for i in NK..total_words {
         let mut temp = words[i - 1];
         if i % NK == 0 {
@@ -92,6 +104,7 @@ pub fn key_expansion(key: &[u8]) -> Vec<[[u8; 4]; 4]> {
         words.push(word);
     }
 
+    // Transformation des mots générés en clés de ronde (matrices 4x4)
     let mut round_keys: Vec<[[u8; 4]; 4]> = Vec::with_capacity(NR + 1);
     for round in 0..(NR + 1) {
         let mut round_key = [[0u8; 4]; 4];
@@ -105,6 +118,7 @@ pub fn key_expansion(key: &[u8]) -> Vec<[[u8; 4]; 4]> {
     round_keys
 }
 
+// Fonction qui applique la transformation SubBytes sur l'état
 pub fn sub_bytes(state: &mut [[u8; 4]; 4]) {
     for r in 0..4 {
         for c in 0..4 {
@@ -113,12 +127,14 @@ pub fn sub_bytes(state: &mut [[u8; 4]; 4]) {
     }
 }
 
+// Fonction qui réalise la transformation ShiftRows sur l'état
 pub fn shift_rows(state: &mut [[u8; 4]; 4]) {
-    state[1].rotate_left(1);
-    state[2].rotate_left(2);
-    state[3].rotate_left(3);
+    state[1].rotate_left(1); // Décalage de la deuxième ligne d'un cran vers la gauche
+    state[2].rotate_left(2); // Décalage de la troisième ligne de deux crans
+    state[3].rotate_left(3); // Décalage de la quatrième ligne de trois crans
 }
 
+// Fonction qui multiplie un octet par 2 dans GF(2^8)
 pub fn xtime(x: u8) -> u8 {
     if x & 0x80 != 0 {
         (x << 1) ^ 0x1b
@@ -127,6 +143,7 @@ pub fn xtime(x: u8) -> u8 {
     }
 }
 
+// Fonction qui réalise la transformation MixColumns sur l'état
 pub fn mix_columns(state: &mut [[u8; 4]; 4]) {
     for c in 0..4 {
         let a0 = state[0][c];
@@ -146,6 +163,7 @@ pub fn mix_columns(state: &mut [[u8; 4]; 4]) {
     }
 }
 
+// Fonction qui ajoute la clé de ronde à l'état (opération XOR)
 pub fn add_round_key(state: &mut [[u8; 4]; 4], round_key: &[[u8; 4]; 4]) {
     for r in 0..4 {
         for c in 0..4 {
@@ -154,6 +172,7 @@ pub fn add_round_key(state: &mut [[u8; 4]; 4], round_key: &[[u8; 4]; 4]) {
     }
 }
 
+// Fonction qui convertit un bloc de 16 octets en une matrice 4x4 (état)
 pub fn block_to_state(block: &[u8]) -> [[u8; 4]; 4] {
     let mut state = [[0u8; 4]; 4];
     for i in 0..16 {
@@ -162,6 +181,7 @@ pub fn block_to_state(block: &[u8]) -> [[u8; 4]; 4] {
     state
 }
 
+// Fonction qui convertit un état (matrice 4x4) en un bloc de 16 octets
 pub fn state_to_block(state: &[[u8; 4]; 4]) -> [u8; 16] {
     let mut block = [0u8; 16];
     for i in 0..16 {
@@ -170,6 +190,7 @@ pub fn state_to_block(state: &[[u8; 4]; 4]) -> [u8; 16] {
     block
 }
 
+// Fonction qui applique la transformation inverse SubBytes sur l'état (pour la décryption)
 pub fn inv_sub_bytes(state: &mut [[u8; 4]; 4]) {
     for r in 0..4 {
         for c in 0..4 {
@@ -178,12 +199,14 @@ pub fn inv_sub_bytes(state: &mut [[u8; 4]; 4]) {
     }
 }
 
+// Fonction qui réalise la transformation inverse ShiftRows sur l'état
 pub fn inv_shift_rows(state: &mut [[u8; 4]; 4]) {
-    state[1].rotate_right(1);
-    state[2].rotate_right(2);
-    state[3].rotate_right(3);
+    state[1].rotate_right(1); // Décalage inverse de la deuxième ligne
+    state[2].rotate_right(2); // Décalage inverse de la troisième ligne
+    state[3].rotate_right(3); // Décalage inverse de la quatrième ligne
 }
 
+// Fonctions de multiplication dans GF(2^8) pour l'inverse de MixColumns
 fn mul9(x: u8) -> u8 {
     xtime(xtime(xtime(x))) ^ x
 }
@@ -197,6 +220,7 @@ fn mul14(x: u8) -> u8 {
     xtime(xtime(xtime(x)) ^ xtime(x) ^ x)
 }
 
+// Fonction générique de multiplication dans GF(2^8) en fonction d'un coefficient donné
 fn mul_gf8(x: u8, coef: u8) -> u8 {
     match coef {
         0x01 => x,
@@ -210,6 +234,7 @@ fn mul_gf8(x: u8, coef: u8) -> u8 {
     }
 }
 
+// Fonction qui réalise la transformation inverse MixColumns sur l'état (pour la décryption)
 pub fn inv_mix_columns(state: &mut [[u8; 4]; 4]) {
     for c in 0..4 {
         let a0 = state[0][c];
@@ -229,14 +254,17 @@ pub fn inv_mix_columns(state: &mut [[u8; 4]; 4]) {
     }
 }
 
+// Fonction qui déchiffre un bloc de 16 octets en utilisant les clés de ronde
 pub fn decrypt_block(block: &[u8], round_keys: &Vec<[[u8; 4]; 4]>) -> [u8; 16] {
-    let nr = 14;
+    let nr = 14; // Nombre de rondes pour AES-256
     let mut state = block_to_state(block);
 
+    // Dernière ronde (sans mix_columns)
     add_round_key(&mut state, &round_keys[nr]);
     inv_shift_rows(&mut state);
     inv_sub_bytes(&mut state);
 
+    // Rounds intermédiaires
     for round in (1..nr).rev() {
         add_round_key(&mut state, &round_keys[round]);
         inv_mix_columns(&mut state);
@@ -244,11 +272,13 @@ pub fn decrypt_block(block: &[u8], round_keys: &Vec<[[u8; 4]; 4]>) -> [u8; 16] {
         inv_sub_bytes(&mut state);
     }
 
+    // Première ronde
     add_round_key(&mut state, &round_keys[0]);
 
     state_to_block(&state)
 }
 
+// Fonction qui retire le padding PKCS#7 d'un vecteur d'octets
 pub fn pkcs7_unpad(data: &mut Vec<u8>) -> Result<(), String> {
     if data.is_empty() {
         return Err("Données vides, impossible de retirer le padding".to_string());
@@ -264,6 +294,8 @@ pub fn pkcs7_unpad(data: &mut Vec<u8>) -> Result<(), String> {
     data.truncate(data.len() - pad_len);
     Ok(())
 }
+
+// Fonction qui ajoute le padding PKCS#7 à un vecteur d'octets pour atteindre une taille de bloc donnée
 pub fn pkcs7_pad(data: &mut Vec<u8>, block_size: usize) {
     let pad_len = block_size - (data.len() % block_size);
     data.extend(std::iter::repeat(pad_len as u8).take(pad_len));
