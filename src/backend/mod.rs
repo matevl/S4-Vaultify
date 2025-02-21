@@ -5,6 +5,8 @@ pub mod encryption;
 pub mod file_manager;
 pub mod vault_manager;
 
+pub mod aes_keys;
+
 // Backend Const
 const VAULT_CONFIG_ROOT: &str = ".vault/";
 const VAULT_USERS_DIR: &str = ".vault/users/";
