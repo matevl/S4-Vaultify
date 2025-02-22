@@ -72,7 +72,7 @@ fn init_config_vault(path: &str) {
  * MAIN CONFIG OF THE SOFTWARE
  * to be sure that it exist
  */
-fn init_config_vaultify() {
+pub fn init_config_vaultify() {
     match exists(VAULTIFY_CONFIG) {
         Ok(true) => {}
         Ok(false) => create_dir(VAULTIFY_CONFIG).expect("Could not create folder"),

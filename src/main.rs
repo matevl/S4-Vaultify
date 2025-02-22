@@ -1,19 +1,11 @@
-mod backend;
-mod error_manager;
-
-use crate::backend::aes_keys::decrypted_key::{decrypt_block, pkcs7_unpad};
-use s4_vaultify::backend::aes_keys::crypted_key::*;
-use s4_vaultify::backend::aes_keys::keys_password::*;
-use std::{env, fs};
 use dioxus::prelude::*;
-use std::rc::Rc;
-use std::cell::RefCell;
-use regex::Regex; // Ajoute cette dépendance dans Cargo.toml
-use web_sys::window;
-use wasm_bindgen_futures::spawn_local;
-use web_sys::Clipboard;
-use std::any::type_name;
 use gloo_timers::*;
+use regex::Regex;
+use std::cell::RefCell;
+use std::rc::Rc;
+use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::spawn_local;
+use web_sys::{window, Window};
 
 const FAVICON: Asset = asset!("/assets/Vaultify-black-png.ico");
 const MAIN_CSS: Asset = asset!("/assets/main.css");
@@ -25,12 +17,11 @@ fn main() {
 
 #[component]
 fn App() -> Element {
-
     rsx! {
         document::Link { rel: "icon", href: FAVICON }
         document::Link { rel: "stylesheet", href: MAIN_CSS }
         Hero {}
-        TextEditor {} // Ajout du composant TextEditor
+        TextEditor {}
     }
 }
 
@@ -49,8 +40,8 @@ pub fn Hero() -> Element {
 
 #[component]
 pub fn TextEditor() -> Element {
-    let input_email = Rc::new(RefCell::new(String::new())); // Utilisation de RefCell pour rendre mutable
-    let validation_message = Rc::new(RefCell::new(String::new())); // Message de validation de l'email
+    let input_email = Rc::new(RefCell::new(String::new()));
+    let validation_message = Rc::new(RefCell::new(String::new()));
 
     let input_text_clone = Rc::clone(&input_email);
     let validation_message_clone = Rc::clone(&validation_message);
@@ -67,7 +58,6 @@ pub fn TextEditor() -> Element {
     let input_text_clone5 = Rc::clone(&input_email);
     let validation_message_clone5 = Rc::clone(&validation_message);
 
-
     let notification_message = Rc::new(RefCell::new(String::new()));
     let show_notification = Rc::new(RefCell::new(false));
     let notification_message_clone = Rc::clone(&notification_message);
@@ -82,14 +72,12 @@ pub fn TextEditor() -> Element {
             let mut show = show_notification_clone.borrow_mut();
             *show = true;
         }
-
     };
 
-
-    let input_mdp = Rc::new(RefCell::new(String::new())); // Utilisation de RefCell pour rendre mutable
+    let input_mdp = Rc::new(RefCell::new(String::new()));
     let validation_mdp = Rc::new(RefCell::new(String::new()));
 
-       rsx! {
+    rsx! {
         div {
             id: "text-editor",
             style: "margin-top: 2rem; padding: 1rem; border: 1px solid #ccc; border-radius: 5px; color: white\
@@ -97,58 +85,56 @@ pub fn TextEditor() -> Element {
             class:"container",
             h2 { "Se Connecter" }
 
-            // Zone de texte
             textarea {
                 style: "width: 50%; height: 20px; padding: 0.5rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 5px; resize: none;",
                 placeholder: "E-Mail",
                 value: "{input_email.borrow()}",
                 oninput: move |evt| {
-                    let value = evt.value().clone(); // Obtenir la valeur de l'événement
+                    let value = evt.value().clone();
                     let mut text = input_text_clone5.borrow_mut();
-                    *text = value; // Met à jour le texte avec la nouvelle valeur
+                    *text = value;
                 },
             }
 
-            // Bouton pour valider l'email
-
-
-            // Afficher le message de validation
             div {
                 style: "margin-top: 1rem; color: red;",
                 "{validation_message.borrow()}"
             }
-
-
 
             textarea {
                 style: "width: 50%; height: 20px; padding: 0.5rem; font-size: 1rem; border-radius: 5px; resize: none;",
                 placeholder: "Mot-de-passe",
                 value: "{input_email.borrow()}",
                 oninput: move |evt| {
-                    let value = evt.value().clone(); // Obtenir la valeur de l'événement
+                    let value = evt.value().clone();
                     let mut text = input_mdp.borrow_mut();
-                    *text = value; // Met à jour le texte avec la nouvelle valeur
+                    *text = value;
                 },
             }
 
             button {
-
                 style: "margin-top: 1rem; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer;",
                 onclick: move |_| {
                     let email = input_text_clone.borrow().trim().to_string();
                     if is_valid_email(&email) {
-                        validation_message_clone.borrow_mut().clear(); // Effacer tout message précédent
+                        validation_message_clone.borrow_mut().clear();
                         validation_message_clone.borrow_mut().push_str("L'email est valide.");
+
+                        if let Some(window) = window() {
+                            // Fermer la fenêtre actuelle
+                            window.close();
+
+                            // Ouvrir une nouvelle fenêtre
+                            let _ = window.open_with_url_and_target("https://example.com", "_blank");
+                        }
                     } else {
-                        validation_message_clone.borrow_mut().clear(); // Effacer tout message précédent
-                        validation_message_clone.borrow_mut().push_str("L'email est pas valide.");
+                        validation_message_clone.borrow_mut().clear();
+                        validation_message_clone.borrow_mut().push_str("L'email n'est pas valide.");
                     }
                 },
                 "Se connecter"
-               }
+            }
 
-
-            // Bouton pour effacer le texte
             button {
                 style: "margin-top: 1rem; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer;",
                 onclick: move |_| {
@@ -156,22 +142,15 @@ pub fn TextEditor() -> Element {
                 },
                 "Effacer"
             }
-
         }
     }
 }
 
-// Fonction pour vérifier la validité d'un email
 fn is_valid_email(email: &str) -> bool {
     let re = Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap();
     re.is_match(email)
 }
 
-// Fonction pour sauvegarder du texte dans un fichier (si nécessaire)
 fn save_text_to_file(text: &str) {
-    // Logique pour sauvegarder du texte dans un fichier
     println!("Enregistrer le texte : {}", text);
 }
-
-// Fonction pour copier du texte dans le presse-papiers
-
