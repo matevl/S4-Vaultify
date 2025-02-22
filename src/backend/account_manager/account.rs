@@ -2,10 +2,9 @@ use crate::backend::aes_keys::keys_password::{derive_key, generate_salt_from_log
 use crate::backend::{USERS_DATA, VAULT_USERS_DIR};
 use crate::error_manager::ErrorType;
 use bcrypt::{hash, verify};
-use rand::Rng;
 use serde::ser::SerializeStruct;
 use serde::{de, Deserialize, Serialize, Serializer};
-use std::fs::{exists, File, Permissions};
+use std::fs::{exists, File};
 use std::io::{Read, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
 
