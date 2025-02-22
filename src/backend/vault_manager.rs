@@ -3,13 +3,36 @@ use crate::error_manager::ErrorType;
 use account_manager::account::*;
 use std::fs::{create_dir, exists, File};
 
+
+/**
+ * This struct contained the env of the current vault.
+ * @users_data - All the users in the vault
+ * @vault_path - The path of the vault
+ * @logged_users - The current logged account
+ */
+pub struct VaultManager {
+    pub local_users: Vec<LocalUserData>,
+    pub loaded_vault_path: String,
+    pub logged_users: Option<LocalJWT>,
+}
+
+impl VaultManager {
+    pub fn new(local_users: Vec<LocalUserData>, loaded_vault_path: &str) -> VaultManager {
+        VaultManager {
+            local_users,
+            loaded_vault_path: loaded_vault_path.to_string(),
+            logged_users: None,
+        }
+    }
+}
+
 /**
  * This function init a vault at a
  * specific path and assign the given user
  * as administrator
  */
 
-pub fn init_vault(user: &JWT, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn init_vault(user: &LocalJWT, path: &str) -> Result<(), Box<dyn std::error::Error>> {
     match { create_dir(&path) } {
         Err(_) => return Err(Box::new(ErrorType::ArgumentError)),
         _ => {}
@@ -17,12 +40,7 @@ pub fn init_vault(user: &JWT, path: &str) -> Result<(), Box<dyn std::error::Erro
 
     init_config_vault(&path);
 
-    let users_data = vec![UserData::new(
-        &user.get_data().get_hash_email().to_string(),
-        &user.get_data().get_hash_pw().to_string(),
-        Perms::Admin,
-    )];
-    sava_users_data(&users_data, path);
+
     Ok(())
 }
 
@@ -32,20 +50,8 @@ pub fn init_vault(user: &JWT, path: &str) -> Result<(), Box<dyn std::error::Erro
  * and give the environment needed
  * to work.
  */
-pub fn load_vault(user: &JWT, path: &str) -> Result<VaultEnv, Box<dyn std::error::Error>> {
-    match exists(path) {
-        Ok(true) => {
-            let mut env = VaultEnv::new(load_users_data(path), path);
-            match log_to_vault(user, &env.users_data) {
-                Ok(logged_users) => {
-                    env.logged_users = Some(logged_users);
-                    Ok(env)
-                }
-                _ => Err(Box::new(ErrorType::LoginError)),
-            }
-        }
-        _ => Err(Box::new(ErrorType::ArgumentError)),
-    }
+pub fn load_vault(user: &LocalJWT, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    Ok(())
 }
 
 /**

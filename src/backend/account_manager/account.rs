@@ -1,9 +1,11 @@
-use crate::backend::USERS_DATA;
+use crate::backend::aes_keys::keys_password::{derive_key, generate_salt_from_login};
+use crate::backend::{USERS_DATA, VAULT_USERS_DIR};
 use crate::error_manager::ErrorType;
 use bcrypt::{hash, verify};
 use rand::Rng;
 use serde::ser::SerializeStruct;
 use serde::{de, Deserialize, Serialize, Serializer};
+use std::fs::{exists, Permissions};
 use std::io::{Read, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -82,20 +84,18 @@ impl UserInput {
  * If it matches with a user, it will be encapsulated by a JWT
  */
 
-pub struct UserData {
+pub struct LocalUserData {
     hash_email: String,
     hash_pw: String,
-    perms: Perms,
 }
 
-impl UserData {
-    pub fn new(email: &String, password: &String, perms: Perms) -> UserData {
+impl LocalUserData {
+    pub fn new(email: &str, password: &str) -> LocalUserData {
         let cost_email = rand::rng().random_range(4..=31);
         let cost_pw = rand::rng().random_range(4..=31);
-        UserData {
-            hash_email: hash(&email.clone(), cost_email).expect("Failed to hash password"),
-            hash_pw: hash(&password.clone(), cost_pw).expect("Failed to hash password"),
-            perms,
+        LocalUserData {
+            hash_email: hash(&email.to_string(), cost_email).expect("Failed to hash password"),
+            hash_pw: hash(&password.to_string(), cost_pw).expect("Failed to hash password"),
         }
     }
     pub fn get_hash_email(&self) -> &str {
@@ -104,23 +104,15 @@ impl UserData {
     pub fn get_hash_pw(&self) -> &str {
         &self.hash_pw
     }
-    pub fn get_permissions(&self) -> &Perms {
-        &self.perms
+}
+
+impl Clone for LocalUserData {
+    fn clone(&self) -> LocalUserData {
+        LocalUserData::new(&self.hash_email, &self.hash_pw)
     }
 }
 
-impl Clone for UserData {
-    fn clone(&self) -> UserData {
-        let perms = match &self.perms {
-            Perms::Admin => Perms::Admin,
-            Perms::Write => Perms::Write,
-            Perms::Read => Perms::Read,
-        };
-        UserData::new(&self.hash_email, &self.hash_pw, perms)
-    }
-}
-
-impl<'de> Deserialize<'de> for UserData {
+impl<'de> Deserialize<'de> for LocalUserData {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -138,20 +130,14 @@ impl<'de> Deserialize<'de> for UserData {
             .ok_or_else(|| de::Error::custom("Missing or invalid hash_pw"))?
             .to_string();
 
-        let perms = map
-            .get("perms")
-            .ok_or_else(|| de::Error::custom("Missing permissions"))
-            .and_then(|v| serde_json::from_value(v.clone()).map_err(de::Error::custom))?;
-
-        Ok(UserData {
+        Ok(LocalUserData {
             hash_email,
             hash_pw,
-            perms,
         })
     }
 }
 
-impl Serialize for UserData {
+impl Serialize for LocalUserData {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -159,9 +145,22 @@ impl Serialize for UserData {
         let mut state = serializer.serialize_struct("UserData", 3)?;
         state.serialize_field("hash_email", &self.hash_email)?;
         state.serialize_field("hash_pw", &self.hash_pw)?;
-        state.serialize_field("perms", &self.perms)?;
 
         state.end()
+    }
+}
+
+pub struct VaultJWT {
+    perms: Perms,
+    vault_key: Box<[u8]>,
+}
+
+impl VaultJWT {
+    pub fn new(perms: Perms, vault_key: &[u8]) -> VaultJWT {
+        VaultJWT {
+            perms,
+            vault_key: Box::from(vault_key),
+        }
     }
 }
 
@@ -170,17 +169,21 @@ impl Serialize for UserData {
  * In case of error the validity of this token could be removed
  */
 
-pub struct JWT {
+pub struct LocalJWT {
     email: String,
-    user_data: UserData,
+    user_data: LocalUserData,
+    user_key: Box<[u8]>,
+    vault_access: Option<VaultJWT>,
     exp: usize,
 }
 #[allow(dead_code)]
-impl JWT {
-    pub fn new(user_data: UserData, email: String) -> JWT {
-        JWT {
+impl LocalJWT {
+    pub fn new(user_data: LocalUserData, email: String, user_key: &[u8]) -> LocalJWT {
+        LocalJWT {
             email,
             user_data,
+            user_key: Box::from(user_key),
+            vault_access: None,
             exp: {
                 (SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -193,9 +196,14 @@ impl JWT {
     pub fn get_email(&self) -> &str {
         &self.email
     }
-    pub fn get_data(&self) -> &UserData {
+    pub fn get_local_users_data(&self) -> &LocalUserData {
         &self.user_data
     }
+
+    pub fn get_vault_access(&self) -> &Option<VaultJWT> {
+        &self.vault_access
+    }
+
     pub fn get_exp(&self) -> usize {
         self.exp
     }
@@ -217,19 +225,21 @@ impl JWT {
  * Give the local JWT so it will be used for
  */
 
-pub fn local_log_in(
+pub fn log_to_vaultify(
     user: &UserInput,
-    users_data: Vec<UserData>,
-) -> Result<JWT, Box<dyn std::error::Error>> {
+    users_data: Vec<LocalUserData>,
+) -> Result<LocalJWT, Box<dyn std::error::Error>> {
     for data in users_data {
-        match verify(&data.hash_email, &user.email) {
-            Ok(true) => match verify(&data.hash_pw, &user.password) {
-                Ok(true) => {
-                    return Ok(JWT::new(data.clone(), user.email.clone()));
-                }
-                _ => continue,
-            },
-            _ => continue,
+        if verify(user.email.as_str(), data.get_hash_email())?
+            && verify(user.password.as_str(), data.get_hash_pw())?
+        {
+            let salt = generate_salt_from_login(user.email.as_str());
+            let key = derive_key(user.password.as_str(), salt.as_slice(), 100);
+            return Ok(LocalJWT::new(
+                data.clone(),
+                user.email.clone(),
+                key.as_slice(),
+            ));
         }
     }
 
@@ -241,29 +251,32 @@ pub fn local_log_in(
  * generate and JWT if it is in the vault database
  */
 
-pub fn log_to_vault(
-    local_jwt: &JWT,
-    users_data: &Vec<UserData>,
-) -> Result<JWT, Box<dyn std::error::Error>> {
-    for data in users_data {
-        match verify(&data.hash_email, &local_jwt.user_data.get_hash_email()) {
-            Ok(true) => match verify(&data.hash_pw, &local_jwt.user_data.get_hash_pw()) {
-                Ok(true) => {
-                    return Ok(JWT::new(data.clone(), local_jwt.email.clone()));
-                }
-                _ => continue,
-            },
-            _ => continue,
+pub fn get_access_to_vault(
+    local_jwt: &mut LocalJWT,
+    path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match exists(format!(
+        "{}{}{}",
+        path,
+        VAULT_USERS_DIR,
+        local_jwt.get_local_users_data().hash_email
+    )) {
+        Ok(true) => {
+            // Function do decrupt..
+            let vault_key: [u8; 1] = [1];
+            let perms = Perms::Admin;
+            //
+            local_jwt.vault_access = Some(VaultJWT::new(perms, vault_key.as_ref()));
+            Ok(())
         }
+        _ => Err(Box::new(ErrorType::LoginError)),
     }
-
-    Err(Box::new(ErrorType::LoginError))
 }
 
 /**
  * Could load data from local users or user in a vault
  */
-pub fn load_users_data(path: &str) -> Vec<UserData> {
+pub fn load_users_data(path: &str) -> Vec<LocalUserData> {
     let mut path = path.to_string();
     path.push_str(USERS_DATA);
 
@@ -280,7 +293,7 @@ pub fn load_users_data(path: &str) -> Vec<UserData> {
 /**
  * Could save data from local users or user in a vault
  */
-pub fn sava_users_data(users_data: &Vec<UserData>, path: &str) {
+pub fn sava_users_data(users_data: &Vec<LocalUserData>, path: &str) {
     let mut path = path.to_string();
     path.push_str(USERS_DATA);
 
@@ -293,7 +306,7 @@ pub fn sava_users_data(users_data: &Vec<UserData>, path: &str) {
 
 fn add_user_to_data(
     user_input: UserInput,
-    users_data: &mut Vec<UserData>,
+    users_data: &mut Vec<LocalUserData>,
     perms: Perms,
 ) -> Result<(), Box<dyn std::error::Error>> {
     for data in users_data.iter() {
@@ -304,11 +317,7 @@ fn add_user_to_data(
             _ => {}
         }
     }
-    users_data.push(UserData::new(
-        &user_input.email,
-        &user_input.password,
-        perms,
-    ));
+    users_data.push(LocalUserData::new(&user_input.email, &user_input.password));
 
     Ok(())
 }
