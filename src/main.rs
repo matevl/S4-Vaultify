@@ -1,29 +1,31 @@
 use dioxus::prelude::*;
 use std::rc::Rc;
-use std::cell::RefCell;
-use regex::Regex; // Ajoute cette dépendance dans Cargo.toml
+use std::cell::{RefCell, RefMut};
+use std::ops::Deref;
+use regex::Regex;
 use web_sys::window;
-use wasm_bindgen_futures::spawn_local;
-use web_sys::Clipboard;
-use std::any::type_name;
-use gloo_timers::*;
+mod backend;
+use backend::*;
+use crate::backend::account_manager::account::{load_users_data, local_log_in, UserInput};
+use crate::backend::vault_manager::init_config_vaultify;
 
+mod error_manager;
 const FAVICON: Asset = asset!("/assets/Vaultify-black-png.ico");
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 const HEADER_SVG: Asset = asset!("/assets/vault-text-svg.svg");
 
 fn main() {
+    init_config_vaultify();
     dioxus::launch(App);
 }
 
 #[component]
 fn App() -> Element {
-
     rsx! {
         document::Link { rel: "icon", href: FAVICON }
         document::Link { rel: "stylesheet", href: MAIN_CSS }
         Hero {}
-        TextEditor {} // Ajout du composant TextEditor
+        TextEditor {}
     }
 }
 
@@ -34,7 +36,7 @@ pub fn Hero() -> Element {
             id: "hero",
             img { src: HEADER_SVG, id: "header" }
             div { id: "links",
-                a { href: "https://github.com/matevl/S4-Vaultify", "en savoir plus sur nous 🔒" }
+                a { href: "https://github.com/matevl/S4-Vaultify", "En savoir plus sur nous 🔒" }
             }
         }
     }
@@ -42,144 +44,63 @@ pub fn Hero() -> Element {
 
 #[component]
 pub fn TextEditor() -> Element {
-    let input_email = Rc::new(RefCell::new(String::new())); // Utilisation de RefCell pour rendre mutable
-    let validation_message = Rc::new(RefCell::new(String::new())); // Message de validation de l'email
-
-    let input_text_clone = Rc::clone(&input_email);
-    let validation_message_clone = Rc::clone(&validation_message);
-
-    let input_text_clone2 = Rc::clone(&input_email);
-    let validation_message_clone2 = Rc::clone(&validation_message);
-
-    let input_text_clone3 = Rc::clone(&input_email);
-    let validation_message_clone3 = Rc::clone(&validation_message);
-
-    let input_text_clone4 = Rc::clone(&input_email);
-    let validation_message_clone4 = Rc::clone(&validation_message);
-
-    let input_text_clone5 = Rc::clone(&input_email);
-    let validation_message_clone5 = Rc::clone(&validation_message);
-
-    let show_blank_page = Rc::new(RefCell::new(false));
-
-    let toggle_blank_page = {
-        let show_blank_page = Rc::clone(&show_blank_page);
-        move || {
-            let mut show_blank_page = show_blank_page.borrow_mut();
-            *show_blank_page = true;
-        }
-    };
-    let notification_message = Rc::new(RefCell::new(String::new()));
-    let show_notification = Rc::new(RefCell::new(false));
-    let notification_message_clone = Rc::clone(&notification_message);
-    let show_notification_clone = Rc::clone(&show_notification);
-    let handle_notification = move |message: String| {
-        {
-            let mut msg = notification_message_clone.borrow_mut();
-            *msg = message;
-        }
-
-        {
-            let mut show = show_notification_clone.borrow_mut();
-            *show = true;
-        }
-
-        
-    };
-
-
-    let input_mdp = Rc::new(RefCell::new(String::new())); // Utilisation de RefCell pour rendre mutable
-    let validation_mdp = Rc::new(RefCell::new(String::new()));
-
-       rsx! {
+    let input_email = Rc::new(RefCell::new(String::new()));
+    let input_mdp = Rc::new(RefCell::new(String::new()));
+    let mut text  = "";
+    let mut text2  = "";
+    usrD = 
+    let userD = load_users_data(format!("{}{",));
+        rsx! {
         div {
             id: "text-editor",
-            style: "margin-top: 2rem; padding: 1rem; border: 1px solid #ccc; border-radius: 5px; color: white\
-            ; background-color: #021433;",
+            style: "margin-top: 2rem; padding: 1rem; border: 1px solid #ccc; border-radius: 5px; color: white; background-color: #021433;",
             class:"container",
             h2 { "Se Connecter" }
 
-            // Zone de texte
             textarea {
                 style: "width: 94%; height: 20px; padding: 0.5rem; font-size: 1rem;",
                 placeholder: "E-Mail",
                 value: "{input_email.borrow()}",
                 oninput: move |evt| {
-                    let value = evt.value().clone(); // Obtenir la valeur de l'événement
-                    let mut text = input_text_clone5.borrow_mut();
-                    *text = value; // Met à jour le texte avec la nouvelle valeur
+                    
+                    text = input_email.borrow().deref().as_str();
                 },
             }
-
-            // Bouton pour valider l'email
-
-
-            // Afficher le message de validation
-            div {
-                style: "margin-top: 1rem; color: red;",
-                "{validation_message.borrow()}"
-            }
-
-
-
+            
             textarea {
                 style: "width: 94%; height: 20px; padding: 0.5rem; font-size: 1rem;",
-                placeholder: "Mot-de-passe",
-                value: "{input_email.borrow()}",
+                placeholder: "mot de passe",
+                value: "{input_mdp.borrow()}",
                 oninput: move |evt| {
-                    let value = evt.value().clone(); // Obtenir la valeur de l'événement
-                    let mut text = input_mdp.borrow_mut();
-                    *text = value; // Met à jour le texte avec la nouvelle valeur
+                    
+                    text2 = input_mdp.borrow_mut().deref().as_str();
                 },
             }
 
             button {
-
                 style: "margin-top: 1rem; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer;",
                 onclick: move |_| {
-                    let email = input_text_clone.borrow().trim().to_string();
-                    if is_valid_email(&email) {
-                        validation_message_clone.borrow_mut().clear(); // Effacer tout message précédent
-                        validation_message_clone.borrow_mut().push_str("L'email est valide.");
-                    } else {
-                        validation_message_clone.borrow_mut().clear(); // Effacer tout message précédent
-                        validation_message_clone.borrow_mut().push_str("L'email est pas valide.");
-                    }
+                    let email = text ;
+                    let mdp = text2;
+                    let userI = UserInput::new(email.to_string(), mdp.to_string());
+                   
+                    let res = local_log_in(&userI, );
+                    match res {
+                            Ok(jwt) => {
+                            },
+                            Err(_>) => {print!("email pas bon");}
+                        }
+                    
                 },
-                "Se connecter"
-               }
-
-
-            // Bouton pour effacer le texte
-            button {
-                style: "margin-top: 1rem; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer;",
-                onclick: move |_| {
-                    input_text_clone3.borrow_mut().clear();
-                },
-                "Effacer"
+                
             }
-               
-           button {
-                onclick: toggle_blank_page,
-                "Afficher Page Blanche"
-               }
-        
-
         }
     }
 }
 
-// Fonction pour vérifier la validité d'un email
-fn is_valid_email(email: &str) -> bool {
-    let re = Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap();
-    re.is_match(email)
+/// Fonction pour ouvrir une URL dans un nouvel onglet
+fn open_webpage(url: &str) {
+    if let Some(win) = window() {
+        win.open_with_url(url).unwrap();
+    }
 }
-
-// Fonction pour sauvegarder du texte dans un fichier (si nécessaire)
-fn save_text_to_file(text: &str) {
-    // Logique pour sauvegarder du texte dans un fichier
-    println!("Enregistrer le texte : {}", text);
-}
-
-// Fonction pour copier du texte dans le presse-papiers
-
