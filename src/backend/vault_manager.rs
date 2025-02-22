@@ -3,7 +3,6 @@ use crate::error_manager::ErrorType;
 use account_manager::account::*;
 use std::fs::{create_dir, exists, File};
 
-
 /**
  * This struct contained the env of the current vault.
  * @users_data - All the users in the vault
@@ -24,6 +23,12 @@ impl VaultManager {
             logged_users: None,
         }
     }
+    fn init_config_vault(&self) {
+        create_dir(&format!("{}{}", &self.loaded_vault_path, VAULT_CONFIG_ROOT))
+            .expect("Could not create folder");
+        create_dir(&format!("{}{}", &self.loaded_vault_path, VAULT_USERS_DIR))
+            .expect("Could not create folder");
+    }
 }
 
 /**
@@ -32,14 +37,13 @@ impl VaultManager {
  * as administrator
  */
 
-pub fn init_vault(user: &LocalJWT, path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    match { create_dir(&path) } {
+pub fn init_vault(vault_manager: &mut VaultManager) -> Result<(), Box<dyn std::error::Error>> {
+    match { create_dir(&vault_manager.loaded_vault_path) } {
         Err(_) => return Err(Box::new(ErrorType::ArgumentError)),
         _ => {}
     }
 
-    init_config_vault(&path);
-
+    vault_manager.init_config_vault();
 
     Ok(())
 }
@@ -55,26 +59,6 @@ pub fn load_vault(user: &LocalJWT, path: &str) -> Result<(), Box<dyn std::error:
 }
 
 /**
- * This function is uses to init the config directory of a vault
- * (.vault)
- */
-
-fn init_config_vault(path: &str) {
-    let mut path_config_root = path.to_string().clone();
-    path_config_root.push_str(VAULT_CONFIG_ROOT);
-
-    let mut path_users_dir = path_config_root.clone();
-    path_users_dir.push_str(VAULT_USERS_DIR);
-
-    let mut path_users_data = path_users_dir.clone();
-    path_users_data.push_str(USERS_DATA);
-
-    create_dir(&path_config_root).expect("Could not create folder");
-    create_dir(&path_users_dir).expect("Could not create folder");
-    File::create(&path_users_data).expect("Could not create files");
-}
-
-/**
  * MAIN CONFIG OF THE SOFTWARE
  * to be sure that it exist
  */
@@ -86,8 +70,7 @@ fn init_config_vaultify() {
             panic!("Could not find config file");
         }
     }
-    let mut path = VAULTIFY_CONFIG.to_string();
-    path.push_str(USERS_DATA);
+    let mut path = format!("{}{}", VAULTIFY_CONFIG, USERS_DATA);
     match exists(&path) {
         Ok(true) => {}
         Ok(false) => {
