@@ -2,10 +2,10 @@ use crate::backend::file_manager::file_handling::{open_file_binary, save_binary}
 use dioxus::prelude::ReadableVecExt;
 use exif::Reader;
 use ffmpeg_next;
+use lopdf::Document;
 use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
 use std::path::Path;
-use lopdf::Document;
 
 use tempfile::NamedTempFile;
 use zip::ZipArchive;
@@ -184,11 +184,15 @@ pub fn detect_type(buffer: &Vec<u8>) -> FType {
             "application/x-par2" => FType::Par2,
             "application/x-mobipocket-ebook" => FType::Mobi,
             "application/msword" => FType::Doc,
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => FType::Docx,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
+                FType::Docx
+            }
             "application/vnd.ms-excel" => FType::Xls,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => FType::Xlsx,
             "application/vnd.ms-powerpoint" => FType::Ppt,
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation" => FType::Pptx,
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation" => {
+                FType::Pptx
+            }
             "application/vnd.oasis.opendocument.text" => FType::Odt,
             "application/vnd.oasis.opendocument.spreadsheet" => FType::Ods,
             "application/vnd.oasis.opendocument.presentation" => FType::Odp,
@@ -218,7 +222,12 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::err
             let mut cursor = Cursor::new(&buffer);
             let exif = exifreader.read_from_container(&mut cursor)?;
             for f in exif.fields() {
-                println!("{} {} {}", f.tag, f.ifd_num, f.display_value().with_unit(&exif));
+                println!(
+                    "{} {} {}",
+                    f.tag,
+                    f.ifd_num,
+                    f.display_value().with_unit(&exif)
+                );
             }
             if let FType::Jpg = ext {
                 let (content_buffer, metadata_buffer) = split_jpeg(&buffer);
@@ -258,7 +267,10 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::err
             ffmpeg_next::init()?;
             let mut temp_file = NamedTempFile::new()?;
             temp_file.write_all(&buffer)?;
-            let temp_path = temp_file.path().to_str().ok_or("Invalid temporary file path")?;
+            let temp_path = temp_file
+                .path()
+                .to_str()
+                .ok_or("Invalid temporary file path")?;
             let mut ictx = ffmpeg_next::format::input(&temp_path)?;
             println!("Métadonnées du format:");
             for (key, value) in ictx.metadata().iter() {
@@ -282,7 +294,13 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::err
             let mut archive = ZipArchive::new(reader)?;
             for i in 0..archive.len() {
                 let file = archive.by_index(i)?;
-                println!("ZIP Entry {}: {} (size: {} bytes, compressed: {} bytes)", i, file.name(), file.size(), file.compressed_size());
+                println!(
+                    "ZIP Entry {}: {} (size: {} bytes, compressed: {} bytes)",
+                    i,
+                    file.name(),
+                    file.size(),
+                    file.compressed_size()
+                );
             }
             let (content_buffer, metadata_buffer) = split_zip(&buffer);
             save_binary(&content_buffer);
@@ -365,14 +383,18 @@ fn split_png(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     content.extend_from_slice(&buffer[0..8]);
     let mut i = 8;
     while i + 8 <= buffer.len() {
-        let length = u32::from_be_bytes(buffer[i..i+4].try_into().unwrap()) as usize;
+        let length = u32::from_be_bytes(buffer[i..i + 4].try_into().unwrap()) as usize;
         if i + 8 + length > buffer.len() {
             break;
         }
-        let chunk_type = &buffer[i+4..i+8];
+        let chunk_type = &buffer[i + 4..i + 8];
         let chunk_total_len = 4 + 4 + length + 4;
-        let chunk = &buffer[i..i+chunk_total_len];
-        if chunk_type == b"tEXt" || chunk_type == b"iTXt" || chunk_type == b"zTXt" || chunk_type == b"eXIf" {
+        let chunk = &buffer[i..i + chunk_total_len];
+        if chunk_type == b"tEXt"
+            || chunk_type == b"iTXt"
+            || chunk_type == b"zTXt"
+            || chunk_type == b"eXIf"
+        {
             metadata.extend_from_slice(chunk);
         } else {
             content.extend_from_slice(chunk);
@@ -387,15 +409,15 @@ fn split_video(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     let mut metadata = Vec::new();
     let mut i = 0;
     while i + 8 <= buffer.len() {
-        let box_size = u32::from_be_bytes(buffer[i..i+4].try_into().unwrap()) as usize;
+        let box_size = u32::from_be_bytes(buffer[i..i + 4].try_into().unwrap()) as usize;
         if box_size < 8 || i + box_size > buffer.len() {
             break;
         }
-        let box_type = &buffer[i+4..i+8];
+        let box_type = &buffer[i + 4..i + 8];
         if box_type == b"moov" {
-            metadata.extend_from_slice(&buffer[i..i+box_size]);
+            metadata.extend_from_slice(&buffer[i..i + box_size]);
         } else {
-            content.extend_from_slice(&buffer[i..i+box_size]);
+            content.extend_from_slice(&buffer[i..i + box_size]);
         }
         i += box_size;
     }
