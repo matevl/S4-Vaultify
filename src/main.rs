@@ -48,7 +48,6 @@ pub fn TextEditor() -> Element {
     let input_mdp = Rc::new(RefCell::new(String::new()));
     let mut text  = "";
     let mut text2  = "";
-    usrD = 
     let userD = load_users_data(format!("{}{",));
         rsx! {
         div {
@@ -84,7 +83,7 @@ pub fn TextEditor() -> Element {
                     let mdp = text2;
                     let userI = UserInput::new(email.to_string(), mdp.to_string());
                    
-                    let res = local_log_in(&userI, );
+                    
                     match res {
                             Ok(jwt) => {
                             },
