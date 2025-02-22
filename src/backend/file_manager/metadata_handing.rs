@@ -5,13 +5,16 @@ use ffmpeg_next;
 use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
 use std::path::Path;
+use lopdf::Document;
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
 use symphonia::core::errors::Error;
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
+use tar::Archive;
 use tempfile::NamedTempFile;
+use zip::ZipArchive;
 
 #[derive(Debug)]
 pub enum FType {
@@ -124,7 +127,7 @@ pub enum FType {
 pub fn process_file<P: AsRef<Path>>(file_path: &Path) {
     let buffer = open_file_binary(file_path);
     let file_type = detect_type(&buffer);
-    md_treatment_buffer(&buffer, file_type);
+    md_treatment(&buffer, file_type);
 }
 pub fn read_bytes<P: AsRef<Path>>(file_path: P) -> io::Result<Vec<u8>> {
     //initially was reading only 16 first byte to get the magic numbers
@@ -249,7 +252,7 @@ pub fn detect_type(buffer: &Vec<u8>) -> FType {
     }
 }
 
-pub fn md_treatment_buffer(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::error::Error>> {
+pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::error::Error>> {
     match ext {
         FType::Tif | FType::Jpg | FType::Heif | FType::Png => {
             //We can read those format if the md field is not broken
@@ -275,21 +278,9 @@ pub fn md_treatment_buffer(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn s
         | FType::Avi
         | FType::Wmv
         | FType::Mpg
-        | FType::Flv
-        //FType::Mid not supported
-        | FType::Mp3
-        | FType::M4a
-        | FType::Ogg
-        | FType::Flac
-        | FType::Wav
-        //| FType::Amr not supported
-        | FType::Aac
-        | FType::Aiff
-        | FType::Dsf
-        | FType::Ape=> {
+        | FType::Flv => {
             //Works for mp4 and mov for sure
             ffmpeg_next::init()?;
-
 
             let mut temp_file = NamedTempFile::new()?;
             temp_file.write_all(&buffer)?;
@@ -298,13 +289,8 @@ pub fn md_treatment_buffer(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn s
                 .to_str()
                 .ok_or("Invalid temporary file path")?;
 
-            let  ictx = ffmpeg_next::format::input(&temp_path)?;
+            let mut ictx = ffmpeg_next::format::input(&temp_path)?;
             //Debug
-
-            println!("Buffer length: {}", buffer.len());
-            println!("Temporary file path: {}", temp_path);
-
-
             println!("Métadonnées du format:");
             for (key, value) in ictx.metadata().iter() {
                 println!("  {}: {}", key, value);
@@ -316,6 +302,28 @@ pub fn md_treatment_buffer(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn s
                 for (key, value) in stream.metadata().iter() {
                     println!("    {}: {}", key, value);
                 }
+            }
+        }
+        FType::Zip => {
+            let reader = Cursor::new(buffer);
+            let mut archive = ZipArchive::new(reader)?;
+            for i in 0..archive.len() {
+                let file = archive.by_index(i)?;
+                println!(
+                    "ZIP Entry {}: {} (size: {} bytes, compressed: {} bytes)",
+                    i,
+                    file.name(),
+                    file.size(),
+                    file.compressed_size()
+                );
+            }
+        }
+        FType::Pdf => {
+            let doc = Document::load_mem(&buffer)?;
+            let info_obj = doc.trailer.get(b"Info").ok().unwrap();
+            let info_dict = doc.get_dictionary(info_obj.as_reference().unwrap())?;
+            for (key, value) in info_dict.iter() {
+                println!("  {}: {:?}", String::from_utf8_lossy(key), value);
             }
         }
 

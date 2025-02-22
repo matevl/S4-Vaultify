@@ -17,6 +17,9 @@ kamadak-exif = "0.6.1"
 ffmpeg-next = "7.1.0"
 tempfile = "3.16.0"
 symphonia = "0.5.4"
+zip = "2.2.2"
+tar = "0.4.44"
+lopdf = "=0.35.0"
 
 [features]
 default = ["desktop"]
