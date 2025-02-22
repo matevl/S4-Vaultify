@@ -1,4 +1,4 @@
-use crate::backend::file_manager::file_handling::open_file_binary;
+use crate::backend::file_manager::file_handling::{open_file_binary, save_binary};
 use dioxus::prelude::ReadableVecExt;
 use exif::Reader;
 use ffmpeg_next;
@@ -6,121 +6,100 @@ use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
 use std::path::Path;
 use lopdf::Document;
-use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
-use symphonia::core::errors::Error;
-use symphonia::core::formats::FormatOptions;
-use symphonia::core::io::MediaSourceStream;
-use symphonia::core::meta::MetadataOptions;
-use symphonia::core::probe::Hint;
-use tar::Archive;
+
 use tempfile::NamedTempFile;
 use zip::ZipArchive;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum FType {
-    // Image
-    Jpg,  // image/jpeg
-    Png,  // image/png
-    Gif,  // image/gif
-    Webp, // image/webp
-    Cr2,  // image/x-canon-cr2
-    Tif,  // image/tiff
-    Bmp,  // image/bmp
-    Heif, // image/heif
-    Avif, // image/avif
-    Jxr,  // image/vnd.ms-photo
-    Psd,  // image/vnd.adobe.photoshop
-    Ico,  // image/vnd.microsoft.icon
-    Ora,  // image/openraster
-    Djvu, // image/vnd.djvu
-
-    // Vidéo
-    Mp4,  // video/mp4
-    M4v,  // video/x-m4v
-    Mkv,  // video/x-matroska
-    Webm, // video/webm
-    Mov,  // video/quicktime
-    Avi,  // video/x-msvideo
-    Wmv,  // video/x-ms-wmv
-    Mpg,  // video/mpeg
-    Flv,  // video/x-flv
-
-    // Audio
-    Mid,  // audio/midi
-    Mp3,  // audio/mpeg
-    M4a,  // audio/m4a
-    Ogg,  // audio/ogg
-    Flac, // audio/x-flac
-    Wav,  // audio/x-wav
-    Amr,  // audio/amr
-    Aac,  // audio/aac
-    Aiff, // audio/x-aiff
-    Dsf,  // audio/x-dsf
-    Ape,  // audio/x-ape
-
-    // Archive
-    Epub,   // application/epub+zip
-    Zip,    // application/zip
-    Tar,    // application/x-tar
-    Rar,    // application/vnd.rar
-    Gz,     // application/gzip
-    Bz2,    // application/x-bzip2
-    Bz3,    // application/vnd.bzip3
-    SevenZ, // application/x-7z-compressed
-    Xz,     // application/x-xz
-    Pdf,    // application/pdf
-    Swf,    // application/x-shockwave-flash
-    Rtf,    // application/rtf
-    Eot,    // application/octet-stream
-    Ps,     // application/postscript
-    Sqlite, // application/vnd.sqlite3
-    Nes,    // application/x-nintendo-nes-rom
-    Crx,    // application/x-google-chrome-extension
-    Cab,    // application/vnd.ms-cab-compressed
-    Deb,    // application/vnd.debian.binary-package
-    Ar,     // application/x-unix-archive
-    Z,      // application/x-compress
-    Lz,     // application/x-lzip
-    Rpm,    // application/x-rpm
-    Dcm,    // application/dicom
-    Zst,    // application/zstd
-    Lz4,    // application/x-lz4
-    Msi,    // application/x-ole-storage
-    Cpio,   // application/x-cpio
-    Par2,   // application/x-par2
-
-    // Book
-    Mobi, // application/x-mobipocket-ebook
-
-    // Documents
-    Doc,  // application/msword
-    Docx, // application/vnd.openxmlformats-officedocument.wordprocessingml.document
-    Xls,  // application/vnd.ms-excel
-    Xlsx, // application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-    Ppt,  // application/vnd.ms-powerpoint
-    Pptx, // application/vnd.openxmlformats-officedocument.presentationml.presentation
-    Odt,  // application/vnd.oasis.opendocument.text
-    Ods,  // application/vnd.oasis.opendocument.spreadsheet
-    Odp,  // application/vnd.oasis.opendocument.presentation
-
-    // Font
-    Woff,  // application/font-woff
-    Woff2, // application/font-woff
-    Ttf,   // application/font-sfnt
-    Otf,   // application/font-sfnt
-
-    // Application
-    Wasm,  // application/wasm
-    Exe,   // application/vnd.microsoft.portable-executable
-    Dll,   // application/vnd.microsoft.portable-executable
-    Elf,   // application/x-executable
-    Bc,    // application/llvm
-    Mach,  // application/x-mach-binary
-    Class, // application/java
-    Dex,   // application/vnd.android.dex
-    Dey,   // application/vnd.android.dey
-    Der,   // application/x-x509-ca-cert
-    Obj,   // application/x-executable
+    Jpg,
+    Png,
+    Gif,
+    Webp,
+    Cr2,
+    Tif,
+    Bmp,
+    Heif,
+    Avif,
+    Jxr,
+    Psd,
+    Ico,
+    Ora,
+    Djvu,
+    Mp4,
+    M4v,
+    Mkv,
+    Webm,
+    Mov,
+    Avi,
+    Wmv,
+    Mpg,
+    Flv,
+    Mid,
+    Mp3,
+    M4a,
+    Ogg,
+    Flac,
+    Wav,
+    Amr,
+    Aac,
+    Aiff,
+    Dsf,
+    Ape,
+    Epub,
+    Zip,
+    Tar,
+    Rar,
+    Gz,
+    Bz2,
+    Bz3,
+    SevenZ,
+    Xz,
+    Pdf,
+    Swf,
+    Rtf,
+    Eot,
+    Ps,
+    Sqlite,
+    Nes,
+    Crx,
+    Cab,
+    Deb,
+    Ar,
+    Z,
+    Lz,
+    Rpm,
+    Dcm,
+    Zst,
+    Lz4,
+    Msi,
+    Cpio,
+    Par2,
+    Mobi,
+    Doc,
+    Docx,
+    Xls,
+    Xlsx,
+    Ppt,
+    Pptx,
+    Odt,
+    Ods,
+    Odp,
+    Woff,
+    Woff2,
+    Ttf,
+    Otf,
+    Wasm,
+    Exe,
+    Dll,
+    Elf,
+    Bc,
+    Mach,
+    Class,
+    Dex,
+    Dey,
+    Der,
+    Obj,
     Unknown,
 }
 
@@ -129,9 +108,8 @@ pub fn process_file<P: AsRef<Path>>(file_path: &Path) {
     let file_type = detect_type(&buffer);
     md_treatment(&buffer, file_type);
 }
+
 pub fn read_bytes<P: AsRef<Path>>(file_path: P) -> io::Result<Vec<u8>> {
-    //initially was reading only 16 first byte to get the magic numbers
-    // but it turned out we needed to read everything to ensure md field finding
     let mut file = File::open(file_path)?;
     let mut contents = Vec::new();
     file.read_to_end(&mut contents)?;
@@ -141,7 +119,6 @@ pub fn read_bytes<P: AsRef<Path>>(file_path: P) -> io::Result<Vec<u8>> {
 pub fn detect_type(buffer: &Vec<u8>) -> FType {
     if let Some(kind) = infer::get(buffer) {
         match kind.mime_type() {
-            // Image
             "image/jpeg" => FType::Jpg,
             "image/png" => FType::Png,
             "image/gif" => FType::Gif,
@@ -156,8 +133,6 @@ pub fn detect_type(buffer: &Vec<u8>) -> FType {
             "image/vnd.microsoft.icon" => FType::Ico,
             "image/openraster" => FType::Ora,
             "image/vnd.djvu" => FType::Djvu,
-
-            // Vidéo
             "video/mp4" => FType::Mp4,
             "video/x-m4v" => FType::M4v,
             "video/x-matroska" => FType::Mkv,
@@ -167,8 +142,6 @@ pub fn detect_type(buffer: &Vec<u8>) -> FType {
             "video/x-ms-wmv" => FType::Wmv,
             "video/mpeg" => FType::Mpg,
             "video/x-flv" => FType::Flv,
-
-            // Audio
             "audio/midi" => FType::Mid,
             "audio/mpeg" => FType::Mp3,
             "audio/m4a" => FType::M4a,
@@ -180,8 +153,6 @@ pub fn detect_type(buffer: &Vec<u8>) -> FType {
             "audio/x-aiff" => FType::Aiff,
             "audio/x-dsf" => FType::Dsf,
             "audio/x-ape" => FType::Ape,
-
-            // Archive
             "application/epub+zip" => FType::Epub,
             "application/zip" => FType::Zip,
             "application/x-tar" => FType::Tar,
@@ -211,31 +182,19 @@ pub fn detect_type(buffer: &Vec<u8>) -> FType {
             "application/x-ole-storage" => FType::Msi,
             "application/x-cpio" => FType::Cpio,
             "application/x-par2" => FType::Par2,
-
-            // Book
             "application/x-mobipocket-ebook" => FType::Mobi,
-
-            // Documents
             "application/msword" => FType::Doc,
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
-                FType::Docx
-            }
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => FType::Docx,
             "application/vnd.ms-excel" => FType::Xls,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => FType::Xlsx,
             "application/vnd.ms-powerpoint" => FType::Ppt,
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation" => {
-                FType::Pptx
-            }
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation" => FType::Pptx,
             "application/vnd.oasis.opendocument.text" => FType::Odt,
             "application/vnd.oasis.opendocument.spreadsheet" => FType::Ods,
             "application/vnd.oasis.opendocument.presentation" => FType::Odp,
-
-            // Font
             "application/font-woff" => FType::Woff,
             "application/font-woff2" => FType::Woff2,
             "application/font-sfnt" => FType::Ttf,
-
-            // Application
             "application/wasm" => FType::Wasm,
             "application/vnd.microsoft.portable-executable" => FType::Exe,
             "application/x-executable" => FType::Elf,
@@ -255,21 +214,38 @@ pub fn detect_type(buffer: &Vec<u8>) -> FType {
 pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::error::Error>> {
     match ext {
         FType::Tif | FType::Jpg | FType::Heif | FType::Png => {
-            //We can read those format if the md field is not broken
             let exifreader = Reader::new();
             let mut cursor = Cursor::new(&buffer);
             let exif = exifreader.read_from_container(&mut cursor)?;
-            //Debug
             for f in exif.fields() {
-                println!(
-                    "{} {} {}",
-                    f.tag,
-                    f.ifd_num,
-                    f.display_value().with_unit(&exif)
-                );
+                println!("{} {} {}", f.tag, f.ifd_num, f.display_value().with_unit(&exif));
+            }
+            if let FType::Jpg = ext {
+                let (content_buffer, metadata_buffer) = split_jpeg(&buffer);
+                save_binary(&content_buffer);
+                if !metadata_buffer.is_empty() {
+                    save_binary(&metadata_buffer);
+                }
+            } else if let FType::Png = ext {
+                let (content_buffer, metadata_buffer) = split_png(&buffer);
+                save_binary(&content_buffer);
+                if !metadata_buffer.is_empty() {
+                    save_binary(&metadata_buffer);
+                }
+            } else if let FType::Tif = ext {
+                let (content_buffer, metadata_buffer) = split_tiff(&buffer);
+                save_binary(&content_buffer);
+                if !metadata_buffer.is_empty() {
+                    save_binary(&metadata_buffer);
+                }
+            } else if let FType::Heif = ext {
+                let (content_buffer, metadata_buffer) = split_tiff(&buffer);
+                save_binary(&content_buffer);
+                if !metadata_buffer.is_empty() {
+                    save_binary(&metadata_buffer);
+                }
             }
         }
-
         FType::Mp4
         | FType::M4v
         | FType::Mkv
@@ -279,23 +255,15 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::err
         | FType::Wmv
         | FType::Mpg
         | FType::Flv => {
-            //Works for mp4 and mov for sure
             ffmpeg_next::init()?;
-
             let mut temp_file = NamedTempFile::new()?;
             temp_file.write_all(&buffer)?;
-            let temp_path = temp_file
-                .path()
-                .to_str()
-                .ok_or("Invalid temporary file path")?;
-
+            let temp_path = temp_file.path().to_str().ok_or("Invalid temporary file path")?;
             let mut ictx = ffmpeg_next::format::input(&temp_path)?;
-            //Debug
             println!("Métadonnées du format:");
             for (key, value) in ictx.metadata().iter() {
                 println!("  {}: {}", key, value);
             }
-
             for (index, stream) in ictx.streams().enumerate() {
                 println!("\nStream {}:", index);
                 println!("  Métadonnées:");
@@ -303,19 +271,23 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::err
                     println!("    {}: {}", key, value);
                 }
             }
+            let (content_buffer, metadata_buffer) = split_video(&buffer);
+            save_binary(&content_buffer);
+            if !metadata_buffer.is_empty() {
+                save_binary(&metadata_buffer);
+            }
         }
         FType::Zip => {
             let reader = Cursor::new(buffer);
             let mut archive = ZipArchive::new(reader)?;
             for i in 0..archive.len() {
                 let file = archive.by_index(i)?;
-                println!(
-                    "ZIP Entry {}: {} (size: {} bytes, compressed: {} bytes)",
-                    i,
-                    file.name(),
-                    file.size(),
-                    file.compressed_size()
-                );
+                println!("ZIP Entry {}: {} (size: {} bytes, compressed: {} bytes)", i, file.name(), file.size(), file.compressed_size());
+            }
+            let (content_buffer, metadata_buffer) = split_zip(&buffer);
+            save_binary(&content_buffer);
+            if !metadata_buffer.is_empty() {
+                save_binary(&metadata_buffer);
             }
         }
         FType::Pdf => {
@@ -325,10 +297,210 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::err
             for (key, value) in info_dict.iter() {
                 println!("  {}: {:?}", String::from_utf8_lossy(key), value);
             }
+            let (content_buffer, metadata_buffer) = split_pdf(&buffer);
+            save_binary(&content_buffer);
+            if !metadata_buffer.is_empty() {
+                save_binary(&metadata_buffer);
+            }
         }
-
-
         _ => {}
     }
     Ok(())
+}
+
+fn split_tiff(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    let meta_len = 512.min(buffer.len());
+    let metadata = buffer[..meta_len].to_vec();
+    let content = buffer[meta_len..].to_vec();
+    (content, metadata)
+}
+
+fn split_jpeg(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    let mut content = Vec::new();
+    let mut metadata = Vec::new();
+    let mut i = 0;
+    if buffer.len() >= 2 && buffer[0] == 0xFF && buffer[1] == 0xD8 {
+        content.extend_from_slice(&buffer[0..2]);
+        i = 2;
+    } else {
+        return (buffer.to_vec(), Vec::new());
+    }
+    while i < buffer.len() {
+        if buffer[i] == 0xFF {
+            if i + 1 >= buffer.len() {
+                break;
+            }
+            let marker = buffer[i + 1];
+            if marker == 0xDA {
+                content.extend_from_slice(&buffer[i..]);
+                break;
+            }
+            if marker >= 0xE0 && marker <= 0xEF {
+                if i + 4 > buffer.len() {
+                    break;
+                }
+                let seg_len = ((buffer[i + 2] as usize) << 8) | (buffer[i + 3] as usize);
+                if i + 2 + seg_len <= buffer.len() {
+                    let segment = &buffer[i..i + 2 + seg_len];
+                    metadata.extend_from_slice(segment);
+                    i += 2 + seg_len;
+                    continue;
+                } else {
+                    break;
+                }
+            }
+        }
+        content.push(buffer[i]);
+        i += 1;
+    }
+    (content, metadata)
+}
+
+fn split_png(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    let mut content = Vec::new();
+    let mut metadata = Vec::new();
+    if buffer.len() < 8 || &buffer[0..8] != b"\x89PNG\r\n\x1a\n" {
+        return (buffer.to_vec(), Vec::new());
+    }
+    content.extend_from_slice(&buffer[0..8]);
+    let mut i = 8;
+    while i + 8 <= buffer.len() {
+        let length = u32::from_be_bytes(buffer[i..i+4].try_into().unwrap()) as usize;
+        if i + 8 + length > buffer.len() {
+            break;
+        }
+        let chunk_type = &buffer[i+4..i+8];
+        let chunk_total_len = 4 + 4 + length + 4;
+        let chunk = &buffer[i..i+chunk_total_len];
+        if chunk_type == b"tEXt" || chunk_type == b"iTXt" || chunk_type == b"zTXt" || chunk_type == b"eXIf" {
+            metadata.extend_from_slice(chunk);
+        } else {
+            content.extend_from_slice(chunk);
+        }
+        i += chunk_total_len;
+    }
+    (content, metadata)
+}
+
+fn split_video(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    let mut content = Vec::new();
+    let mut metadata = Vec::new();
+    let mut i = 0;
+    while i + 8 <= buffer.len() {
+        let box_size = u32::from_be_bytes(buffer[i..i+4].try_into().unwrap()) as usize;
+        if box_size < 8 || i + box_size > buffer.len() {
+            break;
+        }
+        let box_type = &buffer[i+4..i+8];
+        if box_type == b"moov" {
+            metadata.extend_from_slice(&buffer[i..i+box_size]);
+        } else {
+            content.extend_from_slice(&buffer[i..i+box_size]);
+        }
+        i += box_size;
+    }
+    if i < buffer.len() {
+        content.extend_from_slice(&buffer[i..]);
+    }
+    (content, metadata)
+}
+
+fn split_zip(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    let signature = b"\x50\x4B\x05\x06";
+    if let Some(pos) = buffer.windows(4).rposition(|w| w == signature) {
+        let content = buffer[..pos].to_vec();
+        let metadata = buffer[pos..].to_vec();
+        (content, metadata)
+    } else {
+        (buffer.to_vec(), Vec::new())
+    }
+}
+
+fn split_pdf(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    if let Some(pos) = buffer.windows(7).position(|w| w == b"trailer") {
+        let content = buffer[..pos].to_vec();
+        let metadata = buffer[pos..].to_vec();
+        (content, metadata)
+    } else {
+        (buffer.to_vec(), Vec::new())
+    }
+}
+
+pub fn recombine_file(content_buffer: &Vec<u8>, metadata_buffer: &Vec<u8>, ext: FType) -> Vec<u8> {
+    match ext {
+        FType::Jpg => recombine_jpeg(content_buffer, metadata_buffer),
+        FType::Png => recombine_png(content_buffer, metadata_buffer),
+        FType::Tif | FType::Heif => recombine_tiff(content_buffer, metadata_buffer),
+        FType::Mp4
+        | FType::M4v
+        | FType::Mkv
+        | FType::Webm
+        | FType::Mov
+        | FType::Avi
+        | FType::Wmv
+        | FType::Mpg
+        | FType::Flv => recombine_video(content_buffer, metadata_buffer),
+        FType::Zip => recombine_zip(content_buffer, metadata_buffer),
+        FType::Pdf => recombine_pdf(content_buffer, metadata_buffer),
+        _ => {
+            let mut combined = Vec::new();
+            combined.extend_from_slice(content_buffer);
+            combined.extend_from_slice(metadata_buffer);
+            combined
+        }
+    }
+}
+
+fn recombine_tiff(content: &[u8], metadata: &[u8]) -> Vec<u8> {
+    let mut combined = Vec::new();
+    combined.extend_from_slice(metadata);
+    combined.extend_from_slice(content);
+    combined
+}
+
+fn recombine_jpeg(content: &[u8], metadata: &[u8]) -> Vec<u8> {
+    let mut combined = Vec::new();
+    if content.len() >= 2 {
+        combined.extend_from_slice(&content[..2]);
+        combined.extend_from_slice(metadata);
+        combined.extend_from_slice(&content[2..]);
+    } else {
+        combined.extend_from_slice(content);
+        combined.extend_from_slice(metadata);
+    }
+    combined
+}
+
+fn recombine_png(content: &[u8], metadata: &[u8]) -> Vec<u8> {
+    let mut combined = Vec::new();
+    if content.len() >= 8 {
+        combined.extend_from_slice(&content[..8]);
+        combined.extend_from_slice(metadata);
+        combined.extend_from_slice(&content[8..]);
+    } else {
+        combined.extend_from_slice(content);
+        combined.extend_from_slice(metadata);
+    }
+    combined
+}
+
+fn recombine_video(content: &[u8], metadata: &[u8]) -> Vec<u8> {
+    let mut combined = Vec::new();
+    combined.extend_from_slice(content);
+    combined.extend_from_slice(metadata);
+    combined
+}
+
+fn recombine_zip(content: &[u8], metadata: &[u8]) -> Vec<u8> {
+    let mut combined = Vec::new();
+    combined.extend_from_slice(content);
+    combined.extend_from_slice(metadata);
+    combined
+}
+
+fn recombine_pdf(content: &[u8], metadata: &[u8]) -> Vec<u8> {
+    let mut combined = Vec::new();
+    combined.extend_from_slice(content);
+    combined.extend_from_slice(metadata);
+    combined
 }

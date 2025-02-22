@@ -20,6 +20,7 @@ symphonia = "0.5.4"
 zip = "2.2.2"
 tar = "0.4.44"
 lopdf = "=0.35.0"
+bincode = "2.0.0-rc.3"
 
 [features]
 default = ["desktop"]
