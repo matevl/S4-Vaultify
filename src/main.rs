@@ -17,6 +17,7 @@ fn main() {
 
 #[component]
 fn App() -> Element {
+
     rsx! {
         document::Link { rel: "icon", href: FAVICON }
         document::Link { rel: "stylesheet", href: MAIN_CSS }
@@ -58,6 +59,7 @@ pub fn TextEditor() -> Element {
     let input_text_clone5 = Rc::clone(&input_email);
     let validation_message_clone5 = Rc::clone(&validation_message);
 
+
     let notification_message = Rc::new(RefCell::new(String::new()));
     let show_notification = Rc::new(RefCell::new(false));
     let notification_message_clone = Rc::clone(&notification_message);
@@ -72,6 +74,7 @@ pub fn TextEditor() -> Element {
             let mut show = show_notification_clone.borrow_mut();
             *show = true;
         }
+
     };
 
     let input_mdp = Rc::new(RefCell::new(String::new()));
@@ -85,6 +88,7 @@ pub fn TextEditor() -> Element {
             class:"container",
             h2 { "Se Connecter" }
 
+            // Zone de texte
             textarea {
                 style: "width: 50%; height: 20px; padding: 0.5rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 5px; resize: none;",
                 placeholder: "E-Mail",
@@ -96,13 +100,19 @@ pub fn TextEditor() -> Element {
                 },
             }
 
+            // Bouton pour valider l'email
+
+
+            // Afficher le message de validation
             div {
                 style: "margin-top: 1rem; color: red;",
                 "{validation_message.borrow()}"
             }
 
+
+
             textarea {
-                style: "width: 50%; height: 20px; padding: 0.5rem; font-size: 1rem; border-radius: 5px; resize: none;",
+                style: "width: 50%; height: 20px; padding: 0.5rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 5px; resize: none;",
                 placeholder: "Mot-de-passe",
                 value: "{input_email.borrow()}",
                 oninput: move |evt| {
@@ -113,6 +123,7 @@ pub fn TextEditor() -> Element {
             }
 
             button {
+
                 style: "margin-top: 1rem; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer;",
                 onclick: move |_| {
                     let email = input_text_clone.borrow().trim().to_string();
@@ -135,6 +146,8 @@ pub fn TextEditor() -> Element {
                 "Se connecter"
             }
 
+
+            // Bouton pour effacer le texte
             button {
                 style: "margin-top: 1rem; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer;",
                 onclick: move |_| {
@@ -142,15 +155,22 @@ pub fn TextEditor() -> Element {
                 },
                 "Effacer"
             }
+
         }
     }
 }
 
+// Fonction pour vérifier la validité d'un email
 fn is_valid_email(email: &str) -> bool {
     let re = Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap();
     re.is_match(email)
 }
 
+// Fonction pour sauvegarder du texte dans un fichier (si nécessaire)
 fn save_text_to_file(text: &str) {
+    // Logique pour sauvegarder du texte dans un fichier
     println!("Enregistrer le texte : {}", text);
 }
+
+// Fonction pour copier du texte dans le presse-papiers
+
