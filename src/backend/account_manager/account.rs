@@ -3,7 +3,7 @@ use crate::backend::{USERS_DATA, VAULT_USERS_DIR};
 use crate::error_manager::ErrorType;
 use bcrypt::{hash, verify};
 use serde::ser::SerializeStruct;
-use serde::{de, Deserialize, Serialize, Serializer};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::fs::{exists, File};
 use std::io::{Read, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -39,6 +39,16 @@ impl Perms {
      */
     fn can_execute(&self) -> bool {
         matches!(self, Perms::Admin)
+    }
+}
+
+impl Clone for Perms {
+    fn clone(&self) -> Self {
+        match self {
+            Perms::Admin => Perms::Admin,
+            Perms::Write => Perms::Write,
+            Perms::Read => Perms::Read,
+        }
     }
 }
 
@@ -173,6 +183,8 @@ impl Serialize for LocalUserData {
 
 /**
  * Struct representing a vault JWT with permissions and vault key.
+ * - `perms`: Permissions associated with the JWT.
+ * - `vault_key`: The key used to encrypt and decrypt vault data.
  */
 pub struct VaultJWT {
     perms: Perms,
@@ -182,12 +194,58 @@ pub struct VaultJWT {
 impl VaultJWT {
     /**
      * Create a new VaultJWT instance.
+     *
+     * @param perms - Permissions for the JWT.
+     * @param vault_key - The key for vault encryption/decryption.
      */
     pub fn new(perms: Perms, vault_key: &[u8]) -> VaultJWT {
         VaultJWT {
             perms,
             vault_key: Box::from(vault_key),
         }
+    }
+}
+
+impl Clone for VaultJWT {
+    /**
+     * Clone the VaultJWT instance.
+     */
+    fn clone(&self) -> VaultJWT {
+        VaultJWT::new(self.perms.clone(), self.vault_key.as_ref())
+    }
+}
+
+impl<'de> Deserialize<'de> for VaultJWT {
+    /**
+     * Deserialize a VaultJWT instance from a data format.
+     */
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct VaultJWTVisitor {
+            perms: Perms,
+            vault_key: Vec<u8>,
+        }
+
+        let visitor = VaultJWTVisitor::deserialize(deserializer)?;
+        Ok(VaultJWT::new(visitor.perms, &visitor.vault_key))
+    }
+}
+
+impl Serialize for VaultJWT {
+    /**
+     * Serialize a VaultJWT instance into a data format.
+     */
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("VaultJWT", 2)?;
+        state.serialize_field("perms", &self.perms)?;
+        state.serialize_field("vault_key", &self.vault_key)?;
+        state.end()
     }
 }
 
@@ -348,7 +406,6 @@ pub fn save_users_data(users_data: &Vec<LocalUserData>, path: &str) {
 fn add_user_to_data(
     user_input: UserInput,
     users_data: &mut Vec<LocalUserData>,
-    perms: Perms,
 ) -> Result<(), Box<dyn std::error::Error>> {
     for data in users_data.iter() {
         if verify(&user_input.email, &data.hash_email)? {
