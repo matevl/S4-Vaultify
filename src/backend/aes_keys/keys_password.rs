@@ -47,3 +47,16 @@ pub fn generate_salt_from_login(login: &str) -> Vec<u8> {
 
     salt // Return the generated salt
 }
+
+pub fn generate_random_key() -> Vec<u8> {
+    // Create a new instance of the system random number generator
+    let rng = SystemRandom::new();
+
+    // Initialize a vector of 32 bytes (256 bits) to store the random key
+    let mut key = vec![0; 32];
+
+    // Fill the vector with random bytes using the secure random number generator
+    rng.fill(&mut key).expect("Failed to generate random key");
+
+    key // Return the generated random key
+}

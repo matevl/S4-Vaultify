@@ -199,3 +199,44 @@ pub fn pkcs7_pad(data: &mut Vec<u8>, block_size: usize) {
     let pad_len = block_size - (data.len() % block_size);
     data.extend(std::iter::repeat(pad_len as u8).take(pad_len));
 }
+
+// Assume the previous AES-related functions are included here...
+
+/**
+ * Encrypts the content of a file using AES-256 encryption.
+ *
+ * @param data - The plaintext data to encrypt.
+ * @param key - The encryption key.
+ * @return Vec<u8> - The encrypted ciphertext.
+ */
+pub fn encrypt(data: &[u8], key: &[u8]) -> Vec<u8> {
+    // Generate round keys using the provided key
+    let round_keys = key_expansion(key);
+
+    // Prepare the output buffer for ciphertext
+    let mut ciphertext = Vec::new();
+
+    // Process the data in 16-byte blocks
+    let mut buffer = [0u8; 16];
+    let mut i = 0;
+
+    while i < data.len() {
+        // Copy a block of data into the buffer
+        let block_size = std::cmp::min(16, data.len() - i);
+        buffer[..block_size].copy_from_slice(&data[i..i + block_size]);
+
+        // Apply PKCS#7 padding if it's the last block
+        if block_size < 16 {
+            pkcs7_pad(&mut buffer.to_vec(), 16);
+        }
+
+        // Encrypt the block
+        let encrypted_block = encrypt_block(&buffer, &round_keys);
+        ciphertext.extend_from_slice(&encrypted_block);
+
+        // Move to the next block
+        i += 16;
+    }
+
+    ciphertext
+}

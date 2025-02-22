@@ -1,6 +1,7 @@
+use crate::backend::aes_keys::decrypted_key::decrypt;
 use crate::backend::aes_keys::keys_password::{derive_key, generate_salt_from_login};
 use crate::backend::{USERS_DATA, VAULT_USERS_DIR};
-use crate::error_manager::ErrorType;
+use crate::error_manager::VaultError;
 use bcrypt::{hash, verify};
 use serde::ser::SerializeStruct;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
@@ -103,18 +104,18 @@ impl UserInput {
  * Struct representing user data.
  * Contains hashed email and password for secure storage.
  */
-pub struct LocalUserData {
+pub struct UserData {
     hash_email: String,
     hash_pw: String,
 }
 
-impl LocalUserData {
+impl UserData {
     /**
      * Create a new LocalUserData instance with hashed email and password.
      */
-    pub fn new(email: &str, password: &str) -> LocalUserData {
+    pub fn new(email: &str, password: &str) -> UserData {
         let cost = 12; // Use a fixed cost factor for bcrypt
-        LocalUserData {
+        UserData {
             hash_email: hash(email, cost).expect("Failed to hash email"),
             hash_pw: hash(password, cost).expect("Failed to hash password"),
         }
@@ -135,16 +136,16 @@ impl LocalUserData {
     }
 }
 
-impl Clone for LocalUserData {
+impl Clone for UserData {
     /**
      * Clone the LocalUserData instance.
      */
-    fn clone(&self) -> LocalUserData {
-        LocalUserData::new(&self.hash_email, &self.hash_pw)
+    fn clone(&self) -> UserData {
+        UserData::new(&self.hash_email, &self.hash_pw)
     }
 }
 
-impl<'de> Deserialize<'de> for LocalUserData {
+impl<'de> Deserialize<'de> for UserData {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -162,14 +163,14 @@ impl<'de> Deserialize<'de> for LocalUserData {
             .ok_or_else(|| de::Error::custom("Missing or invalid hash_pw"))?
             .to_string();
 
-        Ok(LocalUserData {
+        Ok(UserData {
             hash_email,
             hash_pw,
         })
     }
 }
 
-impl Serialize for LocalUserData {
+impl Serialize for UserData {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -252,20 +253,20 @@ impl Serialize for VaultJWT {
 /**
  * Struct representing a local JWT for logged-in users.
  */
-pub struct LocalJWT {
+pub struct JWT {
     email: String,
-    user_data: LocalUserData,
+    user_data: UserData,
     user_key: Box<[u8]>,
     vault_access: Option<VaultJWT>,
     exp: usize,
 }
 
-impl LocalJWT {
+impl JWT {
     /**
      * Create a new LocalJWT instance.
      */
-    pub fn new(user_data: LocalUserData, email: String, user_key: &[u8]) -> LocalJWT {
-        LocalJWT {
+    pub fn new(user_data: UserData, email: String, user_key: &[u8]) -> JWT {
+        JWT {
             email,
             user_data,
             user_key: Box::from(user_key),
@@ -288,7 +289,7 @@ impl LocalJWT {
     /**
      * Get the user's data.
      */
-    pub fn get_local_users_data(&self) -> &LocalUserData {
+    pub fn get_user_data(&self) -> &UserData {
         &self.user_data
     }
 
@@ -330,55 +331,74 @@ impl LocalJWT {
  */
 pub fn log_to_vaultify(
     user: &UserInput,
-    users_data: Vec<LocalUserData>,
-) -> Result<LocalJWT, Box<dyn std::error::Error>> {
+    users_data: Vec<UserData>,
+) -> Result<JWT, Box<dyn std::error::Error>> {
     for data in users_data {
         if verify(user.email.as_str(), data.get_hash_email())?
             && verify(user.password.as_str(), data.get_hash_pw())?
         {
             let salt = generate_salt_from_login(user.email.as_str());
             let key = derive_key(user.password.as_str(), salt.as_slice(), 100000); // Increase iterations for security
-            return Ok(LocalJWT::new(
-                data.clone(),
-                user.email.clone(),
-                key.as_slice(),
-            ));
+            return Ok(JWT::new(data.clone(), user.email.clone(), key.as_slice()));
         }
     }
 
-    Err(Box::new(ErrorType::LoginError))
+    Err(Box::new(VaultError::LoginError))
 }
 
 /**
  * Grant access to the vault if the user is in the vault database.
  */
-pub fn get_access_to_vault(
-    local_jwt: &mut LocalJWT,
-    path: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn get_access_to_vault(jwt: &mut JWT, path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let user_path = format!(
         "{}{}{}",
         path,
         VAULT_USERS_DIR,
-        local_jwt.get_local_users_data().get_hash_email()
+        jwt.get_user_data().get_hash_email()
     );
 
     if exists(&user_path)? {
-        // Decrypt the vault key and permissions here
-        let vault_key: [u8; 32] = [0; 32]; // Replace with actual decryption logic
-        let perms = Perms::Read; // Replace with actual permission logic
+        pub fn get_access_to_vault(
+            jwt: &mut JWT,
+            path: &str,
+        ) -> Result<(), Box<dyn std::error::Error>> {
+            let user_path = format!(
+                "{}{}{}",
+                path,
+                VAULT_USERS_DIR,
+                jwt.get_user_data().get_hash_email()
+            );
 
-        local_jwt.vault_access = Some(VaultJWT::new(perms, &vault_key));
+            if exists(&user_path)? {
+                let crypted_content = std::fs::read_to_string(&user_path)?;
+                let decypted_content: String = decrypt(crypted_content.as_bytes(), &jwt.user_key)?
+                    .iter()
+                    .map(|&c| c as char)
+                    .collect();
+                jwt.vault_access = Some(serde_json::from_str(&decypted_content)?);
+                Ok(())
+            } else {
+                Err(Box::new(VaultError::LoginError))
+            }
+        }
+        let crypted_content = std::fs::read_to_string(&user_path)?;
+
+        let decrypted_byte = decrypt(crypted_content.as_bytes(), &jwt.user_key)?;
+        let decrypted_content: String = String::from_utf8(decrypted_byte)?;
+
+        let vault_access: VaultJWT = serde_json::from_str(&decrypted_content)?;
+        jwt.vault_access = Some(vault_access);
+
         Ok(())
     } else {
-        Err(Box::new(ErrorType::LoginError))
+        Err(Box::new(VaultError::LoginError))
     }
 }
 
 /**
  * Load user data from a file.
  */
-pub fn load_users_data(path: &str) -> Vec<LocalUserData> {
+pub fn load_users_data(path: &str) -> Vec<UserData> {
     let file_path = format!("{}{}", path, USERS_DATA);
     let mut file = File::open(&file_path).expect("Unable to open file");
     let mut contents = String::new();
@@ -391,7 +411,7 @@ pub fn load_users_data(path: &str) -> Vec<LocalUserData> {
 /**
  * Save user data to a file.
  */
-pub fn save_users_data(users_data: &Vec<LocalUserData>, path: &str) {
+pub fn save_users_data(users_data: &Vec<UserData>, path: &str) {
     let file_path = format!("{}{}", path, USERS_DATA);
     let content = serde_json::to_string(users_data).expect("Unable to serialize user data");
     let mut file = File::create(&file_path).expect("Unable to create file");
@@ -405,13 +425,13 @@ pub fn save_users_data(users_data: &Vec<LocalUserData>, path: &str) {
  */
 fn add_user_to_data(
     user_input: UserInput,
-    users_data: &mut Vec<LocalUserData>,
+    users_data: &mut Vec<UserData>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     for data in users_data.iter() {
         if verify(&user_input.email, &data.hash_email)? {
-            return Err(Box::new(ErrorType::ArgumentError));
+            return Err(Box::new(VaultError::ArgumentError));
         }
     }
-    users_data.push(LocalUserData::new(&user_input.email, &user_input.password));
+    users_data.push(UserData::new(&user_input.email, &user_input.password));
     Ok(())
 }

@@ -1,4 +1,4 @@
-use crate::backend::account_manager::account::{LocalJWT, LocalUserData};
+use crate::backend::account_manager::account::{UserData, JWT};
 
 pub mod account_manager;
 pub mod encryption;
