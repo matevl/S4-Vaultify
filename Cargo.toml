@@ -21,6 +21,8 @@ zip = "2.2.2"
 tar = "0.4.44"
 lopdf = "=0.35.0"
 bincode = "2.0.0-rc.3"
+ring = "0.17.9"
+sha2 = "0.11.0-pre.4"
 
 [features]
 default = ["desktop"]
