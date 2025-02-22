@@ -1,176 +1,137 @@
 use dioxus::prelude::*;
-use gloo_timers::*;
 use regex::Regex;
-use std::cell::RefCell;
-use std::rc::Rc;
-use wasm_bindgen::JsCast;
-use wasm_bindgen_futures::spawn_local;
-use web_sys::{window, Window};
+use std::sync::mpmc::SendTimeoutError::Timeout;
 
-const FAVICON: Asset = asset!("/assets/Vaultify-black-png.ico");
-const MAIN_CSS: Asset = asset!("/assets/main.css");
-const HEADER_SVG: Asset = asset!("/assets/vault-text-svg.svg");
+// ... (assets and other code)
 
-fn main() {
-    dioxus::launch(App);
+#[derive(Clone, PartialEq)]
+enum Route {
+    Home,
+    LoginPage,
+    BlankPage,
 }
 
 #[component]
 fn App() -> Element {
+    let current_route = use_signal(|| Route::Home); // Use signal here
 
     rsx! {
-        document::Link { rel: "icon", href: FAVICON }
-        document::Link { rel: "stylesheet", href: MAIN_CSS }
-        Hero {}
-        TextEditor {}
+        // ... (document links)
+
+        match *current_route {
+            Route::Home => rsx! { Home { current_route: current_route } }, // No .clone() needed
+            Route::LoginPage => rsx! { LoginPage { current_route: current_route } }, // No .clone() needed
+            Route::BlankPage => rsx! { BlankPage {} },
+        }
     }
 }
 
 #[component]
-pub fn Hero() -> Element {
+pub fn Home(current_route: Signal<Route>) -> Element { // Signal as prop
     rsx! {
         div {
-            id: "hero",
-            img { src: HEADER_SVG, id: "header" }
-            div { id: "links",
-                a { href: "https://github.com/matevl/S4-Vaultify", "en savoir plus sur nous 🔒" }
+            // ... (hero content)
+            button {
+                onclick: move |_| current_route.set(Route::LoginPage), // No .clone() needed
+                "Se connecter"
+            }
+            button {
+                onclick: move |_| current_route.set(Route::BlankPage), // No .clone() needed
+                "Page blanche"
             }
         }
     }
 }
 
 #[component]
-pub fn TextEditor() -> Element {
-    let input_email = Rc::new(RefCell::new(String::new()));
-    let validation_message = Rc::new(RefCell::new(String::new()));
+pub fn LoginPage(current_route: Signal<Route>) -> Element { // Signal as prop
+    let input_email = use_signal(|| String::new()); // Use signal
+    let validation_message = use_signal(|| String::new()); // Use signal
+    let input_mdp = use_signal(|| String::new()); // Use signal
+    let notification_message = use_signal(|| String::new()); // Use signal
+    let show_notification = use_signal(|| false); // Use signal
 
-    let input_text_clone = Rc::clone(&input_email);
-    let validation_message_clone = Rc::clone(&validation_message);
-
-    let input_text_clone2 = Rc::clone(&input_email);
-    let validation_message_clone2 = Rc::clone(&validation_message);
-
-    let input_text_clone3 = Rc::clone(&input_email);
-    let validation_message_clone3 = Rc::clone(&validation_message);
-
-    let input_text_clone4 = Rc::clone(&input_email);
-    let validation_message_clone4 = Rc::clone(&validation_message);
-
-    let input_text_clone5 = Rc::clone(&input_email);
-    let validation_message_clone5 = Rc::clone(&validation_message);
-
-
-    let notification_message = Rc::new(RefCell::new(String::new()));
-    let show_notification = Rc::new(RefCell::new(false));
-    let notification_message_clone = Rc::clone(&notification_message);
-    let show_notification_clone = Rc::clone(&show_notification);
     let handle_notification = move |message: String| {
-        {
-            let mut msg = notification_message_clone.borrow_mut();
-            *msg = message;
-        }
+        *notification_message = message; // Direct assignment
+        *show_notification = true; // Direct assignment
 
-        {
-            let mut show = show_notification_clone.borrow_mut();
-            *show = true;
-        }
-
+        gloo_timers::Timeout::new(3000, move || {
+            *show_notification = false; // Direct assignment
+        }).start();
     };
 
-    let input_mdp = Rc::new(RefCell::new(String::new()));
-    let validation_mdp = Rc::new(RefCell::new(String::new()));
-
     rsx! {
         div {
-            id: "text-editor",
-            style: "margin-top: 2rem; padding: 1rem; border: 1px solid #ccc; border-radius: 5px; color: white\
-            ; background-color: #021433;",
-            class:"container",
-            h2 { "Se Connecter" }
+            // ... (text-editor content)
 
-            // Zone de texte
             textarea {
-                style: "width: 50%; height: 20px; padding: 0.5rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 5px; resize: none;",
-                placeholder: "E-Mail",
-                value: "{input_email.borrow()}",
-                oninput: move |evt| {
-                    let value = evt.value().clone();
-                    let mut text = input_text_clone5.borrow_mut();
-                    *text = value;
-                },
+                // ...
+                value: "{input_email}", // Access signal value directly
+                oninput: move |evt| *input_email = evt.value().clone(), // Direct assignment
             }
 
-            // Bouton pour valider l'email
-
-
-            // Afficher le message de validation
             div {
-                style: "margin-top: 1rem; color: red;",
-                "{validation_message.borrow()}"
+                // ...
+                "{validation_message}" // Access signal value directly
             }
 
-
-
             textarea {
-                style: "width: 50%; height: 20px; padding: 0.5rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 5px; resize: none;",
-                placeholder: "Mot-de-passe",
-                value: "{input_email.borrow()}",
-                oninput: move |evt| {
-                    let value = evt.value().clone();
-                    let mut text = input_mdp.borrow_mut();
-                    *text = value;
-                },
+                // ...
+                value: "{input_mdp}", // Access signal value directly
+                oninput: move |evt| *input_mdp = evt.value().clone(), // Direct assignment
             }
 
             button {
-
-                style: "margin-top: 1rem; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer;",
+                // ...
                 onclick: move |_| {
-                    let email = input_text_clone.borrow().trim().to_string();
+                    let email = input_email.trim().to_string(); // Access signal value directly
                     if is_valid_email(&email) {
-                        validation_message_clone.borrow_mut().clear();
-                        validation_message_clone.borrow_mut().push_str("L'email est valide.");
-
-                        if let Some(window) = window() {
-                            // Fermer la fenêtre actuelle
-                            window.close();
-
-                            // Ouvrir une nouvelle fenêtre
-                            let _ = window.open_with_url_and_target("https://example.com", "_blank");
-                        }
+                        *validation_message = "L'email est valide.".to_string(); // Direct assignment
+                        handle_notification("Email valide !".to_string());
                     } else {
-                        validation_message_clone.borrow_mut().clear();
-                        validation_message_clone.borrow_mut().push_str("L'email n'est pas valide.");
+                        *validation_message = "L'email est pas valide.".to_string(); // Direct assignment
+                        handle_notification("Email invalide !".to_string());
                     }
                 },
                 "Se connecter"
             }
 
-
-            // Bouton pour effacer le texte
             button {
-                style: "margin-top: 1rem; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer;",
+                // ...
                 onclick: move |_| {
-                    input_text_clone3.borrow_mut().clear();
+                    *input_email = String::new(); // Direct assignment
+                    *input_mdp = String::new(); // Direct assignment
+                    *validation_message = String::new(); // Direct assignment
                 },
                 "Effacer"
             }
+            button {
+                onclick: move |_| current_route.set(Route::Home), // No .clone() needed
+                "Retour à l'accueil"
+            }
 
+            if *show_notification { // Access signal value directly
+                div {
+                    // ...
+                    "{notification_message}" // Access signal value directly
+                }
+            }
         }
     }
 }
 
-// Fonction pour vérifier la validité d'un email
+// ... (BlankPage and is_valid_email)
+#[component]
+pub fn BlankPage() -> Element {
+    rsx! {
+        div {
+            "Page blanche !"
+        }
+    }
+}
+
+
 fn is_valid_email(email: &str) -> bool {
     let re = Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap();
     re.is_match(email)
 }
-
-// Fonction pour sauvegarder du texte dans un fichier (si nécessaire)
-fn save_text_to_file(text: &str) {
-    // Logique pour sauvegarder du texte dans un fichier
-    println!("Enregistrer le texte : {}", text);
-}
-
-// Fonction pour copier du texte dans le presse-papiers
-
