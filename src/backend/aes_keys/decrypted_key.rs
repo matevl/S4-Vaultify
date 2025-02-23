@@ -300,3 +300,40 @@ pub fn pkcs7_pad(data: &mut Vec<u8>, block_size: usize) {
     let pad_len = block_size - (data.len() % block_size);
     data.extend(std::iter::repeat(pad_len as u8).take(pad_len));
 }
+
+/**
+ * Decrypts the content of a file using AES-256 decryption.
+ *
+ * @param data - The ciphertext data to decrypt.
+ * @param key - The decryption key.
+ * @return Result<Vec<u8>, String> - The decrypted plaintext or an error message.
+ */
+pub fn decrypt(data: &[u8], key: &[u8]) -> Result<Vec<u8>, String> {
+    // Generate round keys using the provided key
+    let round_keys = key_expansion(key);
+
+    // Prepare the output buffer for plaintext
+    let mut plaintext = Vec::new();
+
+    // Process the data in 16-byte blocks
+    let mut buffer = [0u8; 16];
+    let mut i = 0;
+
+    while i < data.len() {
+        // Copy a block of data into the buffer
+        let block_size = std::cmp::min(16, data.len() - i);
+        buffer[..block_size].copy_from_slice(&data[i..i + block_size]);
+
+        // Decrypt the block
+        let decrypted_block = decrypt_block(&buffer, &round_keys);
+        plaintext.extend_from_slice(&decrypted_block);
+
+        // Move to the next block
+        i += 16;
+    }
+
+    // Remove PKCS#7 padding from the last block
+    pkcs7_unpad(&mut plaintext)?;
+
+    Ok(plaintext)
+}
