@@ -4,6 +4,7 @@ use crate::backend::aes_keys::keys_password::generate_random_key;
 use crate::backend::{account_manager, *};
 use crate::error_manager::VaultError;
 use account_manager::account::*;
+use std::collections::HashMap;
 use std::fs::{create_dir, exists, File};
 
 /**
@@ -83,7 +84,7 @@ pub fn init_vault(
 /**
  * Initialize the main configuration for the software to ensure it exists.
  */
-fn init_config_vaultify() {
+pub fn init_config_vaultify() {
     if !exists(VAULTIFY_CONFIG).is_ok() {
         create_dir(VAULTIFY_CONFIG).expect("Could not create folder");
     }
@@ -91,5 +92,14 @@ fn init_config_vaultify() {
     let path = format!("{}{}", VAULTIFY_CONFIG, USERS_DATA);
     if !exists(&path).is_ok() {
         File::create(&path).expect("Could not create file");
+        let empty: Vec<UserData> = Vec::new();
+        save_users_data(&empty, &path);
+    }
+
+    let path = VAULT_MATCHING;
+    if !exists(&path).is_ok() {
+        File::create(&path).expect("Could not create file");
+        let empty: HashMap<String, Vec<(String, String)>> = HashMap::new();
+        save_vault_matching(&empty);
     }
 }

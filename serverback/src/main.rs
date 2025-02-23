@@ -1,34 +1,43 @@
 mod models;
 
-
-use actix_web::{web, App, HttpServer,HttpResponse, Responder};
 use actix_web::middleware::Logger;
-use models::*;
-use serde::{Deserialize, Serialize};
-use s4_vaultify::backend::*;
+use actix_web::{App, HttpResponse, HttpServer, Responder, web};
 use lazy_static::lazy_static;
+use models::*;
+use s4_vaultify::backend::*;
+use serde::{Deserialize, Serialize};
 use spin::Mutex;
+use std::collections::HashMap;
+use std::ops::Deref;
 
 use account_manager::account::JWT;
 // Structure pour les identifiants utilisateur
-use account_manager::account::{UserInput, log_to_vaultify, load_users_data, UserData}; // Impor
-lazy_static!{
+use account_manager::account::{
+    UserData, UserInput, load_users_data, load_vault_matching, log_to_vaultify, save_vault_matching,
+};
+use s4_vaultify::backend::vault_manager::init_config_vaultify;
 
-static ref USERDAT : Mutex<Vec<UserData>> = Mutex::new(load_users_data());
+// Impor
+lazy_static! {
+    static ref USERD: Mutex<Vec<UserData>> = Mutex::new(load_users_data("~/.vaultify/"));
+    static ref VAULT_MATCh: Mutex<HashMap<String, Vec<(String, String)>>> =
+        Mutex::new(load_vault_matching());
 }
 
 pub fn homepage() {
     println!("Bienvenue !\n1. S'enregistrer\n2. Se connecter");
     let mut choix = String::new();
-    std::io::stdin().read_line(&mut choix).expect("Erreur lors de la lecture du choix");
+    std::io::stdin()
+        .read_line(&mut choix)
+        .expect("Erreur lors de la lecture du choix");
 
     match choix.trim() {
         "1" => {
-            register_user("TEST".to_string(),"TEST".to_string(),"TEST".to_string());
-        },
+            register_user("TEST".to_string(), "TEST".to_string(), "TEST".to_string());
+        }
         "2" => {
             login_user();
-        },
+        }
         _ => {
             println!("Choix invalide, veuillez réessayer.");
             homepage(); // Réappeler la fonction en cas de mauvais choix
@@ -36,16 +45,20 @@ pub fn homepage() {
     }
 }
 
-fn register_user(email: String, password: String, name: String ) {
+fn register_user(email: String, password: String, name: String) {
     println!("Veuillez entrer vos informations pour vous enregistrer.");
     let mut username = String::new();
     let mut password = String::new();
 
     println!("Nom d'utilisateur : ");
-    std::io::stdin().read_line(&mut username).expect("Erreur lors de la saisie du nom d'utilisateur");
+    std::io::stdin()
+        .read_line(&mut username)
+        .expect("Erreur lors de la saisie du nom d'utilisateur");
 
     println!("Mot de passe : ");
-    std::io::stdin().read_line(&mut password).expect("Erreur lors de la saisie du mot de passe");
+    std::io::stdin()
+        .read_line(&mut password)
+        .expect("Erreur lors de la saisie du mot de passe");
 
     let user_input = UserInput {
         email: username.trim().to_string(),
@@ -61,38 +74,38 @@ fn login_user() {
     let mut username = String::new();
     let mut password = String::new();
 
-    println!("Nom d'utilisateur : ");
-    std::io::stdin().read_line(&mut username).expect("Erreur lors de la saisie du nom d'utilisateur");
+    println!("Email : ");
+    std::io::stdin()
+        .read_line(&mut username)
+        .expect("Erreur lors de la saisie du nom d'utilisateur");
 
     println!("Mot de passe : ");
-    std::io::stdin().read_line(&mut password).expect("Erreur lors de la saisie du mot de passe");
+    std::io::stdin()
+        .read_line(&mut password)
+        .expect("Erreur lors de la saisie du mot de passe");
 
     let user_input = UserInput::new(username.trim().to_string(), password.trim().to_string());
 
     // Utilise la fonction load_user_data de account.rs
-    match log_to_vaultify(&user_input, Vec::new()) {
-        Some(user_data) => {
-            println!("Connexion réussie ! Données utilisateur : {:?}", user_data);
+    match log_to_vaultify(&user_input, USERD.lock().deref()) {
+        Ok(jwt) => {
+            println!("Connexion réussie ! Données utilisateur :");
+            show_acc(&jwt);
         }
-        None => {
+        Err(_) => {
             println!("Nom d'utilisateur ou mot de passe incorrect. Veuillez réessayer.");
             login_user();
         }
     }
 }
 
-
-
-
+fn show_acc(jwt: &JWT) {}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| {
-        App::new()
-            
-    })
+    init_config_vaultify();
+    HttpServer::new(|| App::new())
         .bind("127.0.0.1:8080")?
         .run()
-        
         .await
 }

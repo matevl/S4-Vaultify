@@ -1,10 +1,12 @@
 use crate::backend::aes_keys::decrypted_key::decrypt;
 use crate::backend::aes_keys::keys_password::{derive_key, generate_salt_from_login};
-use crate::backend::{USERS_DATA, VAULT_USERS_DIR};
+use crate::backend::{USERS_DATA, VAULTIFY_CONFIG, VAULT_MATCHING, VAULT_USERS_DIR};
 use crate::error_manager::VaultError;
 use bcrypt::{hash, verify};
 use serde::ser::SerializeStruct;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use std::collections::HashMap;
+use std::fs;
 use std::fs::{exists, File};
 use std::io::{Read, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -254,6 +256,7 @@ impl Serialize for VaultJWT {
 /**
  * Struct representing a local JWT for logged-in users.
  */
+
 pub struct JWT {
     email: String,
     user_data: UserData,
@@ -332,7 +335,7 @@ impl JWT {
  */
 pub fn log_to_vaultify(
     user: &UserInput,
-    users_data: Vec<UserData>,
+    users_data: &Vec<UserData>,
 ) -> Result<JWT, Box<dyn std::error::Error>> {
     for data in users_data {
         if verify(user.email.as_str(), data.get_hash_email())?
@@ -435,4 +438,21 @@ fn add_user_to_data(
     }
     users_data.push(UserData::new(&user_input.email, &user_input.password));
     Ok(())
+}
+
+type VaultMatching = HashMap<String, Vec<(String, String)>>;
+
+pub fn load_vault_matching() -> VaultMatching {
+    let file_path = format!("{}{}", VAULTIFY_CONFIG, VAULT_MATCHING);
+    let file_content = fs::read_to_string(file_path).expect("Unable to read file");
+    let vault_matching: VaultMatching =
+        serde_json::from_str(&file_content).expect("Unable to parse JSON");
+    vault_matching
+}
+
+// Function to save vault matching to a JSON file
+pub fn save_vault_matching(data: &VaultMatching) {
+    let file_path = format!("{}{}", VAULTIFY_CONFIG, VAULT_MATCHING);
+    let file_content = serde_json::to_string_pretty(data).expect("Unable to serialize user data");
+    fs::write(file_path, file_content).expect("Unable to write file");
 }
