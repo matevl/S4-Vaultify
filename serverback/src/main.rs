@@ -6,62 +6,80 @@ use actix_web::middleware::Logger;
 use models::*;
 use serde::{Deserialize, Serialize};
 use s4_vaultify::backend::*;
-use s4_vaultify::backend::account_manager::account::{load_users_data, local_log_in, UserInput, JWT};
-use s4_vaultify::backend::vault_manager::init_config_vaultify;
+
+
+use account_manager::account::JWT;
 // Structure pour les identifiants utilisateur
-#[derive(Deserialize)]
-struct LoginData {
-    email: String,
-    password: String,
-}
-impl LoginData {
-    fn new(email: String, password: String) -> LoginData {
-        LoginData { email, password }
-    }
-    fn get_email(&self) -> &String {
-        &self.email
-    }
-    fn get_password(&self) -> &String {
-        &self.password
-    }
-}
-#[derive(Deserialize)]
-struct RegisterData {
-    email: String,
-    password: String,
-}
-// Structure pour la réponse JWT
-async fn login(user_data: web::Json<UserInput>) -> impl Responder {
-    // Charger les utilisateurs depuis le fichier
-    let users_data = load_users_data("path_to_users_data");
-
-    // Vérifier les identifiants de l'utilisateur avec UserInput
-    match local_log_in(&user_data.into_inner(), users_data) {
-        Ok(jwt) => HttpResponse::Ok().json(jwt), // Retourne le JWT
-        Err(_) => HttpResponse::Unauthorized().body("Invalid credentials"),
-    }
-}
+use account_manager::account::{UserInput, local_log_in}; // Impor
 
 
-// Handler pour une page protégée
-async fn protected_route() -> impl Responder {
-    HttpResponse::Ok().body("Bienvenue dans la page protégée !")
-}
+pub fn homepage() {
+    println!("Bienvenue !\n1. S'enregistrer\n2. Se connecter");
+    let mut choix = String::new();
+    std::io::stdin().read_line(&mut choix).expect("Erreur lors de la lecture du choix");
 
-async fn register(register_data: web::Json<RegisterData>) -> impl Responder {
-    // Charger les utilisateurs depuis le fichier
-    let mut users_data = load_users_data("path_to_users_data");
-
-    // Ajouter l'utilisateur aux données
-    let user_input = UserInput::new(register_data.email.clone(), register_data.password.clone());
-    match add_user_to_data(user_input, &mut users_data, Perms::Read) {
-        Ok(_) => {
-            sava_users_data(&users_data, "path_to_users_data"); // Sauvegarder les données après ajout
-            HttpResponse::Created().body("User created successfully")
+    match choix.trim() {
+        "1" => {
+            register_user("TEST".to_string(),"TEST".to_string(),"TEST".to_string());
+        },
+        "2" => {
+            login_user();
+        },
+        _ => {
+            println!("Choix invalide, veuillez réessayer.");
+            homepage(); // Réappeler la fonction en cas de mauvais choix
         }
-        Err(_) => HttpResponse::Conflict().body("User already exists"),
     }
 }
+
+fn register_user(email: String, password: String, name: String ) {
+    println!("Veuillez entrer vos informations pour vous enregistrer.");
+    let mut username = String::new();
+    let mut password = String::new();
+
+    println!("Nom d'utilisateur : ");
+    std::io::stdin().read_line(&mut username).expect("Erreur lors de la saisie du nom d'utilisateur");
+
+    println!("Mot de passe : ");
+    std::io::stdin().read_line(&mut password).expect("Erreur lors de la saisie du mot de passe");
+
+    let user_input = UserInput {
+        email: username.trim().to_string(),
+        password: password.trim().to_string(),
+    };
+
+    // Ajoute une logique pour sauvegarder les informations utilisateur si nécessaire
+    println!("Utilisateur enregistré avec succès : {:?}", user_input);
+}
+
+fn login_user() {
+    println!("Veuillez entrer vos informations pour vous connecter.");
+    let mut username = String::new();
+    let mut password = String::new();
+
+    println!("Nom d'utilisateur : ");
+    std::io::stdin().read_line(&mut username).expect("Erreur lors de la saisie du nom d'utilisateur");
+
+    println!("Mot de passe : ");
+    std::io::stdin().read_line(&mut password).expect("Erreur lors de la saisie du mot de passe");
+
+    let user_input = UserInput::new(username.trim().to_string(), password.trim().to_string());
+
+    // Utilise la fonction load_user_data de account.rs
+    match local_log_in(&user_input, ) {
+        Some(user_data) => {
+            println!("Connexion réussie ! Données utilisateur : {:?}", user_data);
+        }
+        None => {
+            println!("Nom d'utilisateur ou mot de passe incorrect. Veuillez réessayer.");
+            login_user();
+        }
+    }
+}
+
+
+
+
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
