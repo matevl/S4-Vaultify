@@ -2,7 +2,7 @@ use crate::backend::account_manager::account::Perms::Admin;
 use crate::backend::aes_keys::crypted_key::encrypt;
 use crate::backend::aes_keys::keys_password::generate_random_key;
 use crate::backend::{account_manager, *};
-use crate::error_manager::ErrorType;
+use crate::error_manager::VaultError;
 use account_manager::account::*;
 use std::fs::{create_dir, exists, File};
 

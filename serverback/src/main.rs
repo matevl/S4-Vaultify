@@ -6,12 +6,16 @@ use actix_web::middleware::Logger;
 use models::*;
 use serde::{Deserialize, Serialize};
 use s4_vaultify::backend::*;
-
+use lazy_static::lazy_static;
+use spin::Mutex;
 
 use account_manager::account::JWT;
 // Structure pour les identifiants utilisateur
-use account_manager::account::{UserInput, local_log_in}; // Impor
+use account_manager::account::{UserInput, log_to_vaultify, load_users_data, UserData}; // Impor
+lazy_static!{
 
+static ref USERDAT : Mutex<Vec<UserData>> = Mutex::new(load_users_data());
+}
 
 pub fn homepage() {
     println!("Bienvenue !\n1. S'enregistrer\n2. Se connecter");
@@ -66,7 +70,7 @@ fn login_user() {
     let user_input = UserInput::new(username.trim().to_string(), password.trim().to_string());
 
     // Utilise la fonction load_user_data de account.rs
-    match local_log_in(&user_input, ) {
+    match log_to_vaultify(&user_input, Vec::new()) {
         Some(user_data) => {
             println!("Connexion réussie ! Données utilisateur : {:?}", user_data);
         }
@@ -85,10 +89,10 @@ fn login_user() {
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
-            .route("/login", web::post().to(login))
-            .route("/register", web::post().to(register))
+            
     })
         .bind("127.0.0.1:8080")?
         .run()
+        
         .await
 }

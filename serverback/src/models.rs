@@ -8,6 +8,4 @@ pub async fn get_me(user_data: UserData) -> impl Responder {
     web::Json(user_data) // Retourne un objet JSON comme réponse
 }
 
-pub async fn show_vaults() -> impl Responder {
-    web::Json()
-}
+

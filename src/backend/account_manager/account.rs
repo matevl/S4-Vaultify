@@ -86,6 +86,7 @@ impl Serialize for Perms {
 /**
  * Struct representing user input from the GUI.
  */
+#[derive(Debug)]
 pub struct UserInput {
     pub email: String,
     pub password: String,
