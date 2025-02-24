@@ -467,8 +467,8 @@ pub fn save_users_data(users_data: &Vec<UserData>, path: &str) {
 /**
  * Add a new user to the user data.
  */
-fn add_user_to_data(
-    user_input: UserInput,
+pub fn add_user_to_data(
+    user_input: &UserInput,
     users_data: &mut Vec<UserData>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     for data in users_data.iter() {

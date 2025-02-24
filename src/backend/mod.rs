@@ -11,6 +11,6 @@ pub mod aes_keys;
 const VAULT_CONFIG_ROOT: &str = ".vault/";
 const VAULT_USERS_DIR: &str = ".vault/users/";
 const USERS_DATA: &str = "users_data.json";
-const VAULTIFY_CONFIG: &str = "~/.vaultify/";
+pub const VAULTIFY_CONFIG: &str = "~/.vaultify/";
 
 const VAULT_MATCHING: &str = "~/.vaultify/vaultmatching.json";

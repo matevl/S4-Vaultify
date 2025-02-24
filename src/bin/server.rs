@@ -6,14 +6,14 @@ use serde::{Deserialize, Serialize};
 use spin::Mutex;
 use std::collections::HashMap;
 
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use regex::Regex;
-use s4_vaultify::backend::account_manager::account::{JWT, UserData, UserInput, load_users_data, load_vault_matching, log_to_vaultify};
+use s4_vaultify::backend::account_manager::account::{add_user_to_data, load_users_data, load_vault_matching, log_to_vaultify, save_users_data, UserData, UserInput, JWT};
 use s4_vaultify::backend::vault_manager::init_config_vaultify;
-
+use s4_vaultify::backend::{VAULTIFY_CONFIG};
 // Déclaration des variables globales
 lazy_static! {
-    static ref USERD: Mutex<Vec<UserData>> = Mutex::new(load_users_data("~/.vaultify/"));
+    static ref USERD: Mutex<Vec<UserData>> = Mutex::new(load_users_data(VAULTIFY_CONFIG));
     static ref VAULT_MATCh: Mutex<HashMap<String, Vec<(String, String)>>> = Mutex::new(load_vault_matching());
 }
 
@@ -40,15 +40,19 @@ async fn homepage(choice: web::Query<Choice>) -> impl Responder {
 
     match choice.choice.as_str() {
         "1" => {
-            // L'utilisateur veut s'enregistrer, appeler la fonction d'enregistrement
-            register_user().await
+            // L'utilisateur veut s'enregistrer, redirige vers la route d'enregistrement
+            HttpResponse::Found()
+                .header("Location", "/auth/register")
+                .finish()
         }
         "2" => {
-            // L'utilisateur veut se connecter, appeler la fonction de connexion
-            login_user().await
+            // L'utilisateur veut se connecter, redirige vers la route de connexion
+            HttpResponse::Found()
+                .header("Location", "/auth/login")
+                .finish()
         }
         _ => {
-            // Si le choix est invalide
+            // Si le choix est invalide, retour à la page d'accueil
             HttpResponse::BadRequest().body("Choix invalide, veuillez réessayer.")
         }
     }
@@ -64,6 +68,7 @@ async fn main() -> std::io::Result<()> {
             .service(web::scope("/auth") // Groupe de routes d'authentification
                 .route("/register", web::post().to(register_user))
                 .route("/login", web::post().to(login_user))
+                .route("myvaults", web::post().to(myvaults))
             )
             .route("/account", web::get().to(account_details)) // Route pour afficher les détails du compte
     })
@@ -87,11 +92,14 @@ async fn register_user() -> impl Responder {
     io::stdin()
         .read_line(&mut email)
         .expect("Erreur lors de la lecture de l'email");
+    
     if is_valid_email(&email) {
         // Supprimer les espaces ou les sauts de ligne de l'email
          email = email.trim().to_string();
     }
-    else { 
+    else {
+        
+        return HttpResponse::BadRequest().body("Email invalide, veuillez réessayer.");
         
     }
 
@@ -118,8 +126,12 @@ async fn register_user() -> impl Responder {
     // Logique d'enregistrement : ici tu pourrais ajouter l'utilisateur à une base de données ou un fichier
     println!("Utilisateur enregistré : {:?}", user_input);
     
+    add_user_to_data(&user_input,USERD.lock().deref_mut());
     // Retourner une réponse HTTP après l'enregistrement
-    HttpResponse::Ok().json("Utilisateur enregistré avec succès")
+    let jwt = log_to_vaultify(&user_input,USERD.lock().deref());
+    HttpResponse::Found()
+        .header("Location", "/auth/myvaults")
+    .finish()
 }
 
 // Fonction pour connecter un utilisateur
@@ -148,14 +160,16 @@ async fn login_user() -> impl Responder {
     // Créer un utilisateur avec les informations saisies
     let user_input = UserInput::new(email, password);
 
-    let jwt = log_to_vaultify(&user_input, USERD.lock().deref()).expect("Erreur"); 
-    match jwt {
-        Ok(jwt) => {
-            
-        }
-        None => {}
-    }
-    HttpResponse::Ok().json(jwt)
+    let jwt = log_to_vaultify(&user_input, USERD.lock().deref()).expect("Erreur");
+
+    HttpResponse::Found()
+        .header("Location", "/auth/myvaults").json(jwt)
+    
+}
+
+async fn myvaults( ) -> impl Responder{
+    
+    HttpResponse::Ok()
 }
 
 // Fonction pour afficher les informations de l'utilisateur
