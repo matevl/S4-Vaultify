@@ -264,6 +264,46 @@ pub struct JWT {
     vault_access: Option<VaultJWT>,
     exp: usize,
 }
+impl Serialize for JWT {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("JWT", 5)?;
+        state.serialize_field("email", &self.email)?;
+        state.serialize_field("user_data", &self.user_data)?;
+        state.serialize_field("user_key", &self.user_key)?;
+        state.serialize_field("vault_access", &self.vault_access)?;
+        state.serialize_field("exp", &self.exp)?;
+        state.end()
+    }
+}
+
+// Désérialisation de JWT
+impl<'de> Deserialize<'de> for JWT {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct JWTVisitor {
+            email: String,
+            user_data: UserData,
+            user_key: Vec<u8>,
+            vault_access: Option<VaultJWT>,
+            exp: usize,
+        }
+
+        let visitor = JWTVisitor::deserialize(deserializer)?;
+        Ok(JWT {
+            email: visitor.email,
+            user_data: visitor.user_data,
+            user_key: Box::from(visitor.user_key),
+            vault_access: visitor.vault_access,
+            exp: visitor.exp,
+        })
+    }
+}
 
 impl JWT {
     /**
