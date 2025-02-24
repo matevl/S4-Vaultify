@@ -103,7 +103,7 @@ pub fn init_config_vaultify() {
         save_users_data(&empty);
     }
 
-    let vault_matching_path = vaultify_config_path.join(VAULT_MATCHING);
+    let vault_matching_path = root.join(VAULT_MATCHING);
     if !vault_matching_path.exists() {
         fs::create_dir_all(vault_matching_path.parent().unwrap()).expect("Could not create directory");
         File::create(&vault_matching_path).expect("Could not create file");
