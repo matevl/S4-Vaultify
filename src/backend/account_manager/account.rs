@@ -3,6 +3,7 @@ use crate::backend::aes_keys::keys_password::{derive_key, generate_salt_from_log
 use crate::backend::{USERS_DATA, VAULTIFY_CONFIG, VAULT_MATCHING, VAULT_USERS_DIR};
 use crate::error_manager::VaultError;
 use bcrypt::{hash, verify};
+use dirs;
 use serde::ser::SerializeStruct;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
@@ -442,26 +443,23 @@ pub fn get_access_to_vault(jwt: &mut JWT, path: &str) -> Result<(), Box<dyn std:
 /**
  * Load user data from a file.
  */
-pub fn load_users_data(path: &str) -> Vec<UserData> {
-    let file_path = format!("{}{}", path, USERS_DATA);
-    let mut file = File::open(&file_path).expect("Unable to open file");
-    let mut contents = String::new();
+pub fn load_users_data() -> Vec<UserData> {
+    let root = dirs::home_dir().expect("No home dir");
+    let file_path = root.join(format!("{}{}", VAULTIFY_CONFIG, USERS_DATA));
 
-    file.read_to_string(&mut contents)
-        .expect("Unable to read file");
+    let contents = fs::read_to_string(file_path).expect("Unable to read file");
     serde_json::from_str(&contents).expect("Unable to parse JSON")
 }
 
 /**
  * Save user data to a file.
  */
-pub fn save_users_data(users_data: &Vec<UserData>, path: &str) {
-    let file_path = format!("{}{}", path, USERS_DATA);
-    let content = serde_json::to_string(users_data).expect("Unable to serialize user data");
-    let mut file = File::create(&file_path).expect("Unable to create file");
+pub fn save_users_data(users_data: &Vec<UserData>) {
+    let root = dirs::home_dir().expect("No home dir");
+    let file_path = root.join(format!("{}{}", VAULTIFY_CONFIG, USERS_DATA));
 
-    file.write_all(content.as_bytes())
-        .expect("Unable to write file");
+    let content = serde_json::to_string(users_data).expect("Unable to serialize user data");
+    fs::write(file_path, content.as_bytes()).unwrap()
 }
 
 /**
@@ -483,7 +481,9 @@ pub fn add_user_to_data(
 type VaultMatching = HashMap<String, Vec<(String, String)>>;
 
 pub fn load_vault_matching() -> VaultMatching {
-    let file_path = format!("{}{}", VAULTIFY_CONFIG, VAULT_MATCHING);
+    let root = dirs::home_dir().expect("No home dir");
+    let file_path = root.join(VAULT_MATCHING);
+
     let file_content = fs::read_to_string(file_path).expect("Unable to read file");
     let vault_matching: VaultMatching =
         serde_json::from_str(&file_content).expect("Unable to parse JSON");
@@ -492,7 +492,9 @@ pub fn load_vault_matching() -> VaultMatching {
 
 // Function to save vault matching to a JSON file
 pub fn save_vault_matching(data: &VaultMatching) {
-    let file_path = format!("{}{}", VAULTIFY_CONFIG, VAULT_MATCHING);
+    let root = dirs::home_dir().expect("No home dir");
+    let file_path = root.join(VAULT_MATCHING);
+
     let file_content = serde_json::to_string_pretty(data).expect("Unable to serialize user data");
     fs::write(file_path, file_content).expect("Unable to write file");
 }
