@@ -4,8 +4,11 @@ use crate::backend::aes_keys::keys_password::generate_random_key;
 use crate::backend::{account_manager, *};
 use crate::error_manager::VaultError;
 use account_manager::account::*;
+use actix_web::dev::ResourcePath;
+use dirs;
 use std::collections::HashMap;
 use std::fs::{create_dir, exists, File};
+use std::fs;
 
 /**
  * Struct representing the environment of the current vault.
@@ -85,21 +88,27 @@ pub fn init_vault(
  * Initialize the main configuration for the software to ensure it exists.
  */
 pub fn init_config_vaultify() {
-    if !exists(VAULTIFY_CONFIG).is_ok() {
-        create_dir(VAULTIFY_CONFIG).expect("Could not create folder");
+    let root = dirs::home_dir().expect("Could not find home dir");
+
+    let vaultify_config_path = root.join(VAULTIFY_CONFIG);
+    if !vaultify_config_path.exists() {
+        fs::create_dir_all(&vaultify_config_path).expect("Could not create folder");
     }
 
-    let path = format!("{}{}", VAULTIFY_CONFIG, USERS_DATA);
-    if !exists(&path).is_ok() {
-        File::create(&path).expect("Could not create file");
+    let users_data_path = vaultify_config_path.join(USERS_DATA);
+    if !users_data_path.exists() {
+        fs::create_dir_all(users_data_path.parent().unwrap()).expect("Could not create directory");
+        File::create(&users_data_path).expect("Could not create file");
         let empty: Vec<UserData> = Vec::new();
-        save_users_data(&empty, &path);
+        save_users_data(&empty);
     }
 
-    let path = VAULT_MATCHING;
-    if !exists(&path).is_ok() {
-        File::create(&path).expect("Could not create file");
+    let vault_matching_path = vaultify_config_path.join(VAULT_MATCHING);
+    if !vault_matching_path.exists() {
+        fs::create_dir_all(vault_matching_path.parent().unwrap()).expect("Could not create directory");
+        File::create(&vault_matching_path).expect("Could not create file");
         let empty: HashMap<String, Vec<(String, String)>> = HashMap::new();
         save_vault_matching(&empty);
     }
 }
+
