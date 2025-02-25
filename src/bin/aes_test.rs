@@ -21,7 +21,7 @@ fn main() {
     display_key_hex(&key);
 
     // 2. Define the path of the file to be encrypted (set directly here)
-    let chemin_fichier = "/home/specsaiko/Bureau/S4-Vaultify/assets/aes_test/video_test.bin"; // change this path as needed
+    let chemin_fichier = "assets/aes_test/video_test.bin"; // change this path as needed
 
     // Read the file
     let donnees = fs::read(chemin_fichier)
