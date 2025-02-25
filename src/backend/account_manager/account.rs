@@ -8,8 +8,7 @@ use serde::ser::SerializeStruct;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::fs;
-use std::fs::{exists, File};
-use std::io::{Read, Write};
+use std::fs::exists;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /**
@@ -23,6 +22,7 @@ pub enum Perms {
     Read,
 }
 
+#[allow(dead_code)]
 impl Perms {
     /**
      * Check if the permission allows reading.
@@ -403,37 +403,12 @@ pub fn get_access_to_vault(jwt: &mut JWT, path: &str) -> Result<(), Box<dyn std:
     );
 
     if exists(&user_path)? {
-        pub fn get_access_to_vault(
-            jwt: &mut JWT,
-            path: &str,
-        ) -> Result<(), Box<dyn std::error::Error>> {
-            let user_path = format!(
-                "{}{}{}",
-                path,
-                VAULT_USERS_DIR,
-                jwt.get_user_data().get_hash_email()
-            );
-
-            if exists(&user_path)? {
-                let crypted_content = std::fs::read_to_string(&user_path)?;
-                let decypted_content: String = decrypt(crypted_content.as_bytes(), &jwt.user_key)?
-                    .iter()
-                    .map(|&c| c as char)
-                    .collect();
-                jwt.vault_access = Some(serde_json::from_str(&decypted_content)?);
-                Ok(())
-            } else {
-                Err(Box::new(VaultError::LoginError))
-            }
-        }
-        let crypted_content = std::fs::read_to_string(&user_path)?;
-
-        let decrypted_byte = decrypt(crypted_content.as_bytes(), &jwt.user_key)?;
-        let decrypted_content: String = String::from_utf8(decrypted_byte)?;
-
-        let vault_access: VaultJWT = serde_json::from_str(&decrypted_content)?;
-        jwt.vault_access = Some(vault_access);
-
+        let _encrypted_content = fs::read_to_string(&user_path)?;
+        let decrypted_content: String = decrypt(_encrypted_content.as_bytes(), &jwt.user_key)?
+            .iter()
+            .map(|&c| c as char)
+            .collect();
+        jwt.vault_access = Some(serde_json::from_str(&decrypted_content)?);
         Ok(())
     } else {
         Err(Box::new(VaultError::LoginError))

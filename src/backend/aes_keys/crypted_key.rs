@@ -1,10 +1,3 @@
-// Importing the necessary libraries
-use ring::pbkdf2; // For password-based key derivation (PBKDF2)
-use sha2::{Digest, Sha256}; // For SHA256 hashing
-use std::env; // For accessing environment variables
-use std::fs; // For file management
-use std::num::NonZeroU32; // For working with non-zero integers
-
 // Definition of the S-Box used in AES for byte substitution
 const S_BOX: [u8; 256] = [
     0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76,

@@ -1,8 +1,7 @@
+use ring::rand::SecureRandom;
+use ring::rand::SystemRandom;
 use std::fs::File;
 use std::io::{Read, Write};
-use ring::rand::SystemRandom;
-use ring::rand::SecureRandom;
-
 
 use s4_vaultify::backend::aes_keys::crypted_key::encrypt;
 use s4_vaultify::backend::aes_keys::decrypted_key::decrypt;
