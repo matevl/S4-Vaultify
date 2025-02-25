@@ -203,16 +203,16 @@ pub fn pkcs7_pad(data: &mut Vec<u8>, block_size: usize) {
  * @return Vec<u8> - The encrypted ciphertext.
  */
 pub fn encrypt(data: &[u8], key: &[u8]) -> Vec<u8> {
-    // Générer les clés de ronde
+
     let round_keys = key_expansion(key);
 
-    // Copie des données et application du padding PKCS#7
+
     let mut padded = data.to_vec();
     pkcs7_pad(&mut padded, 16);
 
     let mut ciphertext = Vec::new();
 
-    // Chiffrer chaque bloc de 16 octets
+
     for block in padded.chunks(16) {
         let encrypted_block = encrypt_block(block, &round_keys);
         ciphertext.extend_from_slice(&encrypted_block);
