@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentification</title>
+</head>
+<body>
+<h1>Bienvenue sur l'interface d'authentification</h1>
+<form id="register-form">
+    <h2>Inscription</h2>
+    <label for="register-email">Email:</label>
+    <input type="email" id="register-email" name="email" required>
+    <label for="register-password">Mot de passe:</label>
+    <input type="password" id="register-password" name="password" required>
+    <button type="submit">S'inscrire</button>
+</form>
+
+<form id="login-form">
+    <h2>Connexion</h2>
+    <label for="login-email">Email:</label>
+    <input type="email" id="login-email" name="email" required>
+    <label for="login-password">Mot de passe:</label>
+    <input type="password" id="login-password" name="password" required>
+    <button type="submit">Se connecter</button>
+</form>
+
+<script>
+    document.getElementById('register-form').addEventListener('submit', async function(event) {
+        event.preventDefault();
+        const email = document.getElementById('register-email').value;
+        const password = document.getElementById('register-password').value;
+
+        const response = await fetch('/auth/register', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ email, password })
+        });
+
+        if (response.ok) {
+            alert('Inscription réussie!');
+        } else {
+            alert('Erreur lors de l\'inscription.');
+        }
+    });
+
+    document.getElementById('login-form').addEventListener('submit', async function(event) {
+        event.preventDefault();
+        const email = document.getElementById('login-email').value;
+        const password = document.getElementById('login-password').value;
+
+        const response = await fetch('/auth/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ email, password })
+        });
+
+        if (response.ok) {
+            alert('Connexion réussie!');
+        } else {
+            alert('Erreur lors de la connexion.');
+        }
+    });
+</script>
+</body>
+</html>
