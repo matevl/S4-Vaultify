@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formulaire d'entrée</title>
+</head>
+<body>
+<h1>Envoyer du texte au serveur</h1>
+<form id="myForm">
+    <label for="inputText">Texte :</label>
+    <input type="text" id="inputText" name="inputText" required>
+    <button type="submit">Envoyer</button>
+</form>
+
+<p id="response"></p>
+
+<script>
+    // Lorsque le formulaire est soumis, on envoie les données au serveur
+    document.getElementById('myForm').addEventListener('submit', async function(event) {
+        event.preventDefault();  // Empêche le rechargement de la page
+
+        const inputText = document.getElementById('inputText').value;
+
+        // Envoi de la donnée via une requête POST avec fetch
+        const response = await fetch('/api/text', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ text: inputText }),  // Envoi des données en JSON
+        });
+
+        // Récupérer la réponse du serveur
+        const result = await response.json();
+
+        // Afficher la réponse dans la page
+        document.getElementById('response').textContent = `Réponse du serveur : ${result.message}`;
+    });
+</script>
+</body>
+</html>

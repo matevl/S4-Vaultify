@@ -1,12 +1,14 @@
 use crate::backend::aes_keys::decrypted_key::decrypt;
 use crate::backend::aes_keys::keys_password::{derive_key, generate_salt_from_login};
-use crate::backend::{USERS_DATA, VAULT_USERS_DIR};
+use crate::backend::{USERS_DATA, VAULTIFY_CONFIG, VAULT_MATCHING, VAULT_USERS_DIR};
 use crate::error_manager::VaultError;
 use bcrypt::{hash, verify};
+use dirs;
 use serde::ser::SerializeStruct;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use std::fs::{exists, File};
-use std::io::{Read, Write};
+use std::collections::HashMap;
+use std::fs;
+use std::fs::exists;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /**
@@ -20,6 +22,7 @@ pub enum Perms {
     Read,
 }
 
+#[allow(dead_code)]
 impl Perms {
     /**
      * Check if the permission allows reading.
@@ -86,6 +89,7 @@ impl Serialize for Perms {
 /**
  * Struct representing user input from the GUI.
  */
+#[derive(Debug, Deserialize, Serialize)]
 pub struct UserInput {
     pub email: String,
     pub password: String,
@@ -98,12 +102,20 @@ impl UserInput {
     pub fn new(email: String, password: String) -> UserInput {
         UserInput { email, password }
     }
+    
+}
+
+impl Clone for UserInput {
+    fn clone(&self) -> UserInput {
+        UserInput::new(self.email.clone(), self.password.clone())
+    }
 }
 
 /**
  * Struct representing user data.
  * Contains hashed email and password for secure storage.
  */
+
 pub struct UserData {
     hash_email: String,
     hash_pw: String,
@@ -253,12 +265,53 @@ impl Serialize for VaultJWT {
 /**
  * Struct representing a local JWT for logged-in users.
  */
+
 pub struct JWT {
     email: String,
     user_data: UserData,
     user_key: Box<[u8]>,
     vault_access: Option<VaultJWT>,
     exp: usize,
+}
+impl Serialize for JWT {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("JWT", 5)?;
+        state.serialize_field("email", &self.email)?;
+        state.serialize_field("user_data", &self.user_data)?;
+        state.serialize_field("user_key", &self.user_key)?;
+        state.serialize_field("vault_access", &self.vault_access)?;
+        state.serialize_field("exp", &self.exp)?;
+        state.end()
+    }
+}
+
+// Désérialisation de JWT
+impl<'de> Deserialize<'de> for JWT {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct JWTVisitor {
+            email: String,
+            user_data: UserData,
+            user_key: Vec<u8>,
+            vault_access: Option<VaultJWT>,
+            exp: usize,
+        }
+
+        let visitor = JWTVisitor::deserialize(deserializer)?;
+        Ok(JWT {
+            email: visitor.email,
+            user_data: visitor.user_data,
+            user_key: Box::from(visitor.user_key),
+            vault_access: visitor.vault_access,
+            exp: visitor.exp,
+        })
+    }
 }
 
 impl JWT {
@@ -331,7 +384,7 @@ impl JWT {
  */
 pub fn log_to_vaultify(
     user: &UserInput,
-    users_data: Vec<UserData>,
+    users_data: &Vec<UserData>,
 ) -> Result<JWT, Box<dyn std::error::Error>> {
     for data in users_data {
         if verify(user.email.as_str(), data.get_hash_email())?
@@ -358,37 +411,12 @@ pub fn get_access_to_vault(jwt: &mut JWT, path: &str) -> Result<(), Box<dyn std:
     );
 
     if exists(&user_path)? {
-        pub fn get_access_to_vault(
-            jwt: &mut JWT,
-            path: &str,
-        ) -> Result<(), Box<dyn std::error::Error>> {
-            let user_path = format!(
-                "{}{}{}",
-                path,
-                VAULT_USERS_DIR,
-                jwt.get_user_data().get_hash_email()
-            );
-
-            if exists(&user_path)? {
-                let crypted_content = std::fs::read_to_string(&user_path)?;
-                let decypted_content: String = decrypt(crypted_content.as_bytes(), &jwt.user_key)?
-                    .iter()
-                    .map(|&c| c as char)
-                    .collect();
-                jwt.vault_access = Some(serde_json::from_str(&decypted_content)?);
-                Ok(())
-            } else {
-                Err(Box::new(VaultError::LoginError))
-            }
-        }
-        let crypted_content = std::fs::read_to_string(&user_path)?;
-
-        let decrypted_byte = decrypt(crypted_content.as_bytes(), &jwt.user_key)?;
-        let decrypted_content: String = String::from_utf8(decrypted_byte)?;
-
-        let vault_access: VaultJWT = serde_json::from_str(&decrypted_content)?;
-        jwt.vault_access = Some(vault_access);
-
+        let _encrypted_content = fs::read_to_string(&user_path)?;
+        let decrypted_content: String = decrypt(_encrypted_content.as_bytes(), &jwt.user_key)?
+            .iter()
+            .map(|&c| c as char)
+            .collect();
+        jwt.vault_access = Some(serde_json::from_str(&decrypted_content)?);
         Ok(())
     } else {
         Err(Box::new(VaultError::LoginError))
@@ -398,40 +426,60 @@ pub fn get_access_to_vault(jwt: &mut JWT, path: &str) -> Result<(), Box<dyn std:
 /**
  * Load user data from a file.
  */
-pub fn load_users_data(path: &str) -> Vec<UserData> {
-    let file_path = format!("{}{}", path, USERS_DATA);
-    let mut file = File::open(&file_path).expect("Unable to open file");
-    let mut contents = String::new();
+pub fn load_users_data() -> Vec<UserData> {
+    let root = dirs::home_dir().expect("No home dir");
+    let file_path = root.join(format!("{}{}", VAULTIFY_CONFIG, USERS_DATA));
 
-    file.read_to_string(&mut contents)
-        .expect("Unable to read file");
+    let contents = fs::read_to_string(file_path).expect("Unable to read file");
     serde_json::from_str(&contents).expect("Unable to parse JSON")
 }
 
 /**
  * Save user data to a file.
  */
-pub fn save_users_data(users_data: &Vec<UserData>, path: &str) {
-    let file_path = format!("{}{}", path, USERS_DATA);
-    let content = serde_json::to_string(users_data).expect("Unable to serialize user data");
-    let mut file = File::create(&file_path).expect("Unable to create file");
+pub fn save_users_data(users_data: &Vec<UserData>) {
+    let root = dirs::home_dir().expect("No home dir");
+    let file_path = root.join(format!("{}{}", VAULTIFY_CONFIG, USERS_DATA));
 
-    file.write_all(content.as_bytes())
-        .expect("Unable to write file");
+    let content = serde_json::to_string(users_data).expect("Unable to serialize user data");
+    fs::write(file_path, content.as_bytes()).unwrap()
 }
+
+
 
 /**
  * Add a new user to the user data.
  */
-fn add_user_to_data(
-    user_input: UserInput,
+pub fn add_user_to_data(
+    user_input: &UserInput,
     users_data: &mut Vec<UserData>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result< UserData, Box<dyn std::error::Error>> {
     for data in users_data.iter() {
         if verify(&user_input.email, &data.hash_email)? {
             return Err(Box::new(VaultError::ArgumentError));
         }
     }
     users_data.push(UserData::new(&user_input.email, &user_input.password));
-    Ok(())
+    Ok(UserData::new(&user_input.email, &user_input.password))
+}
+
+type VaultMatching = HashMap<String, Vec<(String, String)>>;
+
+pub fn load_vault_matching() -> VaultMatching {
+    let root = dirs::home_dir().expect("No home dir");
+    let file_path = root.join(VAULT_MATCHING);
+
+    let file_content = fs::read_to_string(file_path).expect("Unable to read file");
+    let vault_matching: VaultMatching =
+        serde_json::from_str(&file_content).expect("Unable to parse JSON");
+    vault_matching
+}
+
+// Function to save vault matching to a JSON file
+pub fn save_vault_matching(data: &VaultMatching) {
+    let root = dirs::home_dir().expect("No home dir");
+    let file_path = root.join(VAULT_MATCHING);
+
+    let file_content = serde_json::to_string_pretty(data).expect("Unable to serialize user data");
+    fs::write(file_path, file_content).expect("Unable to write file");
 }
