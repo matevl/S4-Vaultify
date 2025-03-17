@@ -266,6 +266,7 @@ impl Serialize for VaultJWT {
  * Struct representing a local JWT for logged-in users.
  */
 
+#[derive(Clone)]
 pub struct JWT {
     email: String,
     user_data: UserData,
@@ -273,6 +274,19 @@ pub struct JWT {
     vault_access: Option<VaultJWT>,
     exp: usize,
 }
+
+impl JWT {
+    pub fn clone(&self) -> JWT {
+        JWT {
+            email: self.email.clone(),
+            user_data: self.user_data.clone(),
+            user_key: self.user_key.clone(),
+            vault_access: self.vault_access.clone(),
+            exp: self.exp,
+        }
+    }
+}
+
 impl Serialize for JWT {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
