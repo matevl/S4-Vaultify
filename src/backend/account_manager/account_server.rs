@@ -1,10 +1,8 @@
-use crate::backend::account_manager::account::UserInput;
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{web, HttpResponse, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 
 lazy_static! {
@@ -20,9 +18,9 @@ lazy_static! {
 type UsersData = HashMap<String, (String, u32)>;
 
 /**
- * Name -> (Vault_Name, Realpath (vault_id in string))
+ * Name -> (Vault_Name -> Realpath (vault_id in string))
  */
-type VaultsAccess = HashMap<String, (String, String)>;
+type VaultsAccess = HashMap<String, HashMap<String, String>>;
 
 pub struct UserJson {
     pub email: String,
@@ -60,4 +58,28 @@ async fn create_user_query(user: web::Json<UserJson>) -> impl Responder {
         .ok_or_else(|| HttpResponse::InternalServerError())?;
 
     HttpResponse::Ok().json(JWT::new(new_id, email, hash_pw));
+}
+
+#[actix_web::post("/user/login")]
+async fn login_user_query(user: web::Json<UserJson>) -> impl Responder {
+    let email = user.email.clone();
+    let pw = user.password.clone();
+    let mut db = USERS_DB.lock().unwrap();
+
+    let data = db.get(&email).unwrap_or(&("".to_string(), 0)).clone();
+
+    if data.0.len() > 0 && verify(&pw, &data.0).is_ok() {
+        HttpResponse::Ok().json(JWT::new(data.1, email, data.0))
+    } else {
+        HttpResponse::NotFound().finish()
+    }
+}
+
+async fn get_vaults_list_query(user: web::Json<JWT>) -> impl Responder {
+    let access = VAULT_ACESS.lock().unwrap();
+    let vaults = access
+        .get(&user.email)
+        .ok_or_else(|| HttpResponse::NotFound())?;
+
+    HttpResponse::Ok().json(vaults.clone())
 }
