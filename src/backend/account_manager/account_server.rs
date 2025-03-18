@@ -1,3 +1,4 @@
+use crate::backend::aes_keys::keys_password::{derive_key, generate_salt_from_login};
 use actix_web::{web, HttpResponse, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use lazy_static::lazy_static;
@@ -9,6 +10,7 @@ lazy_static! {
     pub static ref USERS_DB: Arc<Mutex<UsersData>> = Arc::new(Mutex::new(UsersData::new()));
     pub static ref VAULT_ACESS: Arc<Mutex<VaultsAccess>> =
         Arc::new(Mutex::new(VaultsAccess::new()));
+    pub static ref PRIVATE_DATA: Arc<Mutex<PrivateData>> = Arc::new(Mutex::new(PrivateData::new()));
 }
 
 /**
@@ -22,6 +24,8 @@ type UsersData = HashMap<String, (String, u32)>;
  */
 type VaultsAccess = HashMap<String, HashMap<String, String>>;
 
+type PrivateData = HashMap<u32, JWTPrivate>;
+
 pub struct UserJson {
     pub email: String,
     pub password: String,
@@ -31,15 +35,28 @@ pub struct UserJson {
 pub struct JWT {
     id: u32,
     email: String,
-    hash_pw: String,
 }
 
 impl JWT {
-    pub fn new(id: u32, email: String, hash_pw: String) -> JWT {
+    pub fn new(id: u32, email: &String) -> JWT {
         JWT {
             id,
             email: email.clone(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct JWTPrivate {
+    hash_pw: String,
+    user_key: Box<[u8]>,
+}
+
+impl JWTPrivate {
+    pub fn new(hash_pw: &String, user_key: &[u8]) -> JWTPrivate {
+        JWTPrivate {
             hash_pw: hash_pw.clone(),
+            user_key: user_key.into_boxed_slice(),
         }
     }
 }
@@ -57,7 +74,13 @@ async fn create_user_query(user: web::Json<UserJson>) -> impl Responder {
     db.insert(email.clone(), (hash_pw.clone(), new_id))
         .ok_or_else(|| HttpResponse::InternalServerError())?;
 
-    HttpResponse::Ok().json(JWT::new(new_id, email, hash_pw));
+    let salt = generate_salt_from_login(user.email.as_str());
+    let key = derive_key(user.password.as_str(), salt.as_slice(), 10000);
+
+    let mut private_data = PRIVATE_DATA.lock().unwrap();
+    private_data.insert(new_id, JWTPrivate::new(&hash_pw, &key));
+
+    HttpResponse::Ok().json(JWT::new(new_id, &email));
 }
 
 #[actix_web::post("/user/login")]
@@ -69,7 +92,12 @@ async fn login_user_query(user: web::Json<UserJson>) -> impl Responder {
     let data = db.get(&email).unwrap_or(&("".to_string(), 0)).clone();
 
     if data.0.len() > 0 && verify(&pw, &data.0).is_ok() {
-        HttpResponse::Ok().json(JWT::new(data.1, email, data.0))
+        let salt = generate_salt_from_login(user.email.as_str());
+        let key = derive_key(user.password.as_str(), salt.as_slice(), 10000);
+
+        let mut private_data = PRIVATE_DATA.lock().unwrap();
+        private_data.insert(data.1, JWTPrivate::new(&data.0, &key));
+        HttpResponse::Ok().json(JWT::new(data.1, &email))
     } else {
         HttpResponse::NotFound().finish()
     }
