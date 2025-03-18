@@ -102,7 +102,6 @@ impl UserInput {
     pub fn new(email: String, password: String) -> UserInput {
         UserInput { email, password }
     }
-    
 }
 
 impl Clone for UserInput {
@@ -459,15 +458,13 @@ pub fn save_users_data(users_data: &Vec<UserData>) {
     fs::write(file_path, content.as_bytes()).unwrap()
 }
 
-
-
 /**
  * Add a new user to the user data.
  */
 pub fn add_user_to_data(
     user_input: &UserInput,
     users_data: &mut Vec<UserData>,
-) -> Result< UserData, Box<dyn std::error::Error>> {
+) -> Result<UserData, Box<dyn std::error::Error>> {
     for data in users_data.iter() {
         if verify(&user_input.email, &data.hash_email)? {
             return Err(Box::new(VaultError::ArgumentError));
