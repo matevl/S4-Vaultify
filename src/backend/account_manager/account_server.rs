@@ -1,7 +1,9 @@
 use crate::backend::aes_keys::keys_password::{
     derive_key, generate_random_key, generate_salt_from_login,
 };
-use crate::backend::{VAULT_CONFIG_ROOT, VAULT_USERS_DIR};
+use crate::backend::{
+    USERS_DATA, VAULTIFY_CONFIG, VAULTS_MATCHING, VAULT_CONFIG_ROOT, VAULT_USERS_DIR,
+};
 use actix_web::{web, HttpResponse, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use dirs;
@@ -9,18 +11,26 @@ use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Write;
+use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 lazy_static! {
-    pub static ref USERS_DB: Arc<Mutex<UsersData>> = Arc::new(Mutex::new(UsersData::new()));
+    pub static ref USERS_DB: Arc<Mutex<UsersData>> = {
+        init_server_config();
+        Arc::new(Mutex::new(load_user_data()))
+    };
     pub static ref VAULT_ACESS: Arc<Mutex<VaultsAccess>> =
-        Arc::new(Mutex::new(VaultsAccess::new()));
+        Arc::new(Mutex::new(load_vault_matching()));
     pub static ref PRIVATE_DATA: Arc<Mutex<PrivateData>> = Arc::new(Mutex::new(PrivateData::new()));
     pub static ref ROOT: std::path::PathBuf = dirs::home_dir().expect("Could not find home dir");
 }
 
+/**
+ * Enum to handle permission verification.
+ * Each variant represents a different level of access.
+ */
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Perms {
     Admin,
@@ -28,15 +38,39 @@ pub enum Perms {
     Read,
 }
 
+#[allow(dead_code)]
+impl Perms {
+    /**
+     * Check if the permission allows reading.
+     */
+    pub fn can_read(&self) -> bool {
+        matches!(self, Perms::Admin | Perms::Write | Perms::Read)
+    }
+
+    /**
+     * Check if the permission allows writing.
+     */
+    pub fn can_write(&self) -> bool {
+        matches!(self, Perms::Admin | Perms::Write)
+    }
+
+    /**
+     * Check if the permission allows execution (admin-only).
+     */
+    pub fn can_execute(&self) -> bool {
+        matches!(self, Perms::Admin)
+    }
+}
+
 /**
  * Name -> (HashPw, id)
  */
-type UsersData = HashMap<String, (String, u32)>;
+pub type UsersData = HashMap<String, (String, u32)>;
 
 /**
  * Name -> (Vault_Name -> Realpath (vault_id in string))
  */
-type VaultsAccess = HashMap<String, Vec<VaultInfo>>;
+pub type VaultsAccess = HashMap<String, Vec<VaultInfo>>;
 
 /**
  *
@@ -91,6 +125,7 @@ pub struct JWTPrivate {
     hash_pw: String,
     user_key: Box<[u8]>,
     vault_key: Box<[u8]>,
+    vault_perms: Perms,
 }
 
 impl JWTPrivate {
@@ -99,12 +134,13 @@ impl JWTPrivate {
             hash_pw: hash_pw.clone(),
             user_key: user_key.to_vec().into_boxed_slice(),
             vault_key: Box::new([]),
+            vault_perms: Perms::Read,
         }
     }
 }
 
 #[actix_web::post("/user/register")]
-async fn create_user_query(user: web::Json<UserJson>) -> impl Responder {
+pub async fn create_user_query(user: web::Json<UserJson>) -> impl Responder {
     let email = user.email.clone();
     let pw = user.password.clone();
 
@@ -113,8 +149,7 @@ async fn create_user_query(user: web::Json<UserJson>) -> impl Responder {
 
     let hash_pw = hash(pw.clone(), DEFAULT_COST).unwrap();
 
-    db.insert(email.clone(), (hash_pw.clone(), new_id))
-        .ok_or_else(|| HttpResponse::InternalServerError());
+    db.insert(email.clone(), (hash_pw.clone(), new_id)).unwrap();
 
     fs::create_dir_all(ROOT.join(new_id.to_string())).unwrap();
 
@@ -128,10 +163,10 @@ async fn create_user_query(user: web::Json<UserJson>) -> impl Responder {
 }
 
 #[actix_web::post("/user/login")]
-async fn login_user_query(user: web::Json<UserJson>) -> impl Responder {
+pub async fn login_user_query(user: web::Json<UserJson>) -> impl Responder {
     let email = user.email.clone();
     let pw = user.password.clone();
-    let mut db = USERS_DB.lock().unwrap();
+    let db = USERS_DB.lock().unwrap();
 
     let data = db.get(&email).unwrap_or(&("".to_string(), 0)).clone();
 
@@ -147,19 +182,23 @@ async fn login_user_query(user: web::Json<UserJson>) -> impl Responder {
     }
 }
 
-async fn get_vaults_list_query(user: web::Json<JWT>) -> impl Responder {
+pub async fn get_vaults_list_query(user: web::Json<JWT>) -> impl Responder {
     let access = VAULT_ACESS.lock().unwrap();
     let vaults = access.get(&user.email).unwrap();
 
     HttpResponse::Ok().json(vaults.clone())
 }
 
-async fn create_vault_query(mut jwt: web::Json<JWT>, name: web::Json<String>) -> impl Responder {
+pub async fn create_vault_query(
+    mut jwt: web::Json<JWT>,
+    name: web::Json<String>,
+) -> impl Responder {
     let mut vault_access = VAULT_ACESS.lock().unwrap();
 
     let user_acces = vault_access.get_mut(jwt.email.as_str()).unwrap();
 
-    let private_jwt = PRIVATE_DATA.lock().unwrap().get_mut(&jwt.id).unwrap();
+    let mut private_data = PRIVATE_DATA.lock().unwrap();
+    let private_jwt = private_data.get_mut(&jwt.id).unwrap();
 
     let time = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -183,21 +222,28 @@ async fn create_vault_query(mut jwt: web::Json<JWT>, name: web::Json<String>) ->
         10000,
     );
 
-    file.write_all(serde_json::to_string(&vault_key).unwrap().as_bytes())
-        .unwrap();
+    file.write(
+        serde_json::to_string(&(&vault_key, Perms::Admin))
+            .unwrap()
+            .as_bytes(),
+    )
+    .unwrap();
 
-    let mut info = VaultInfo::new(&name, &vault_path, time);
+    let info = VaultInfo::new(&name, &vault_path, time);
     user_acces.push(info.clone());
 
-    private_jwt.vault_key = vault_key;
+    private_jwt.vault_key = vault_key.into_boxed_slice();
 
     jwt.loaded_vault = Some(info.clone());
     HttpResponse::Ok().json(jwt)
 }
 
-async fn load_vault_query(mut jwt: web::Json<JWT>, info: web::Json<VaultInfo>) -> impl Responder {
-    let access = VAULT_ACESS.lock().unwrap().get(jwt.email.as_str()).unwrap();
-    let private_jwt = PRIVATE_DATA.lock().unwrap().get_mut(&jwt.id).unwrap();
+pub async fn load_vault_query(
+    mut jwt: web::Json<JWT>,
+    info: web::Json<VaultInfo>,
+) -> impl Responder {
+    let mut private_data = PRIVATE_DATA.lock().unwrap();
+    let private_jwt = private_data.get_mut(&jwt.id).unwrap();
 
     let key_path = format!(
         "{}{}{}{}.json",
@@ -207,10 +253,67 @@ async fn load_vault_query(mut jwt: web::Json<JWT>, info: web::Json<VaultInfo>) -
         jwt.id
     );
 
-    let mut content = fs::read_to_string(&key_path).unwrap();
-    let vault_key: Box<[u8]> = serde_json::from_str(&content).unwrap();
+    let content = fs::read_to_string(&key_path).unwrap();
+    let (vault_key, vault_perms): (Box<[u8]>, Perms) = serde_json::from_str(&content).unwrap();
     private_jwt.vault_key = vault_key;
+    private_jwt.vault_perms = vault_perms;
 
     jwt.loaded_vault = Some(info.clone());
     HttpResponse::Ok().json(jwt)
+}
+
+pub fn init_server_config() {
+    let config_root = format!("{}{}", ROOT.to_str().unwrap(), VAULTIFY_CONFIG);
+    if !fs::exists(&config_root).is_ok() {
+        fs::create_dir_all(&config_root).expect("Could not create folder");
+    }
+    let user_data = format!("{}{}", config_root, USERS_DATA);
+    if !fs::exists(&user_data).is_ok() {
+        let mut file = fs::File::create(&user_data).expect("Could not create file");
+        file.write_all(serde_json::to_string(&UsersData::new()).unwrap().as_bytes())
+            .unwrap();
+    }
+    let vault_matching = format!("{}{}", config_root, VAULTS_MATCHING);
+    if !fs::exists(&vault_matching).is_ok() {
+        let mut file = fs::File::create(&vault_matching).expect("Could not create file");
+        file.write_all(
+            serde_json::to_string(&VaultsAccess::new())
+                .unwrap()
+                .as_bytes(),
+        )
+        .unwrap();
+    }
+}
+
+pub fn load_user_data() -> UsersData {
+    let user_data = format!("{}{}", ROOT.to_str().unwrap(), USERS_DATA);
+    let content = fs::read_to_string(user_data).unwrap();
+    serde_json::from_str::<UsersData>(&content).unwrap()
+}
+pub fn load_vault_matching() -> VaultsAccess {
+    let user_data = format!("{}{}", ROOT.to_str().unwrap(), VAULTS_MATCHING);
+    let content = fs::read_to_string(user_data).unwrap();
+    serde_json::from_str::<VaultsAccess>(&content).unwrap()
+}
+
+pub async fn save_server_config() -> impl Responder {
+    let users_db = USERS_DB.lock().unwrap();
+    let vault_access = VAULT_ACESS.lock().unwrap();
+
+    let path_users_db = format!("{}{}", ROOT.to_str().unwrap(), USERS_DATA);
+    let path_vault_access = format!("{}{}", ROOT.to_str().unwrap(), VAULTS_MATCHING);
+    fs::write(
+        &path_users_db,
+        serde_json::to_string(&users_db.deref()).unwrap().as_bytes(),
+    )
+    .unwrap();
+    fs::write(
+        &path_vault_access,
+        &serde_json::to_string(&vault_access.deref())
+            .unwrap()
+            .as_bytes(),
+    )
+    .unwrap();
+
+    HttpResponse::Ok().json("Saving server config successfully.")
 }

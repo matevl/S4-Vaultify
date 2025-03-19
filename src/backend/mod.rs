@@ -1,22 +1,13 @@
-use crate::backend::account_manager::account::{UserData, JWT};
-
 pub mod account_manager;
+pub mod aes_keys;
 pub mod encryption;
 pub mod file_manager;
-pub mod vault_manager;
-
-pub mod aes_keys;
 
 // Backend Const
 const VAULT_CONFIG_ROOT: &str = ".vault/";
 const VAULT_USERS_DIR: &str = ".vault/users/";
-
 pub const VAULTIFY_CONFIG: &str = ".vaultify/";
-
 const USERS_DATA: &str = ".vaultify/users.json";
-
-pub const VAULT_MATCHING: &str = ".vaultify/vault_matching.json";
 pub const VAULTS_MATCHING: &str = ".vaultify/vault_matching.json";
-
 // Where the vault are stored
 pub const VAULTS_DATA: &str = "VaultsData/";
