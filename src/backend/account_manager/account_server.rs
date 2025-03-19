@@ -16,14 +16,33 @@ use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/**
+ * Lazy static initialization for global variables.
+ * These variables are used to store user data, vault access, and private data.
+ */
 lazy_static! {
+    /**
+     * Global user database.
+     */
     pub static ref USERS_DB: Arc<Mutex<UsersData>> = {
         init_server_config();
         Arc::new(Mutex::new(load_user_data()))
     };
+
+    /**
+     * Global vault access data.
+     */
     pub static ref VAULT_ACESS: Arc<Mutex<VaultsAccess>> =
         Arc::new(Mutex::new(load_vault_matching()));
+
+    /**
+     * Global private data storage.
+     */
     pub static ref PRIVATE_DATA: Arc<Mutex<PrivateData>> = Arc::new(Mutex::new(PrivateData::new()));
+
+    /**
+     * Root directory path for the application.
+     */
     pub static ref ROOT: std::path::PathBuf = dirs::home_dir().expect("Could not find home dir");
 }
 
@@ -63,17 +82,19 @@ impl Perms {
 }
 
 /**
- * Name -> (HashPw, id)
+ * Type alias for user data storage.
+ * Maps user names to their hashed passwords and IDs.
  */
 pub type UsersData = HashMap<String, (String, u32)>;
 
 /**
- * Name -> (Vault_Name -> Realpath (vault_id in string))
+ * Type alias for vault access storage.
+ * Maps user names to their accessible vaults.
  */
 pub type VaultsAccess = HashMap<String, Vec<VaultInfo>>;
 
 /**
- *
+ * Struct representing vault information.
  */
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VaultInfo {
@@ -83,6 +104,9 @@ pub struct VaultInfo {
 }
 
 impl VaultInfo {
+    /**
+     * Create a new VaultInfo instance.
+     */
     pub fn new(name: &String, path: &String, date: u64) -> Self {
         Self {
             name: name.clone(),
@@ -93,24 +117,34 @@ impl VaultInfo {
 }
 
 /**
- * ID -> JWTPrivate
+ * Type alias for private data storage.
+ * Maps user IDs to their private JWT data.
  */
 type PrivateData = HashMap<u32, JWTPrivate>;
 
+/**
+ * Struct representing user JSON data for API requests.
+ */
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UserJson {
     pub email: String,
     pub password: String,
 }
 
+/**
+ * Struct representing a JSON Web Token (JWT).
+ */
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct JWT {
-    id: u32,
-    email: String,
-    loaded_vault: Option<VaultInfo>,
+    pub id: u32,
+    pub email: String,
+    pub loaded_vault: Option<VaultInfo>,
 }
 
 impl JWT {
+    /**
+     * Create a new JWT instance.
+     */
     pub fn new(id: u32, email: &String) -> JWT {
         JWT {
             id,
@@ -120,7 +154,10 @@ impl JWT {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/**
+ * Struct representing private JWT data.
+ */
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct JWTPrivate {
     hash_pw: String,
     user_key: Box<[u8]>,
@@ -129,6 +166,9 @@ pub struct JWTPrivate {
 }
 
 impl JWTPrivate {
+    /**
+     * Create a new JWTPrivate instance.
+     */
     pub fn new(hash_pw: &String, user_key: &[u8]) -> JWTPrivate {
         JWTPrivate {
             hash_pw: hash_pw.clone(),
@@ -139,6 +179,9 @@ impl JWTPrivate {
     }
 }
 
+/**
+ * Endpoint to create a new user.
+ */
 #[actix_web::post("/user/register")]
 pub async fn create_user_query(user: web::Json<UserJson>) -> impl Responder {
     let email = user.email.clone();
@@ -162,6 +205,9 @@ pub async fn create_user_query(user: web::Json<UserJson>) -> impl Responder {
     HttpResponse::Ok().json(JWT::new(new_id, &email))
 }
 
+/**
+ * Endpoint to log in a user.
+ */
 #[actix_web::post("/user/login")]
 pub async fn login_user_query(user: web::Json<UserJson>) -> impl Responder {
     let email = user.email.clone();
@@ -182,6 +228,9 @@ pub async fn login_user_query(user: web::Json<UserJson>) -> impl Responder {
     }
 }
 
+/**
+ * Endpoint to get the list of vaults for a user.
+ */
 pub async fn get_vaults_list_query(user: web::Json<JWT>) -> impl Responder {
     let access = VAULT_ACESS.lock().unwrap();
     let vaults = access.get(&user.email).unwrap();
@@ -189,6 +238,9 @@ pub async fn get_vaults_list_query(user: web::Json<JWT>) -> impl Responder {
     HttpResponse::Ok().json(vaults.clone())
 }
 
+/**
+ * Endpoint to create a new vault for a user.
+ */
 pub async fn create_vault_query(
     mut jwt: web::Json<JWT>,
     name: web::Json<String>,
@@ -238,6 +290,9 @@ pub async fn create_vault_query(
     HttpResponse::Ok().json(jwt)
 }
 
+/**
+ * Endpoint to load a vault for a user.
+ */
 pub async fn load_vault_query(
     mut jwt: web::Json<JWT>,
     info: web::Json<VaultInfo>,
@@ -262,6 +317,9 @@ pub async fn load_vault_query(
     HttpResponse::Ok().json(jwt)
 }
 
+/**
+ * Initialize the server configuration.
+ */
 pub fn init_server_config() {
     let config_root = format!("{}{}", ROOT.to_str().unwrap(), VAULTIFY_CONFIG);
     if !fs::exists(&config_root).is_ok() {
@@ -285,17 +343,27 @@ pub fn init_server_config() {
     }
 }
 
+/**
+ * Load user data from the file system.
+ */
 pub fn load_user_data() -> UsersData {
     let user_data = format!("{}{}", ROOT.to_str().unwrap(), USERS_DATA);
     let content = fs::read_to_string(user_data).unwrap();
     serde_json::from_str::<UsersData>(&content).unwrap()
 }
+
+/**
+ * Load vault matching data from the file system.
+ */
 pub fn load_vault_matching() -> VaultsAccess {
     let user_data = format!("{}{}", ROOT.to_str().unwrap(), VAULTS_MATCHING);
     let content = fs::read_to_string(user_data).unwrap();
     serde_json::from_str::<VaultsAccess>(&content).unwrap()
 }
 
+/**
+ * Endpoint to save the server configuration.
+ */
 pub async fn save_server_config() -> impl Responder {
     let users_db = USERS_DB.lock().unwrap();
     let vault_access = VAULT_ACESS.lock().unwrap();
