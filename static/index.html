@@ -3,66 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Authentification</title>
+    <title>Connexion</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<h1>Bienvenue sur l'interface d'authentification</h1>
-<form id="register-form">
-    <h2>Inscription</h2>
-    <label for="register-email">Email:</label>
-    <input type="email" id="register-email" name="email" required>
-    <label for="register-password">Mot de passe:</label>
-    <input type="password" id="register-password" name="password" required>
-    <button type="submit">S'inscrire</button>
-</form>
+<div class="container">
+    <!-- Formulaire de Login -->
+    <div id="login-form">
+        <h2>Se connecter</h2>
+        <form id="login">
+            <input type="email" id="email" placeholder="Email" required>
+            <input type="password" id="password" placeholder="Mot de passe" required>
+            <button type="submit">Se connecter</button>
+        </form>
+        <button onclick="showRegisterForm()">S'inscrire</button>
+    </div>
 
-<form id="login-form">
-    <h2>Connexion</h2>
-    <label for="login-email">Email:</label>
-    <input type="email" id="login-email" name="email" required>
-    <label for="login-password">Mot de passe:</label>
-    <input type="password" id="login-password" name="password" required>
-    <button type="submit">Se connecter</button>
-</form>
+    <!-- Formulaire d'enregistrement -->
+    <div id="register-form" style="display: none;">
+        <h2>S'inscrire</h2>
+        <form id="register">
+            <input type="email" id="reg-email" placeholder="Email" required>
+            <input type="password" id="reg-password" placeholder="Mot de passe" required>
+            <input type="password" id="confirm-password" placeholder="Confirmer mot de passe" required>
+            <button type="submit">S'inscrire</button>
+        </form>
+        <button onclick="showLoginForm()">Se connecter</button>
+    </div>
+</div>
 
 <script>
-    document.getElementById('register-form').addEventListener('submit', async function(event) {
+    // Afficher le formulaire de login
+    function showLoginForm() {
+        document.getElementById('login-form').style.display = 'block';
+        document.getElementById('register-form').style.display = 'none';
+    }
+
+    // Afficher le formulaire d'enregistrement
+    function showRegisterForm() {
+        document.getElementById('login-form').style.display = 'none';
+        document.getElementById('register-form').style.display = 'block';
+    }
+
+    // Logique pour soumettre les formulaires (tu peux l'adapter à tes besoins)
+    document.getElementById('login').addEventListener('submit', function(event) {
         event.preventDefault();
-        const email = document.getElementById('register-email').value;
-        const password = document.getElementById('register-password').value;
-
-        const response = await fetch('/auth/register', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ email, password })
-        });
-
-        if (response.ok) {
-            alert('Inscription réussie!');
-        } else {
-            alert('Erreur lors de l\'inscription.');
-        }
+        let email = document.getElementById('email').value;
+        let password = document.getElementById('password').value;
+        // Envoie une requête pour la connexion ici
+        console.log("Se connecter avec:", email, password);
     });
 
-    document.getElementById('login-form').addEventListener('submit', async function(event) {
+    document.getElementById('register').addEventListener('submit', function(event) {
         event.preventDefault();
-        const email = document.getElementById('login-email').value;
-        const password = document.getElementById('login-password').value;
-
-        const response = await fetch('/auth/login', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ email, password })
-        });
-
-        if (response.ok) {
-            alert('Connexion réussie!');
+        let email = document.getElementById('reg-email').value;
+        let password = document.getElementById('reg-password').value;
+        let confirmPassword = document.getElementById('confirm-password').value;
+        // Vérifie si les mots de passe correspondent, puis envoie la requête d'enregistrement
+        if (password === confirmPassword) {
+            console.log("S'inscrire avec:", email, password);
         } else {
-            alert('Erreur lors de la connexion.');
+            alert("Les mots de passe ne correspondent pas.");
         }
     });
 </script>
