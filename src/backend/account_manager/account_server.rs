@@ -159,10 +159,10 @@ impl JWT {
  */
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct JWTPrivate {
-    hash_pw: String,
-    user_key: Box<[u8]>,
-    vault_key: Box<[u8]>,
-    vault_perms: Perms,
+    pub hash_pw: String,
+    pub user_key: Box<[u8]>,
+    pub vault_key: Box<[u8]>,
+    pub vault_perms: Perms,
 }
 
 impl JWTPrivate {
