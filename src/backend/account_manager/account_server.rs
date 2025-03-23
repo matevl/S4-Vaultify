@@ -1,7 +1,9 @@
 use crate::backend::aes_keys::keys_password::{
     derive_key, generate_random_key, generate_salt_from_login,
 };
-use crate::backend::{USERS_DATA, VAULTIFY_CONFIG, VAULTS_DATA, VAULTS_MATCHING, VAULT_CONFIG_ROOT, VAULT_USERS_DIR};
+use crate::backend::{
+    USERS_DATA, VAULTIFY_CONFIG, VAULTS_DATA, VAULTS_MATCHING, VAULT_CONFIG_ROOT, VAULT_USERS_DIR,
+};
 use actix_web::{web, HttpResponse, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use dirs;
@@ -13,7 +15,6 @@ use std::io::Write;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
-
 /**
  * Lazy static initialization for global variables.
  * These variables are used to store user data, vault access, and private data.
@@ -52,6 +53,18 @@ pub enum Perms {
     Admin,
     Write,
     Read,
+}
+
+#[derive(serde::Deserialize, Debug)]
+pub struct CreateUserForm {
+    username: String,
+    password: String,
+}
+
+#[derive(serde::Deserialize, Debug)]
+pub struct LoginForm {
+    username: String,
+    password: String,
 }
 
 #[allow(dead_code)]
@@ -179,10 +192,10 @@ impl JWTPrivate {
 /**
  * Endpoint to create a new user.
  */
-#[actix_web::post("/user/register")]
-pub async fn create_user_query(user: web::Json<UserJson>) -> impl Responder {
-    let email = user.email.clone();
-    let pw = user.password.clone();
+
+pub async fn create_user_query(form: web::Form<CreateUserForm>) -> impl Responder {
+    let email = form.username.clone();
+    let pw = form.password.clone();
 
     let mut db = USERS_DB.lock().unwrap();
     let new_id = db.values().last().unwrap_or(&("".to_string(), 0)).1 + 1;
@@ -191,34 +204,43 @@ pub async fn create_user_query(user: web::Json<UserJson>) -> impl Responder {
 
     db.insert(email.clone(), (hash_pw.clone(), new_id));
 
-    fs::create_dir_all(format!("{}/{}{}", ROOT.to_str().unwrap(), VAULTS_DATA, new_id)).unwrap();
+    fs::create_dir_all(format!(
+        "{}/{}{}",
+        ROOT.to_str().unwrap(),
+        VAULTS_DATA,
+        new_id
+    ))
+    .unwrap();
 
-    let salt = generate_salt_from_login(user.email.as_str());
-    let key = derive_key(user.password.as_str(), salt.as_slice(), 10000);
+    let salt = generate_salt_from_login(form.username.as_str());
+    let key = derive_key(form.password.as_str(), salt.as_slice(), 10000);
 
     let mut private_data = PRIVATE_DATA.lock().unwrap();
     private_data.insert(new_id, JWTPrivate::new(&hash_pw, &key));
 
+    // Renvoie l'email et l'ID
     HttpResponse::Ok().json(JWT::new(new_id, &email))
 }
 
 /**
  * Endpoint to log in a user.
  */
-#[actix_web::post("/user/login")]
-pub async fn login_user_query(user: web::Json<UserJson>) -> impl Responder {
-    let email = user.email.clone();
-    let pw = user.password.clone();
+
+pub async fn login_user_query(form: web::Form<LoginForm>) -> impl Responder {
+    let email = form.username.clone();
+    let pw = form.password.clone();
     let db = USERS_DB.lock().unwrap();
 
     let data = db.get(&email).unwrap_or(&("".to_string(), 0)).clone();
 
     if data.0.len() > 0 && verify(&pw, &data.0).is_ok() {
-        let salt = generate_salt_from_login(user.email.as_str());
-        let key = derive_key(user.password.as_str(), salt.as_slice(), 10000);
+        let salt = generate_salt_from_login(form.username.as_str());
+        let key = derive_key(form.password.as_str(), salt.as_slice(), 10000);
 
         let mut private_data = PRIVATE_DATA.lock().unwrap();
         private_data.insert(data.1, JWTPrivate::new(&data.0, &key));
+
+        // Renvoie l'email et l'ID
         HttpResponse::Ok().json(JWT::new(data.1, &email))
     } else {
         HttpResponse::NotFound().finish()
@@ -254,7 +276,13 @@ pub async fn create_vault_query(
         .unwrap()
         .as_secs();
 
-    let vault_path = format!("{}/{}{}{}", ROOT.to_str().unwrap(), VAULTS_DATA, jwt.id, time);
+    let vault_path = format!(
+        "{}/{}{}{}",
+        ROOT.to_str().unwrap(),
+        VAULTS_DATA,
+        jwt.id,
+        time
+    );
     let vault_config_path = format!("{}{}", vault_path, VAULT_CONFIG_ROOT);
     let vault_key_data = format!("{}{}", vault_path, VAULT_USERS_DIR);
     let key_path = format!("{}{}.json", vault_key_data, jwt.id);
@@ -323,7 +351,7 @@ pub fn init_server_config() {
         fs::create_dir_all(&config_root).expect("Could not create folder");
     }
     let user_data = format!("{}/{}", ROOT.to_str().unwrap(), USERS_DATA);
-    if !fs::exists(&user_data).unwrap(){
+    if !fs::exists(&user_data).unwrap() {
         let mut file = fs::File::create(&user_data).expect("Could not create file");
         file.write_all(serde_json::to_string(&UsersData::new()).unwrap().as_bytes())
             .unwrap();
