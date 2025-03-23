@@ -25,7 +25,6 @@ lazy_static! {
      * Global user database.
      */
     pub static ref USERS_DB: Arc<Mutex<UsersData>> = {
-        init_server_config();
         Arc::new(Mutex::new(load_user_data()))
     };
 
@@ -192,7 +191,7 @@ pub async fn create_user_query(user: web::Json<UserJson>) -> impl Responder {
 
     let hash_pw = hash(pw.clone(), DEFAULT_COST).unwrap();
 
-    db.insert(email.clone(), (hash_pw.clone(), new_id)).unwrap();
+    db.insert(email.clone(), (hash_pw.clone(), new_id));
 
     fs::create_dir_all(ROOT.join(new_id.to_string())).unwrap();
 
@@ -257,7 +256,7 @@ pub async fn create_vault_query(
         .unwrap()
         .as_secs();
 
-    let vault_path = format!("{}{}{}", ROOT.to_str().unwrap(), jwt.id, time);
+    let vault_path = format!("{}/{}{}", ROOT.to_str().unwrap(), jwt.id, time);
     let vault_config_path = format!("{}{}", vault_path, VAULT_CONFIG_ROOT);
     let vault_key_data = format!("{}{}", vault_path, VAULT_USERS_DIR);
     let key_path = format!("{}{}.json", vault_key_data, jwt.id);
@@ -321,18 +320,18 @@ pub async fn load_vault_query(
  * Initialize the server configuration.
  */
 pub fn init_server_config() {
-    let config_root = format!("{}{}", ROOT.to_str().unwrap(), VAULTIFY_CONFIG);
-    if !fs::exists(&config_root).is_ok() {
+    let config_root = format!("{}/{}", ROOT.to_str().unwrap(), VAULTIFY_CONFIG);
+    if !fs::exists(&config_root).unwrap() {
         fs::create_dir_all(&config_root).expect("Could not create folder");
     }
-    let user_data = format!("{}{}", config_root, USERS_DATA);
-    if !fs::exists(&user_data).is_ok() {
+    let user_data = format!("{}/{}", ROOT.to_str().unwrap(), USERS_DATA);
+    if !fs::exists(&user_data).unwrap(){
         let mut file = fs::File::create(&user_data).expect("Could not create file");
         file.write_all(serde_json::to_string(&UsersData::new()).unwrap().as_bytes())
             .unwrap();
     }
-    let vault_matching = format!("{}{}", config_root, VAULTS_MATCHING);
-    if !fs::exists(&vault_matching).is_ok() {
+    let vault_matching = format!("{}/{}", ROOT.to_str().unwrap(), VAULTS_MATCHING);
+    if !fs::exists(&vault_matching).unwrap() {
         let mut file = fs::File::create(&vault_matching).expect("Could not create file");
         file.write_all(
             serde_json::to_string(&VaultsAccess::new())
@@ -347,8 +346,8 @@ pub fn init_server_config() {
  * Load user data from the file system.
  */
 pub fn load_user_data() -> UsersData {
-    let user_data = format!("{}{}", ROOT.to_str().unwrap(), USERS_DATA);
-    let content = fs::read_to_string(user_data).unwrap();
+    let user_data = format!("{}/{}", ROOT.to_str().unwrap(), USERS_DATA);
+    let content = fs::read_to_string(&user_data).unwrap();
     serde_json::from_str::<UsersData>(&content).unwrap()
 }
 
@@ -356,7 +355,7 @@ pub fn load_user_data() -> UsersData {
  * Load vault matching data from the file system.
  */
 pub fn load_vault_matching() -> VaultsAccess {
-    let user_data = format!("{}{}", ROOT.to_str().unwrap(), VAULTS_MATCHING);
+    let user_data = format!("{}/{}", ROOT.to_str().unwrap(), VAULTS_MATCHING);
 
     // Vérifiez si le fichier existe avant d'essayer de le lire
     if fs::metadata(&user_data).is_ok() {
@@ -385,8 +384,8 @@ pub async fn save_server_config() -> impl Responder {
     let users_db = USERS_DB.lock().unwrap();
     let vault_access = VAULT_ACESS.lock().unwrap();
 
-    let path_users_db = format!("{}{}", ROOT.to_str().unwrap(), USERS_DATA);
-    let path_vault_access = format!("{}{}", ROOT.to_str().unwrap(), VAULTS_MATCHING);
+    let path_users_db = format!("{}/{}", ROOT.to_str().unwrap(), USERS_DATA);
+    let path_vault_access = format!("{}/{}", ROOT.to_str().unwrap(), VAULTS_MATCHING);
     fs::write(
         &path_users_db,
         serde_json::to_string(&users_db.deref()).unwrap().as_bytes(),
