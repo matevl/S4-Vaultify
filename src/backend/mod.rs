@@ -1,9 +1,6 @@
-use crate::backend::account_manager::account::{UserData, JWT};
-
 pub mod account_manager;
 pub mod encryption;
 pub mod file_manager;
-pub mod vault_manager;
 
 pub mod aes_keys;
 

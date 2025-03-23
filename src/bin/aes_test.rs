@@ -1,6 +1,6 @@
+use s4_vaultify::backend::aes_keys::crypted_key::*;
 use s4_vaultify::backend::aes_keys::decrypted_key::*;
 use s4_vaultify::backend::aes_keys::keys_password::*;
-use s4_vaultify::backend::aes_keys::crypted_key::*;
 
 use std::env;
 use std::fs;
@@ -24,15 +24,13 @@ fn main() {
     let chemin_fichier = "assets/aes_test/video_test.bin"; // change this path as needed
 
     // Read the file
-    let donnees = fs::read(chemin_fichier)
-        .expect("Error reading the file");
+    let donnees = fs::read(chemin_fichier).expect("Error reading the file");
 
     // 3. Encrypt the data
     let donnees_chiffrees = encrypt(&donnees, &key);
     // Save the encrypted file with the ".enc" extension
     let chemin_chiffre = format!("{}.enc", chemin_fichier);
-    fs::write(&chemin_chiffre, &donnees_chiffrees)
-        .expect("Error writing the encrypted file");
+    fs::write(&chemin_chiffre, &donnees_chiffrees).expect("Error writing the encrypted file");
     println!("Encrypted file saved as: {}", chemin_chiffre);
 
     // 4. Decrypt the data
@@ -43,7 +41,7 @@ fn main() {
             fs::write(&chemin_dechiffre, &donnees_dechiffrees)
                 .expect("Error writing the decrypted file");
             println!("Decrypted file saved as: {}", chemin_dechiffre);
-        },
+        }
         Err(err) => {
             eprintln!("Error during decryption: {}", err);
             process::exit(1);

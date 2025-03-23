@@ -369,7 +369,7 @@ pub fn load_vault_matching() -> VaultsAccess {
                     Ok(vault_access) => vault_access,
                     Err(e) => panic!("Failed to parse JSON: {}", e),
                 }
-            },
+            }
             Err(e) => panic!("Failed to read file: {}", e),
         }
     } else {
@@ -377,8 +377,6 @@ pub fn load_vault_matching() -> VaultsAccess {
         VaultsAccess::new()
     }
 }
-
-
 
 /**
  * Endpoint to save the server configuration.
