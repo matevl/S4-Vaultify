@@ -1,9 +1,7 @@
 use crate::backend::aes_keys::keys_password::{
     derive_key, generate_random_key, generate_salt_from_login,
 };
-use crate::backend::{
-    USERS_DATA, VAULTIFY_CONFIG, VAULTS_MATCHING, VAULT_CONFIG_ROOT, VAULT_USERS_DIR,
-};
+use crate::backend::{USERS_DATA, VAULTIFY_CONFIG, VAULTS_DATA, VAULTS_MATCHING, VAULT_CONFIG_ROOT, VAULT_USERS_DIR};
 use actix_web::{web, HttpResponse, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use dirs;
@@ -193,7 +191,7 @@ pub async fn create_user_query(user: web::Json<UserJson>) -> impl Responder {
 
     db.insert(email.clone(), (hash_pw.clone(), new_id));
 
-    fs::create_dir_all(ROOT.join(new_id.to_string())).unwrap();
+    fs::create_dir_all(format!("{}/{}{}", ROOT.to_str().unwrap(), VAULTS_DATA, new_id)).unwrap();
 
     let salt = generate_salt_from_login(user.email.as_str());
     let key = derive_key(user.password.as_str(), salt.as_slice(), 10000);
@@ -256,7 +254,7 @@ pub async fn create_vault_query(
         .unwrap()
         .as_secs();
 
-    let vault_path = format!("{}/{}{}", ROOT.to_str().unwrap(), jwt.id, time);
+    let vault_path = format!("{}/{}{}{}", ROOT.to_str().unwrap(), VAULTS_DATA, jwt.id, time);
     let vault_config_path = format!("{}{}", vault_path, VAULT_CONFIG_ROOT);
     let vault_key_data = format!("{}{}", vault_path, VAULT_USERS_DIR);
     let key_path = format!("{}{}.json", vault_key_data, jwt.id);
