@@ -30,7 +30,7 @@ document.getElementById('login').addEventListener('submit', function(event) {
     })
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
+            if (data.id) {
                 console.log('Connexion réussie:', data);
                 // Redirige vers la page d'accueil ou dashboard
                 window.location.href = "/dashboard";
@@ -71,7 +71,7 @@ document.getElementById('register').addEventListener('submit', function(event) {
     })
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
+            if (data.id) {
                 console.log('Utilisateur créé:', data);
                 alert('Inscription réussie ! Vous pouvez maintenant vous connecter.');
                 // Affiche le formulaire de connexion
