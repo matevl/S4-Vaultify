@@ -2,7 +2,7 @@ use crate::backend::aes_keys::keys_password::{
     derive_key, generate_random_key, generate_salt_from_login,
 };
 use crate::backend::{
-    USERS_DATA, VAULTIFY_CONFIG, VAULT_MATCHING, VAULT_CONFIG_ROOT, VAULT_USERS_DIR,
+    USERS_DATA, VAULTIFY_CONFIG, VAULTS_MATCHING, VAULT_CONFIG_ROOT, VAULT_USERS_DIR,
 };
 use actix_web::{web, HttpResponse, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
@@ -331,7 +331,7 @@ pub fn init_server_config() {
         file.write_all(serde_json::to_string(&UsersData::new()).unwrap().as_bytes())
             .unwrap();
     }
-    let vault_matching = format!("{}{}", config_root, VAULT_MATCHING);
+    let vault_matching = format!("{}{}", config_root, VAULTS_MATCHING);
     if !fs::exists(&vault_matching).is_ok() {
         let mut file = fs::File::create(&vault_matching).expect("Could not create file");
         file.write_all(
@@ -356,7 +356,7 @@ pub fn load_user_data() -> UsersData {
  * Load vault matching data from the file system.
  */
 pub fn load_vault_matching() -> VaultsAccess {
-    let user_data = format!("{}{}", ROOT.to_str().unwrap(), VAULT_MATCHING);
+    let user_data = format!("{}{}", ROOT.to_str().unwrap(), VAULTS_MATCHING);
 
     // Vérifiez si le fichier existe avant d'essayer de le lire
     if fs::metadata(&user_data).is_ok() {
@@ -388,7 +388,7 @@ pub async fn save_server_config() -> impl Responder {
     let vault_access = VAULT_ACESS.lock().unwrap();
 
     let path_users_db = format!("{}{}", ROOT.to_str().unwrap(), USERS_DATA);
-    let path_vault_access = format!("{}{}", ROOT.to_str().unwrap(), VAULT_MATCHING);
+    let path_vault_access = format!("{}{}", ROOT.to_str().unwrap(), VAULTS_MATCHING);
     fs::write(
         &path_users_db,
         serde_json::to_string(&users_db.deref()).unwrap().as_bytes(),

@@ -1,6 +1,6 @@
 use crate::backend::aes_keys::decrypted_key::decrypt;
 use crate::backend::aes_keys::keys_password::{derive_key, generate_salt_from_login};
-use crate::backend::{USERS_DATA, VAULTIFY_CONFIG, VAULT_MATCHING, VAULT_USERS_DIR};
+use crate::backend::{USERS_DATA, VAULTIFY_CONFIG, VAULTS_MATCHING, VAULT_USERS_DIR};
 use crate::error_manager::VaultError;
 use bcrypt::{hash, verify};
 use dirs;
@@ -481,7 +481,7 @@ type VaultMatching = HashMap<String, Vec<(String, String)>>;
 
 pub fn load_vault_matching() -> VaultMatching {
     let root = dirs::home_dir().expect("No home dir");
-    let file_path = root.join(VAULT_MATCHING);
+    let file_path = root.join(VAULTS_MATCHING);
 
     let file_content = fs::read_to_string(file_path).expect("Unable to read file");
     let vault_matching: VaultMatching =
@@ -492,7 +492,7 @@ pub fn load_vault_matching() -> VaultMatching {
 // Function to save vault matching to a JSON file
 pub fn save_vault_matching(data: &VaultMatching) {
     let root = dirs::home_dir().expect("No home dir");
-    let file_path = root.join(VAULT_MATCHING);
+    let file_path = root.join(VAULTS_MATCHING);
 
     let file_content = serde_json::to_string_pretty(data).expect("Unable to serialize user data");
     fs::write(file_path, file_content).expect("Unable to write file");
