@@ -78,7 +78,7 @@ async fn log_user( user_data: web::Json<LogInput>, db: web::Data<UserDb>) -> imp
         id : new_id,
         user_input: usrinput.clone(),
         jwt : jwt.clone()
-        
+
     });
     HttpResponse::Created().json(CreateUserResponse{
         id :new_id,
@@ -111,7 +111,7 @@ async fn main() -> std::io::Result<()> {
                 .service(create_user_query)
                 .service(greet)
                 .service(log_user)
-                
+
         })
 
         .bind(format!("127.0.0.1:{}", port))?
