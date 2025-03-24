@@ -5,10 +5,12 @@ use lopdf::Document;
 use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
 use std::path::Path;
-
+use dioxus::html::completions::CompleteWithBraces::metadata;
 pub use crate::backend::file_manager::file_handling::{read_bytes, save_binary};
 use tempfile::NamedTempFile;
 use zip::ZipArchive;
+use crate::backend::file_manager::file_handling::get_name;
+use crate::backend::file_manager::mapping::update_map;
 
 #[derive(Debug, Clone, Copy)]
 pub enum FType {
@@ -104,13 +106,14 @@ pub enum FType {
 }
 
 pub fn process_file<P: AsRef<Path>>(file_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let original_name=get_name(file_path);
     println!("DEBUG: File path: {:?}", file_path);
     let buffer = read_bytes(file_path)?;
     println!("DEBUG: {} bytes read.", buffer.len());
     let file_type = detect_type(&buffer);
     println!("DEBUG: Detected file type: {:?}", file_type);
     println!("DEBUG: Processing metadata.");
-    md_treatment(&buffer, file_type)?;
+    md_treatment(&buffer, file_type,original_name)?;
     save_binary(&buffer);
     println!("DEBUG: Binary file saved in binary_files directory.");
     Ok(())
@@ -215,7 +218,7 @@ pub fn detect_type(buffer: &Vec<u8>) -> FType {
     }
 }
 
-pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::error::Error>> {
+pub fn md_treatment(buffer: &Vec<u8>, ext: FType, original_name:String) -> Result<(), Box<dyn std::error::Error>> {
     match ext {
         FType::Tif | FType::Jpg | FType::Heif | FType::Png => {
             let exifreader = Reader::new();
@@ -231,27 +234,31 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::err
             }
             if let FType::Jpg = ext {
                 let (content_buffer, metadata_buffer) = split_jpeg(&buffer);
-                save_binary(&content_buffer);
+                let content=save_binary(&content_buffer);
                 if !metadata_buffer.is_empty() {
-                    save_binary(&metadata_buffer);
+                    let metadata=save_binary(&metadata_buffer);
+                    update_map(original_name, content, metadata);
                 }
             } else if let FType::Png = ext {
                 let (content_buffer, metadata_buffer) = split_png(&buffer);
-                save_binary(&content_buffer);
+                let content = save_binary(&content_buffer);
                 if !metadata_buffer.is_empty() {
-                    save_binary(&metadata_buffer);
+                    let metadata = save_binary(&metadata_buffer);
+                    update_map(original_name.clone(), content, metadata);
                 }
             } else if let FType::Tif = ext {
                 let (content_buffer, metadata_buffer) = split_tiff(&buffer);
-                save_binary(&content_buffer);
+                let content = save_binary(&content_buffer);
                 if !metadata_buffer.is_empty() {
-                    save_binary(&metadata_buffer);
+                    let metadata = save_binary(&metadata_buffer);
+                    update_map(original_name.clone(), content, metadata);
                 }
             } else if let FType::Heif = ext {
                 let (content_buffer, metadata_buffer) = split_tiff(&buffer);
-                save_binary(&content_buffer);
+                let content = save_binary(&content_buffer);
                 if !metadata_buffer.is_empty() {
-                    save_binary(&metadata_buffer);
+                    let metadata = save_binary(&metadata_buffer);
+                    update_map(original_name.clone(), content, metadata);
                 }
             }
         }
@@ -284,9 +291,10 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::err
                 }
             }
             let (content_buffer, metadata_buffer) = split_video(&buffer);
-            save_binary(&content_buffer);
+            let content = save_binary(&content_buffer);
             if !metadata_buffer.is_empty() {
-                save_binary(&metadata_buffer);
+                let metadata = save_binary(&metadata_buffer);
+                update_map(original_name.clone(), content, metadata);
             }
         }
         FType::Zip => {
@@ -303,9 +311,10 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::err
                 );
             }
             let (content_buffer, metadata_buffer) = split_zip(&buffer);
-            save_binary(&content_buffer);
+            let content = save_binary(&content_buffer);
             if !metadata_buffer.is_empty() {
-                save_binary(&metadata_buffer);
+                let metadata = save_binary(&metadata_buffer);
+                update_map(original_name.clone(), content, metadata);
             }
         }
         FType::Pdf => {
@@ -316,9 +325,10 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType) -> Result<(), Box<dyn std::err
                 println!("  {}: {:?}", String::from_utf8_lossy(key), value);
             }
             let (content_buffer, metadata_buffer) = split_pdf(&buffer);
-            save_binary(&content_buffer);
+            let content = save_binary(&content_buffer);
             if !metadata_buffer.is_empty() {
-                save_binary(&metadata_buffer);
+                let metadata = save_binary(&metadata_buffer);
+                update_map(original_name.clone(), content, metadata);
             }
         }
         _ => {}
