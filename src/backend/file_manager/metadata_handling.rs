@@ -1,4 +1,3 @@
-use crate::backend::file_manager::file_handling::{open_file_binary, save_binary};
 use dioxus::prelude::ReadableVecExt;
 use exif::Reader;
 use ffmpeg_next;
@@ -7,6 +6,7 @@ use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
 use std::path::Path;
 
+pub use crate::backend::file_manager::file_handling::{read_bytes, save_binary};
 use tempfile::NamedTempFile;
 use zip::ZipArchive;
 
@@ -103,17 +103,17 @@ pub enum FType {
     Unknown,
 }
 
-pub fn process_file<P: AsRef<Path>>(file_path: &Path) {
-    let buffer = open_file_binary(file_path);
+pub fn process_file<P: AsRef<Path>>(file_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    println!("DEBUG: File path: {:?}", file_path);
+    let buffer = read_bytes(file_path)?;
+    println!("DEBUG: {} bytes read.", buffer.len());
     let file_type = detect_type(&buffer);
-    md_treatment(&buffer, file_type);
-}
-
-pub fn read_bytes<P: AsRef<Path>>(file_path: P) -> io::Result<Vec<u8>> {
-    let mut file = File::open(file_path)?;
-    let mut contents = Vec::new();
-    file.read_to_end(&mut contents)?;
-    Ok(contents)
+    println!("DEBUG: Detected file type: {:?}", file_type);
+    println!("DEBUG: Processing metadata.");
+    md_treatment(&buffer, file_type)?;
+    save_binary(&buffer);
+    println!("DEBUG: Binary file saved in binary_files directory.");
+    Ok(())
 }
 
 pub fn detect_type(buffer: &Vec<u8>) -> FType {

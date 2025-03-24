@@ -1,8 +1,8 @@
 use rand::Rng;
-use std::fs;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
+use std::{fs, io};
 
 pub fn binary_namegen() -> String {
     let mut rng = rand::rng();
@@ -10,11 +10,11 @@ pub fn binary_namegen() -> String {
     format!("bin_{}.v", id)
 }
 
-pub fn open_file_binary(path: &Path) -> Vec<u8> {
-    let mut file = File::open(path).unwrap();
+pub fn read_bytes<P: AsRef<Path>>(file_path: P) -> io::Result<Vec<u8>> {
+    let mut file = File::open(file_path)?;
     let mut contents = Vec::new();
-    file.read_to_end(&mut contents).unwrap();
-    contents
+    file.read_to_end(&mut contents)?;
+    Ok(contents)
 }
 
 pub fn save_binary(contents: &[u8]) {
