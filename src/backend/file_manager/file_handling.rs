@@ -3,7 +3,6 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::{env, fs, io};
-use crate::backend::file_manager::metadata_handling::detect_type;
 
 pub fn get_name<P: AsRef<Path>>(file_path: P) ->String{
     file_path.as_ref().file_name().unwrap().to_str().unwrap().to_string()
@@ -43,32 +42,3 @@ pub fn clear_binary() {
         fs::remove_file(&bin_path).unwrap();
     }
 }
-
-//pub fn refusion<P: AsRef<Path>>(file_path: P) -> io::Result<Vec<u8>> {
-//    let buffer = read_bytes(file_path)?;
-//    let file_type = detect_type(&buffer);
-//    if format!("{:?}", file_type).to_lowercase().contains("heic")
-//    {
-//        let output_path = env::current_dir()?.join("output.heic");
-//        println!(
-//            "DEBUG: Detected HEIC image. Writing output to {:?}",
-//            output_path
-//        );
-//        fs::write(&output_path, &buffer)?;
-//    } else {
-//        println!("DEBUG: File is not a HEIC image; skipping HEIC output generation.");
-//    }
-//
-//    if format!("{:?}", file_type).to_lowercase().contains("heif")
-//    {
-//        let output_path = env::current_dir()?.join("output.heif");
-//        println!(
-//            "DEBUG: Detected HEIF image. Writing output to {:?}",
-//            output_path
-//        );
-//        fs::write(&output_path, &buffer)?;
-//    } else {
-//        println!("DEBUG: File is not a HEIF image; skipping HEIF output generation.");
-//    }
-
-//}

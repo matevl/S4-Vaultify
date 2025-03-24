@@ -1,3 +1,4 @@
+use std::{env, fs};
 use dioxus::prelude::ReadableVecExt;
 use exif::Reader;
 use ffmpeg_next;
@@ -6,11 +7,20 @@ use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
 use std::path::Path;
 use dioxus::html::completions::CompleteWithBraces::metadata;
+use serde::{Deserialize, Serialize};
 pub use crate::backend::file_manager::file_handling::{read_bytes, save_binary};
 use tempfile::NamedTempFile;
 use zip::ZipArchive;
 use crate::backend::file_manager::file_handling::get_name;
 use crate::backend::file_manager::mapping::update_map;
+
+#[derive(Serialize, Deserialize)]
+struct FileMap {
+    original_filename: String,
+    binary: String,
+    metadata: String,
+    file_type: String,
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum FType {
@@ -234,31 +244,31 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType, original_name:String) -> Resul
             }
             if let FType::Jpg = ext {
                 let (content_buffer, metadata_buffer) = split_jpeg(&buffer);
-                let content=save_binary(&content_buffer);
+                let content = save_binary(&content_buffer);
                 if !metadata_buffer.is_empty() {
-                    let metadata=save_binary(&metadata_buffer);
-                    update_map(original_name, content, metadata);
+                    let metadata = save_binary(&metadata_buffer);
+                    update_map(original_name, content, metadata, "jpg".to_string());
                 }
             } else if let FType::Png = ext {
                 let (content_buffer, metadata_buffer) = split_png(&buffer);
                 let content = save_binary(&content_buffer);
                 if !metadata_buffer.is_empty() {
                     let metadata = save_binary(&metadata_buffer);
-                    update_map(original_name.clone(), content, metadata);
+                    update_map(original_name.clone(), content, metadata, "png".to_string());
                 }
             } else if let FType::Tif = ext {
                 let (content_buffer, metadata_buffer) = split_tiff(&buffer);
                 let content = save_binary(&content_buffer);
                 if !metadata_buffer.is_empty() {
                     let metadata = save_binary(&metadata_buffer);
-                    update_map(original_name.clone(), content, metadata);
+                    update_map(original_name.clone(), content, metadata, "tif".to_string());
                 }
             } else if let FType::Heif = ext {
                 let (content_buffer, metadata_buffer) = split_tiff(&buffer);
                 let content = save_binary(&content_buffer);
                 if !metadata_buffer.is_empty() {
                     let metadata = save_binary(&metadata_buffer);
-                    update_map(original_name.clone(), content, metadata);
+                    update_map(original_name.clone(), content, metadata, "heif".to_string());
                 }
             }
         }
@@ -294,7 +304,7 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType, original_name:String) -> Resul
             let content = save_binary(&content_buffer);
             if !metadata_buffer.is_empty() {
                 let metadata = save_binary(&metadata_buffer);
-                update_map(original_name.clone(), content, metadata);
+                update_map(original_name.clone(), content, metadata, "mp4".to_string()); //add other fmt to map
             }
         }
         FType::Zip => {
@@ -314,7 +324,7 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType, original_name:String) -> Resul
             let content = save_binary(&content_buffer);
             if !metadata_buffer.is_empty() {
                 let metadata = save_binary(&metadata_buffer);
-                update_map(original_name.clone(), content, metadata);
+                update_map(original_name.clone(), content, metadata, "zip".to_string());
             }
         }
         FType::Pdf => {
@@ -326,10 +336,12 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType, original_name:String) -> Resul
             }
             let (content_buffer, metadata_buffer) = split_pdf(&buffer);
             let content = save_binary(&content_buffer);
-            if !metadata_buffer.is_empty() {
-                let metadata = save_binary(&metadata_buffer);
-                update_map(original_name.clone(), content, metadata);
-            }
+            let metadata = if metadata_buffer.is_empty() {
+                save_binary(&Vec::new())
+            } else {
+                save_binary(&metadata_buffer)
+            };
+            update_map(original_name.clone(), content, metadata, "pdf".to_string());
         }
         _ => {}
     }
@@ -458,30 +470,6 @@ fn split_pdf(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     }
 }
 
-pub fn recombine_file(content_buffer: &Vec<u8>, metadata_buffer: &Vec<u8>, ext: FType) -> Vec<u8> {
-    match ext {
-        FType::Jpg => recombine_jpeg(content_buffer, metadata_buffer),
-        FType::Png => recombine_png(content_buffer, metadata_buffer),
-        FType::Tif | FType::Heif => recombine_tiff(content_buffer, metadata_buffer),
-        FType::Mp4
-        | FType::M4v
-        | FType::Mkv
-        | FType::Webm
-        | FType::Mov
-        | FType::Avi
-        | FType::Wmv
-        | FType::Mpg
-        | FType::Flv => recombine_video(content_buffer, metadata_buffer),
-        FType::Zip => recombine_zip(content_buffer, metadata_buffer),
-        FType::Pdf => recombine_pdf(content_buffer, metadata_buffer),
-        _ => {
-            let mut combined = Vec::new();
-            combined.extend_from_slice(content_buffer);
-            combined.extend_from_slice(metadata_buffer);
-            combined
-        }
-    }
-}
 
 fn recombine_tiff(content: &[u8], metadata: &[u8]) -> Vec<u8> {
     let mut combined = Vec::new();
@@ -516,10 +504,10 @@ fn recombine_png(content: &[u8], metadata: &[u8]) -> Vec<u8> {
     combined
 }
 
-fn recombine_video(content: &[u8], metadata: &[u8]) -> Vec<u8> {
+fn recombine_video(content: &[u8], metadata: &[u8]) -> Vec<u8> { //MP4 proof, other format not tested
     let mut combined = Vec::new();
-    combined.extend_from_slice(content);
     combined.extend_from_slice(metadata);
+    combined.extend_from_slice(content);
     combined
 }
 
@@ -535,4 +523,67 @@ fn recombine_pdf(content: &[u8], metadata: &[u8]) -> Vec<u8> {
     combined.extend_from_slice(content);
     combined.extend_from_slice(metadata);
     combined
+}
+
+fn detect_type_from_ext(ext: &str) -> FType {
+    match ext.to_lowercase().as_str() {
+        "jpg" | "jpeg" => FType::Jpg,
+        "png" => FType::Png,
+        "tif" | "tiff" => FType::Tif,
+        "heif" => FType::Heif,
+        "mp4" => FType::Mp4,
+        "m4v" => FType::M4v,
+        "mkv" => FType::Mkv,
+        "webm" => FType::Webm,
+        "mov" => FType::Mov,
+        "avi" => FType::Avi,
+        "wmv" => FType::Wmv,
+        "mpg" => FType::Mpg,
+        "flv" => FType::Flv,
+        "zip" => FType::Zip,
+        "pdf" => FType::Pdf,
+        _ => FType::Unknown,
+    }
+}
+
+pub fn refusion_from_map(filename: &str) -> std::io::Result<()> {
+
+    let map_path = env::current_dir()?.join("binary_files").join("map.json");
+    let content = fs::read_to_string(&map_path)?;
+    let entries: Vec<FileMap> = serde_json::from_str(&content)?;
+
+    let entry = entries.into_iter().find(|e| e.original_filename == filename);
+
+    if let Some(entry) = entry {
+        let binary_path = env::current_dir()?.join("binary_files").join(&entry.binary);
+        let metadata_path = env::current_dir()?.join("binary_files").join(&entry.metadata);
+
+        let binary_buffer = read_bytes(&binary_path)?;
+        let metadata_buffer = read_bytes(&metadata_path)?;
+
+        let ext = entry.file_type.as_str();
+        let combined = match detect_type_from_ext(ext) {
+            FType::Jpg => recombine_jpeg(&binary_buffer, &metadata_buffer),
+            FType::Png => recombine_png(&binary_buffer, &metadata_buffer),
+            FType::Tif | FType::Heif => recombine_tiff(&binary_buffer, &metadata_buffer),
+            FType::Mp4 | FType::M4v | FType::Mkv | FType::Webm | FType::Mov |
+            FType::Avi | FType::Wmv | FType::Mpg | FType::Flv => recombine_video(&binary_buffer, &metadata_buffer),
+            FType::Zip => recombine_zip(&binary_buffer, &metadata_buffer),
+            FType::Pdf => recombine_pdf(&binary_buffer, &metadata_buffer),
+            _ => {
+                let mut combined = Vec::new();
+                combined.extend_from_slice(&binary_buffer);
+                combined.extend_from_slice(&metadata_buffer);
+                combined
+            }
+        };
+
+        let output_path = env::current_dir()?.join(filename);
+        fs::write(output_path, combined)?;
+        println!("Recombined file written to {:?}", filename);
+    } else {
+        println!("No entry found in map for filename: {}", filename);
+    }
+
+    Ok(())
 }
