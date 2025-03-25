@@ -4,8 +4,14 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::{env, fs, io};
 
-pub fn get_name<P: AsRef<Path>>(file_path: P) ->String{
-    file_path.as_ref().file_name().unwrap().to_str().unwrap().to_string()
+pub fn get_name<P: AsRef<Path>>(file_path: P) -> String {
+    file_path
+        .as_ref()
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string()
 }
 pub fn binary_namegen() -> String {
     let mut rng = rand::rng();
@@ -20,8 +26,8 @@ pub fn read_bytes<P: AsRef<Path>>(file_path: P) -> io::Result<Vec<u8>> {
     Ok(contents)
 }
 
-pub fn save_binary(contents: &[u8])->String {
-    let name:String= binary_namegen();
+pub fn save_binary(contents: &[u8]) -> String {
+    let name: String = binary_namegen();
     let mut file = File::create(
         std::env::current_dir()
             .unwrap()

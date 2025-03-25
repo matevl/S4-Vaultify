@@ -1,16 +1,16 @@
-use std::{env, fs};
+use crate::backend::file_manager::file_handling::get_name;
+pub use crate::backend::file_manager::file_handling::{read_bytes, save_binary};
+use crate::backend::file_manager::mapping::update_map;
 use exif::Reader;
 use ffmpeg_next;
 use lopdf::Document;
+use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{self, Cursor, Read, Write};
 use std::path::Path;
-use serde::{Deserialize, Serialize};
-pub use crate::backend::file_manager::file_handling::{read_bytes, save_binary};
+use std::{env, fs};
 use tempfile::NamedTempFile;
 use zip::ZipArchive;
-use crate::backend::file_manager::file_handling::get_name;
-use crate::backend::file_manager::mapping::update_map;
 
 #[derive(Serialize, Deserialize)]
 struct FileMap {
@@ -114,14 +114,14 @@ pub enum FType {
 }
 
 pub fn process_file<P: AsRef<Path>>(file_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let original_name=get_name(file_path);
+    let original_name = get_name(file_path);
     println!("DEBUG: File path: {:?}", file_path);
     let buffer = read_bytes(file_path)?;
     println!("DEBUG: {} bytes read.", buffer.len());
     let file_type = detect_type(&buffer);
     println!("DEBUG: Detected file type: {:?}", file_type);
     println!("DEBUG: Processing metadata.");
-    md_treatment(&buffer, file_type,original_name)?;
+    md_treatment(&buffer, file_type, original_name)?;
     save_binary(&buffer);
     println!("DEBUG: Binary file saved in binary_files directory.");
     Ok(())
@@ -226,7 +226,11 @@ pub fn detect_type(buffer: &Vec<u8>) -> FType {
     }
 }
 
-pub fn md_treatment(buffer: &Vec<u8>, ext: FType, original_name:String) -> Result<(), Box<dyn std::error::Error>> {
+pub fn md_treatment(
+    buffer: &Vec<u8>,
+    ext: FType,
+    original_name: String,
+) -> Result<(), Box<dyn std::error::Error>> {
     match ext {
         FType::Tif | FType::Jpg | FType::Heif | FType::Png => {
             let exifreader = Reader::new();
@@ -302,7 +306,8 @@ pub fn md_treatment(buffer: &Vec<u8>, ext: FType, original_name:String) -> Resul
             let content = save_binary(&content_buffer);
             if !metadata_buffer.is_empty() {
                 let metadata = save_binary(&metadata_buffer);
-                update_map(original_name.clone(), content, metadata, "mp4".to_string()); //add other fmt to map
+                update_map(original_name.clone(), content, metadata, "mp4".to_string());
+                //add other fmt to map
             }
         }
         FType::Zip => {
@@ -468,7 +473,6 @@ fn split_pdf(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     }
 }
 
-
 fn recombine_tiff(content: &[u8], metadata: &[u8]) -> Vec<u8> {
     let mut combined = Vec::new();
     combined.extend_from_slice(metadata);
@@ -502,7 +506,8 @@ fn recombine_png(content: &[u8], metadata: &[u8]) -> Vec<u8> {
     combined
 }
 
-fn recombine_video(content: &[u8], metadata: &[u8]) -> Vec<u8> { //MP4 proof, other format not tested
+fn recombine_video(content: &[u8], metadata: &[u8]) -> Vec<u8> {
+    //MP4 proof, other format not tested
     let mut combined = Vec::new();
     combined.extend_from_slice(metadata);
     combined.extend_from_slice(content);
@@ -545,16 +550,19 @@ fn detect_type_from_ext(ext: &str) -> FType {
 }
 
 pub fn refusion_from_map(filename: &str) -> std::io::Result<()> {
-
     let map_path = env::current_dir()?.join("binary_files").join("map.json");
     let content = fs::read_to_string(&map_path)?;
     let entries: Vec<FileMap> = serde_json::from_str(&content)?;
 
-    let entry = entries.into_iter().find(|e| e.original_filename == filename);
+    let entry = entries
+        .into_iter()
+        .find(|e| e.original_filename == filename);
 
     if let Some(entry) = entry {
         let binary_path = env::current_dir()?.join("binary_files").join(&entry.binary);
-        let metadata_path = env::current_dir()?.join("binary_files").join(&entry.metadata);
+        let metadata_path = env::current_dir()?
+            .join("binary_files")
+            .join(&entry.metadata);
 
         let binary_buffer = read_bytes(&binary_path)?;
         let metadata_buffer = read_bytes(&metadata_path)?;
@@ -564,8 +572,15 @@ pub fn refusion_from_map(filename: &str) -> std::io::Result<()> {
             FType::Jpg => recombine_jpeg(&binary_buffer, &metadata_buffer),
             FType::Png => recombine_png(&binary_buffer, &metadata_buffer),
             FType::Tif | FType::Heif => recombine_tiff(&binary_buffer, &metadata_buffer),
-            FType::Mp4 | FType::M4v | FType::Mkv | FType::Webm | FType::Mov |
-            FType::Avi | FType::Wmv | FType::Mpg | FType::Flv => recombine_video(&binary_buffer, &metadata_buffer),
+            FType::Mp4
+            | FType::M4v
+            | FType::Mkv
+            | FType::Webm
+            | FType::Mov
+            | FType::Avi
+            | FType::Wmv
+            | FType::Mpg
+            | FType::Flv => recombine_video(&binary_buffer, &metadata_buffer),
             FType::Zip => recombine_zip(&binary_buffer, &metadata_buffer),
             FType::Pdf => recombine_pdf(&binary_buffer, &metadata_buffer),
             _ => {
