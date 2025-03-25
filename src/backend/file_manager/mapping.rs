@@ -10,6 +10,10 @@ struct FileMap {
     file_type: String,
 }
 
+/**
+ * Updates the file mapping JSON by appending a new entry.
+ * Stores original filename, binary name, metadata path, and file type.
+ */
 pub fn update_map(original_filename: String, binary: String, metadata: String, file_type: String) {
     let map_path = Path::new("binary_files").join("map.json");
     let mut map: Vec<FileMap> = if map_path.exists() {

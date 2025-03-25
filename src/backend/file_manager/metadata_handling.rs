@@ -113,6 +113,10 @@ pub enum FType {
     Unknown,
 }
 
+/**
+ * Processes a file by reading its bytes, detecting its type,
+ * extracting metadata, saving the binary, and updating the map.
+ */
 pub fn process_file<P: AsRef<Path>>(file_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let original_name = get_name(file_path);
     println!("DEBUG: File path: {:?}", file_path);
@@ -127,6 +131,9 @@ pub fn process_file<P: AsRef<Path>>(file_path: &Path) -> Result<(), Box<dyn std:
     Ok(())
 }
 
+/**
+ * Detects the file type based on its byte content using MIME type inference.
+ */
 pub fn detect_type(buffer: &Vec<u8>) -> FType {
     if let Some(kind) = infer::get(buffer) {
         match kind.mime_type() {
@@ -226,6 +233,9 @@ pub fn detect_type(buffer: &Vec<u8>) -> FType {
     }
 }
 
+/**
+ * Extracts and separates metadata from various file types and updates the map.
+ */
 pub fn md_treatment(
     buffer: &Vec<u8>,
     ext: FType,
@@ -351,6 +361,9 @@ pub fn md_treatment(
     Ok(())
 }
 
+/**
+ * Splits TIFF file buffer into content and metadata.
+ */
 fn split_tiff(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     let meta_len = 512.min(buffer.len());
     let metadata = buffer[..meta_len].to_vec();
@@ -358,6 +371,9 @@ fn split_tiff(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     (content, metadata)
 }
 
+/**
+ * Splits JPEG file buffer into content and metadata.
+ */
 fn split_jpeg(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     let mut content = Vec::new();
     let mut metadata = Vec::new();
@@ -399,6 +415,9 @@ fn split_jpeg(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     (content, metadata)
 }
 
+/**
+ * Splits PNG file buffer into content and metadata.
+ */
 fn split_png(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     let mut content = Vec::new();
     let mut metadata = Vec::new();
@@ -429,6 +448,9 @@ fn split_png(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     (content, metadata)
 }
 
+/**
+ * Splits video file buffer into content and metadata.
+ */
 fn split_video(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     let mut content = Vec::new();
     let mut metadata = Vec::new();
@@ -452,6 +474,9 @@ fn split_video(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     (content, metadata)
 }
 
+/**
+ * Splits ZIP file buffer into content and metadata.
+ */
 fn split_zip(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     let signature = b"\x50\x4B\x05\x06";
     if let Some(pos) = buffer.windows(4).rposition(|w| w == signature) {
@@ -463,6 +488,9 @@ fn split_zip(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     }
 }
 
+/**
+ * Splits PDF file buffer into content and metadata.
+ */
 fn split_pdf(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     if let Some(pos) = buffer.windows(7).position(|w| w == b"trailer") {
         let content = buffer[..pos].to_vec();
@@ -473,6 +501,9 @@ fn split_pdf(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     }
 }
 
+/**
+ * Recombines TIFF content and metadata into a full file buffer.
+ */
 fn recombine_tiff(content: &[u8], metadata: &[u8]) -> Vec<u8> {
     let mut combined = Vec::new();
     combined.extend_from_slice(metadata);
@@ -480,6 +511,9 @@ fn recombine_tiff(content: &[u8], metadata: &[u8]) -> Vec<u8> {
     combined
 }
 
+/**
+ * Recombines JPEG content and metadata into a full file buffer.
+ */
 fn recombine_jpeg(content: &[u8], metadata: &[u8]) -> Vec<u8> {
     let mut combined = Vec::new();
     if content.len() >= 2 {
@@ -493,6 +527,9 @@ fn recombine_jpeg(content: &[u8], metadata: &[u8]) -> Vec<u8> {
     combined
 }
 
+/**
+ * Recombines PNG content and metadata into a full file buffer.
+ */
 fn recombine_png(content: &[u8], metadata: &[u8]) -> Vec<u8> {
     let mut combined = Vec::new();
     if content.len() >= 8 {
@@ -506,6 +543,9 @@ fn recombine_png(content: &[u8], metadata: &[u8]) -> Vec<u8> {
     combined
 }
 
+/**
+ * Recombines video content and metadata into a full file buffer.
+ */
 fn recombine_video(content: &[u8], metadata: &[u8]) -> Vec<u8> {
     //MP4 proof, other format not tested
     let mut combined = Vec::new();
@@ -514,6 +554,9 @@ fn recombine_video(content: &[u8], metadata: &[u8]) -> Vec<u8> {
     combined
 }
 
+/**
+ * Recombines ZIP content and metadata into a full file buffer.
+ */
 fn recombine_zip(content: &[u8], metadata: &[u8]) -> Vec<u8> {
     let mut combined = Vec::new();
     combined.extend_from_slice(content);
@@ -521,6 +564,9 @@ fn recombine_zip(content: &[u8], metadata: &[u8]) -> Vec<u8> {
     combined
 }
 
+/**
+ * Recombines PDF content and metadata into a full file buffer.
+ */
 fn recombine_pdf(content: &[u8], metadata: &[u8]) -> Vec<u8> {
     let mut combined = Vec::new();
     combined.extend_from_slice(content);
@@ -528,6 +574,9 @@ fn recombine_pdf(content: &[u8], metadata: &[u8]) -> Vec<u8> {
     combined
 }
 
+/**
+ * Detects the file type enum from a file extension string.
+ */
 fn detect_type_from_ext(ext: &str) -> FType {
     match ext.to_lowercase().as_str() {
         "jpg" | "jpeg" => FType::Jpg,
@@ -549,6 +598,10 @@ fn detect_type_from_ext(ext: &str) -> FType {
     }
 }
 
+/**
+ * Reconstructs the original file from its binary and metadata parts using the mapping file.
+ * Writes the recombined file back to the filesystem.
+ */
 pub fn refusion_from_map(filename: &str) -> std::io::Result<()> {
     let map_path = env::current_dir()?.join("binary_files").join("map.json");
     let content = fs::read_to_string(&map_path)?;

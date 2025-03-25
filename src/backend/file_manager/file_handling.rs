@@ -4,6 +4,9 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::{env, fs, io};
 
+/**
+ * Returns the file name as a string from a given file path.
+ */
 pub fn get_name<P: AsRef<Path>>(file_path: P) -> String {
     file_path
         .as_ref()
@@ -13,12 +16,19 @@ pub fn get_name<P: AsRef<Path>>(file_path: P) -> String {
         .unwrap()
         .to_string()
 }
+
+/**
+ * Generates a random binary file name with `.v` extension.
+ */
 pub fn binary_namegen() -> String {
     let mut rng = rand::rng();
     let id: u32 = rng.gen();
     format!("bin_{}.v", id)
 }
 
+/**
+ * Reads all bytes from a file and returns them as a vector.
+ */
 pub fn read_bytes<P: AsRef<Path>>(file_path: P) -> io::Result<Vec<u8>> {
     let mut file = File::open(file_path)?;
     let mut contents = Vec::new();
@@ -26,6 +36,10 @@ pub fn read_bytes<P: AsRef<Path>>(file_path: P) -> io::Result<Vec<u8>> {
     Ok(contents)
 }
 
+/**
+ * Saves byte contents into a new file in the `binary_files` directory.
+ * Returns the generated file name.
+ */
 pub fn save_binary(contents: &[u8]) -> String {
     let name: String = binary_namegen();
     let mut file = File::create(
@@ -39,6 +53,10 @@ pub fn save_binary(contents: &[u8]) -> String {
     name
 }
 
+/**
+ * Deletes all `.v` binary files from the `binary_files` directory.
+ * This is used to clean up temporary files generated during execution.
+ */
 pub fn clear_binary() {
     let path = std::env::current_dir().unwrap().join("binary_files");
 

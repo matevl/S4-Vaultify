@@ -25,23 +25,23 @@ jobs:
             libatk1.0-dev \
             libpango1.0-dev \
             libglib2.0-dev \
-            meson ninja-build \
-            libgtk-3-dev \
-            pkg-config \
-            libgdk-pixbuf2.0-dev \
+            meson \
+            ninja-build \
             javascriptcoregtk-4.1-dev \
             libsoup-3.0-dev \
             webkit2gtk-4.1-dev \
             libxdo3 \
             libx11-dev \
             libxdo-dev \
-            ffmpeg \ 
-            libavutil-dev
+            ffmpeg \
+            libavutil-dev \
+            libavformat-dev \
+            libavfilter-dev \
+            libavdevice-dev
 
       - name: Set PKG_CONFIG_PATH
         run: |
           echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
 
       - name: Cache Cargo build
         uses: actions/cache@v3
