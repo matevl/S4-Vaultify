@@ -35,9 +35,8 @@ jobs:
             libxdo3 \
             libx11-dev \
             libxdo-dev \
-            libc6-dev \
-            libclang-dev
-
+            ffmpeg \ 
+            libavutil-dev
 
       - name: Set PKG_CONFIG_PATH
         run: |
