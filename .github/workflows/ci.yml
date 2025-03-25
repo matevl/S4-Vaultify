@@ -34,7 +34,10 @@ jobs:
             webkit2gtk-4.1-dev \
             libxdo3 \
             libx11-dev \
-            libxdo-dev
+            libxdo-dev \
+            libc6-dev \
+            libclang-dev
+
 
       - name: Set PKG_CONFIG_PATH
         run: |
