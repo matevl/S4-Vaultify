@@ -1,4 +1,3 @@
-
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
 use rand::Rng; // For handling current date and time

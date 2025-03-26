@@ -7,7 +7,7 @@ fn main() {
                 Some(ts) => println!("Sent at (UNIX timestamp): {}", ts),
                 None => println!("Could not get send time"),
             }
-        },
+        }
         Err(e) => eprintln!("Failed to send email: {}", e),
     }
 }
