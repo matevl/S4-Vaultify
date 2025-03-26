@@ -3,6 +3,7 @@ pub mod encryption;
 pub mod file_manager;
 
 pub mod aes_keys;
+pub mod file_flow;
 pub mod auth;
 
 // Backend Const
