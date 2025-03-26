@@ -5,6 +5,7 @@ authors = ["matevl <144525314+matevl@users.noreply.github.com>"]
 edition = "2021"
 
 [dependencies]
+lettre = { version = "0.11.2", features = ["builder", "smtp-transport"] }
 serde = { version = "1.0.104", features = ["derive"] }
 serde_json = "1.0.48"
 bcrypt = "0.12"
