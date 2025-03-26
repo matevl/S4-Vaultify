@@ -299,7 +299,7 @@ pub fn md_treatment(
                 .path()
                 .to_str()
                 .ok_or("Invalid temporary file path")?;
-            let ictx = ffmpeg_next::format::input(&temp_path)?;
+            let mut ictx = ffmpeg_next::format::input(&temp_path)?;
             println!("Métadonnées du format:");
             for (key, value) in ictx.metadata().iter() {
                 println!("  {}: {}", key, value);
