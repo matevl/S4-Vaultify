@@ -31,5 +31,5 @@ pub fn update_map(original_filename: String, binary: String, metadata: String, f
     });
 
     let json = serde_json::to_string_pretty(&map).unwrap();
-    fs::write(map_path, json).unwrap();
+    fs::write(map_path, json).unwrap(); //le rendre en dictionnaire.
 }
