@@ -116,7 +116,7 @@ pub enum FType {
  * Processes a file by reading its bytes, detecting its type,
  * extracting metadata, saving the binary, and updating the map.
  */
-pub fn process_file<P: AsRef<Path>>(file_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+pub fn process_file(file_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let original_name = get_name(file_path);
     println!("DEBUG: File path: {:?}", file_path);
     let buffer = read_bytes(file_path)?;

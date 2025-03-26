@@ -2,7 +2,7 @@ use rand::Rng;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::{ fs, io};
+use std::{fs, io};
 
 /**
  * Returns the file name as a string from a given file path.
