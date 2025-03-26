@@ -1,28 +1,36 @@
-use chrono::{DateTime, Utc};
+
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
 use rand::Rng; // For handling current date and time
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-// Struct to store the 2FA code, the exact sending time, and the recipient email
 pub struct Timecode {
-    pub code: String,        // The verification code sent
-    pub time: DateTime<Utc>, // The exact UTC timestamp of when the code was sent
-    pub email: String,       // The recipient email address
+    pub code: String,
+    pub time: SystemTime, // Current system time (standard)
+    pub email: String,
 }
 
 impl Timecode {
-    // Constructor to create a new Timecode instance
     pub fn new(code: String, email: String) -> Self {
         Self {
             code,
-            time: Utc::now(), // Get the current UTC time at creation
+            time: SystemTime::now(), // Capture system time when sending
             email,
         }
     }
 
-    // Method to check if the code is still valid (within 10 minutes)
     pub fn is_valid(&self) -> bool {
-        Utc::now().signed_duration_since(self.time).num_seconds() < 600
+        match SystemTime::now().duration_since(self.time) {
+            Ok(duration) => duration < Duration::from_secs(600),
+            Err(_) => false, // In case system clock changed
+        }
+    }
+
+    pub fn timestamp(&self) -> Option<u64> {
+        match self.time.duration_since(UNIX_EPOCH) {
+            Ok(dur) => Some(dur.as_secs()),
+            Err(_) => None,
+        }
     }
 }
 
