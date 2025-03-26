@@ -5,7 +5,7 @@ use exif::Reader;
 use ffmpeg_next;
 use lopdf::Document;
 use serde::{Deserialize, Serialize};
-use std::io::{ Cursor, Write};
+use std::io::{Cursor, Write};
 use std::path::Path;
 use std::{env, fs};
 use tempfile::NamedTempFile;
