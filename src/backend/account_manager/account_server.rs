@@ -106,7 +106,7 @@ lazy_static! {
      */
     pub static ref SESSION_CACHE: Arc<Mutex<HashMap<String, Session>>> = Arc::new(Mutex::new(HashMap::new()));
 
-    pub static ref CONNECTION: Arc<Mutex<Connection>> = Arc::new(Mutex::new(init_db_connection(VAULTIFY_DATABASE).unwrap()));
+    pub static ref CONNECTION: Arc<Mutex<Connection>> = Arc::new(Mutex::new(init_db_connection(&format!("{}/{}", ROOT.to_str().unwrap(), VAULTIFY_DATABASE)).unwrap()));
 }
 
 // Function to initialize the connection to the database
@@ -184,8 +184,21 @@ pub async fn create_user_query(form: web::Form<CreateUserForm>) -> impl Responde
     let conn = CONNECTION.lock().unwrap();
     let email = form.username.clone();
     let pw = form.password.clone();
-    let hash_pw = hash(&pw, DEFAULT_COST).unwrap();
-    let user_id = create_user(&conn, &email, &hash_pw).unwrap();
+
+    // Vérifiez si l'utilisateur existe déjà
+    if let Ok(Some(_)) = get_user_by_email(&conn, &email) {
+        return HttpResponse::Conflict().body("User with this email already exists");
+    }
+
+    let hash_pw = match hash(&pw, DEFAULT_COST) {
+        Ok(hashed) => hashed,
+        Err(_) => return HttpResponse::InternalServerError().body("Error hashing password"),
+    };
+
+    let user_id = match create_user(&conn, &email, &hash_pw) {
+        Ok(id) => id,
+        Err(_) => return HttpResponse::InternalServerError().body("Error creating user"),
+    };
 
     let user_key = derive_key(&pw, &generate_salt_from_login(&email), 10000);
     let session_id = generate_session_id();
@@ -194,8 +207,9 @@ pub async fn create_user_query(form: web::Form<CreateUserForm>) -> impl Responde
         Session::new(user_id, &hash_pw, &user_key),
     );
 
-    HttpResponse::Ok()
+    HttpResponse::Ok().json(JWT::new(user_id, &email))
 }
+
 
 pub async fn login_user_query(form: web::Form<LoginForm>) -> impl Responder {
     let conn = CONNECTION.lock().unwrap();

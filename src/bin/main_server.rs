@@ -53,7 +53,7 @@ async fn main() -> std::io::Result<()> {
             .service(actix_files::Files::new("/", "./templates").index_file("index.html"))
     })
     .bind(format!("127.0.0.1:{}", port))?
-    .workers(4)
+    .workers(8)
     .run()
     .await
 }
