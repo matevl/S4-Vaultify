@@ -1,12 +1,9 @@
 use actix_files::NamedFile;
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
-use lazy_static::lazy_static;
+use actix_web::{web, App, HttpServer};
 use s4_vaultify::backend::account_manager::account_server::{
     create_user_query, create_vault_query, get_vaults_list_query, init_db_connection,
     init_server_config, load_vault_query, login_user_query,
 };
-use s4_vaultify::backend::VAULTIFY_DATABASE;
-use std::sync::Arc;
 
 // Gestion des formulaires (POST)
 

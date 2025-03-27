@@ -286,7 +286,6 @@ pub async fn create_vault_query(
 
 // Endpoint to load a vault for a user
 pub async fn load_vault_query(
-    conn: web::Data<Connection>,
     mut jwt: web::Json<JWT>,
     info: web::Json<VaultInfo>,
 ) -> impl Responder {
