@@ -49,7 +49,7 @@ async fn main() -> std::io::Result<()> {
             .service(actix_files::Files::new("/static", "./static").show_files_listing())
             .service(actix_files::Files::new("/", "./templates").index_file("index.html"))
     })
-    .bind(format!("127.0.0.1:{}", port))?
+    .bind(format!("0.0.0.0:{}", port))?
     .workers(8)
     .run()
     .await
