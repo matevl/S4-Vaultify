@@ -2,9 +2,7 @@ use std::env;
 use std::error::Error;
 
 // Import metadata-handling functions.
-use s4_vaultify::backend::file_manager::metadata_handling::{
-    process_file, refusion_from_map,
-};
+use s4_vaultify::backend::file_manager::metadata_handling::{process_file, refusion_from_map};
 
 // Import binary file utilities from our module (assume binary_utils.rs is in your project).
 use s4_vaultify::backend::file_manager::file_handling::clear_binary;

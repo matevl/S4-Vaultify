@@ -210,7 +210,6 @@ pub async fn create_user_query(form: web::Form<CreateUserForm>) -> impl Responde
     HttpResponse::Ok().json(JWT::new(user_id, &email))
 }
 
-
 pub async fn login_user_query(form: web::Form<LoginForm>) -> impl Responder {
     let conn = CONNECTION.lock().unwrap();
     let email = form.username.clone();

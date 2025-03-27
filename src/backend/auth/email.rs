@@ -36,7 +36,9 @@ impl Timecode {
 // Function to generate a random 6-digit numeric code
 pub fn generate_code() -> String {
     let mut rng = rand::rng();
-    (0..6).map(|_| rng.random_range(0..10).to_string()).collect()
+    (0..6)
+        .map(|_| rng.random_range(0..10).to_string())
+        .collect()
 }
 
 // Function to send an email containing the verification code
