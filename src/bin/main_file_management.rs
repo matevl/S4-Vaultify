@@ -1,12 +1,8 @@
 use std::env;
 use std::error::Error;
-use std::fs;
-use std::path::Path;
 
 // Import metadata-handling functions.
-use s4_vaultify::backend::file_manager::metadata_handling::{
-    detect_type, md_treatment, process_file, read_bytes, refusion_from_map,
-};
+use s4_vaultify::backend::file_manager::metadata_handling::{process_file, refusion_from_map};
 
 // Import binary file utilities from our module (assume binary_utils.rs is in your project).
 use s4_vaultify::backend::file_manager::file_handling::clear_binary;
@@ -28,7 +24,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("DEBUG: File path: {}", file_path);
 
     // Delegate processing to process_file
-    process_file::<&str>(file_path.as_ref())?;
+    process_file(file_path.as_ref())?;
     refusion_from_map("mcq-2027-s4-02copy.pdf").expect("failed to process file");
 
     // // Re-fusion logic: duplicate HEIC/HEIF file to output.heif

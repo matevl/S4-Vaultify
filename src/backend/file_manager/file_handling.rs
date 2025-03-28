@@ -2,7 +2,7 @@ use rand::Rng;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::{env, fs, io};
+use std::{fs, io};
 
 /**
  * Returns the file name as a string from a given file path.
@@ -22,7 +22,7 @@ pub fn get_name<P: AsRef<Path>>(file_path: P) -> String {
  */
 pub fn binary_namegen() -> String {
     let mut rng = rand::rng();
-    let id: u32 = rng.gen();
+    let id: u32 = rng.random();
     format!("bin_{}.v", id)
 }
 
