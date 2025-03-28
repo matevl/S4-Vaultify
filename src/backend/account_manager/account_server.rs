@@ -7,6 +7,7 @@ use crate::backend::{
     VAULTIFY_CONFIG, VAULTIFY_DATABASE, VAULTS_DATA, VAULT_CONFIG_ROOT, VAULT_USERS_DIR,
 };
 use actix_web::{web, HttpResponse, Responder};
+use base64;
 use bcrypt::{hash, verify, DEFAULT_COST};
 use dirs;
 use lazy_static::lazy_static;
@@ -40,14 +41,16 @@ pub struct LoginForm {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VaultInfo {
+    pub user_id: u32,
     pub name: String,
     pub path: String,
     pub date: u64,
 }
 
 impl VaultInfo {
-    pub fn new(name: &str, path: &str, date: u64) -> Self {
+    pub fn new(user_id: u32, name: &str, path: &str, date: u64) -> Self {
         Self {
+            user_id,
             name: name.to_string(),
             path: path.to_string(),
             date,
@@ -57,14 +60,16 @@ impl VaultInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct JWT {
+    pub session_id: String,
     pub id: u32,
     pub email: String,
     pub loaded_vault: Option<VaultInfo>,
 }
 
 impl JWT {
-    pub fn new(id: u32, email: &str) -> Self {
+    pub fn new(session_id: &str, id: u32, email: &str) -> Self {
         Self {
+            session_id: session_id.to_string(),
             id,
             email: email.to_string(),
             loaded_vault: None,
@@ -135,16 +140,16 @@ pub fn get_user_by_email(conn: &Connection, email: &str) -> Result<Option<(u32, 
 }
 
 // Function to create a new vault for a user
-pub fn create_vault(
-    conn: &Connection,
-    user_id: u32,
-    name: &str,
-    path: &str,
-    date: u64,
-) -> Result<u32> {
+// Function to create a new vault for a user
+pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> Result<u32> {
     conn.execute(
         "INSERT INTO vaults (user_id, name, path, date) VALUES (?, ?, ?, ?)",
-        params![user_id, name, path, date as i64],
+        params![
+            vault_info.user_id,
+            vault_info.name,
+            vault_info.path,
+            vault_info.date as i64
+        ],
     )?;
     Ok(conn.last_insert_rowid() as u32)
 }
@@ -156,9 +161,10 @@ pub fn get_user_vaults(conn: &Connection, user_id: u32) -> Result<Vec<VaultInfo>
     let mut vaults = Vec::new();
     while let Some(row) = rows.next()? {
         vaults.push(VaultInfo {
-            name: row.get(0)?,
-            path: row.get(1)?,
-            date: row.get(2)?,
+            user_id: row.get(0)?,
+            name: row.get(1)?,
+            path: row.get(2)?,
+            date: row.get(3)?,
         });
     }
     Ok(vaults)
@@ -195,19 +201,12 @@ pub async fn create_user_query(form: web::Form<CreateUserForm>) -> impl Responde
         Err(_) => return HttpResponse::InternalServerError().body("Error hashing password"),
     };
 
-    let user_id = match create_user(&conn, &email, &hash_pw) {
+    let _ = match create_user(&conn, &email, &hash_pw) {
         Ok(id) => id,
         Err(_) => return HttpResponse::InternalServerError().body("Error creating user"),
     };
 
-    let user_key = derive_key(&pw, &generate_salt_from_login(&email), 10000);
-    let session_id = generate_session_id();
-    SESSION_CACHE.lock().unwrap().insert(
-        session_id.clone(),
-        Session::new(user_id, &hash_pw, &user_key),
-    );
-
-    HttpResponse::Ok().json(JWT::new(user_id, &email))
+    HttpResponse::Ok().json("User created successfully")
 }
 
 pub async fn login_user_query(form: web::Form<LoginForm>) -> impl Responder {
@@ -222,7 +221,7 @@ pub async fn login_user_query(form: web::Form<LoginForm>) -> impl Responder {
                 session_id.clone(),
                 Session::new(user_id, &hash_pw, &user_key),
             );
-            return HttpResponse::Ok().json(JWT::new(user_id, &email));
+            return HttpResponse::Ok().json(JWT::new(&session_id, user_id, &email));
         }
     }
     HttpResponse::Unauthorized().finish()
@@ -231,32 +230,36 @@ pub async fn login_user_query(form: web::Form<LoginForm>) -> impl Responder {
 // Endpoint to get the list of vaults for a user
 pub async fn get_vaults_list_query(user: web::Json<JWT>) -> impl Responder {
     let conn = CONNECTION.lock().unwrap();
-    let vaults = get_user_vaults(&conn, user.id).unwrap();
-    HttpResponse::Ok().json(vaults)
+    if let Ok(vaults) = get_user_vaults(&conn, user.id) {
+        HttpResponse::Ok().json(vaults)
+    } else {
+        HttpResponse::Unauthorized().finish()
+    }
 }
 
 // Endpoint to create a new vault for a user
-pub async fn create_vault_query(
-    mut jwt: web::Json<JWT>,
-    name: web::Json<String>,
-) -> impl Responder {
+pub async fn create_vault_query(data: web::Json<(JWT, String)>) -> impl Responder {
+    let connection = CONNECTION.lock().unwrap();
     let sessions = SESSION_CACHE.lock().unwrap();
-    if let Some(cache) = sessions.get(&jwt.email) {
+
+    let (jwt, name) = data.into_inner();
+
+    if let Some(cache) = sessions.get(&jwt.session_id) {
         let time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
         let vault_path = format!(
-            "{}/{}{}/{}/",
+            "{}/{}{}/{}",
             ROOT.to_str().unwrap(),
             VAULTS_DATA,
             jwt.id,
             time
         );
 
-        let vault_config = format!("{}{}", vault_path, VAULT_CONFIG_ROOT);
-        let users_vault = format!("{}{}", vault_config, VAULT_USERS_DIR);
+        let vault_config = format!("{}/{}", vault_path, VAULT_CONFIG_ROOT);
+        let users_vault = format!("{}/{}", vault_path, VAULT_USERS_DIR);
         let user_json = format!("{users_vault}{}.json", jwt.id);
 
         fs::create_dir_all(&vault_path).unwrap();
@@ -264,12 +267,13 @@ pub async fn create_vault_query(
         fs::create_dir_all(&users_vault).unwrap();
         fs::File::create(&user_json).unwrap();
 
-        let info = VaultInfo::new(&name, &vault_path, time);
+        let info = VaultInfo::new(jwt.id, &name, &vault_path, time);
+        create_vault(&connection, &info).unwrap();
 
         let vault_key = generate_random_key();
 
         let vault_key = derive_key(
-            &String::from_utf8(vault_key).unwrap(),
+            &base64::encode(&vault_key),
             generate_salt_from_login(&jwt.email).as_slice(),
             10000,
         );
@@ -277,7 +281,7 @@ pub async fn create_vault_query(
         let content = serde_json::to_string(&(vault_key, Perms::Admin)).unwrap();
         let encrypted_content = encrypt(content.as_bytes(), cache.user_key.as_slice());
         fs::write(&user_json, &encrypted_content).unwrap();
-        HttpResponse::Ok().json(jwt)
+        HttpResponse::Ok().json(format!("vault {} created successfully", name))
     } else {
         HttpResponse::ExpectationFailed().finish()
     }
