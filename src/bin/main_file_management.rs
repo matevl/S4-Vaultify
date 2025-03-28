@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("DEBUG: File path: {}", file_path);
 
     // Delegate processing to process_file
-    process_file::<&str>(file_path.as_ref())?;
+    process_file(file_path.as_ref())?;
     refusion_from_map("mcq-2027-s4-02copy.pdf").expect("failed to process file");
 
     // // Re-fusion logic: duplicate HEIC/HEIF file to output.heif
