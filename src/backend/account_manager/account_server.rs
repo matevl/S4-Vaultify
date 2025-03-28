@@ -43,16 +43,15 @@ pub struct LoginForm {
 pub struct VaultInfo {
     pub user_id: u32,
     pub name: String,
-    pub path: String,
     pub date: u64,
 }
 
 impl VaultInfo {
-    pub fn new(user_id: u32, name: &str, path: &str, date: u64) -> Self {
+    pub fn new(user_id: u32, name: &str, date: u64) -> Self {
         Self {
             user_id,
             name: name.to_string(),
-            path: path.to_string(),
+
             date,
         }
     }
@@ -144,29 +143,25 @@ pub fn get_user_by_email(conn: &Connection, email: &str) -> Result<Option<(u32, 
 pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> Result<u32> {
     conn.execute(
         "INSERT INTO vaults (user_id, name, path, date) VALUES (?, ?, ?, ?)",
-        params![
-            vault_info.user_id,
-            vault_info.name,
-            vault_info.path,
-            vault_info.date as i64
-        ],
+        params![vault_info.user_id, vault_info.name, vault_info.date as i64],
     )?;
     Ok(conn.last_insert_rowid() as u32)
 }
 
 // Function to get the vaults of a user
 pub fn get_user_vaults(conn: &Connection, user_id: u32) -> Result<Vec<VaultInfo>> {
-    let mut stmt = conn.prepare("SELECT name, path, date FROM vaults WHERE user_id = ?")?;
+    let mut stmt = conn.prepare("SELECT user_id, name, date FROM vaults WHERE user_id = ?")?;
     let mut rows = stmt.query(params![user_id])?;
     let mut vaults = Vec::new();
+
     while let Some(row) = rows.next()? {
         vaults.push(VaultInfo {
             user_id: row.get(0)?,
             name: row.get(1)?,
-            path: row.get(2)?,
-            date: row.get(3)?,
+            date: row.get(2)?,
         });
     }
+
     Ok(vaults)
 }
 
@@ -250,13 +245,9 @@ pub async fn create_vault_query(data: web::Json<(JWT, String)>) -> impl Responde
             .unwrap()
             .as_secs();
 
-        let vault_path = format!(
-            "{}/{}{}/{}",
-            ROOT.to_str().unwrap(),
-            VAULTS_DATA,
-            jwt.id,
-            time
-        );
+        let vault_name = format!("{}_{}", jwt.id, time);
+
+        let vault_path = format!("{}/{}{}", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
 
         let vault_config = format!("{}/{}", vault_path, VAULT_CONFIG_ROOT);
         let users_vault = format!("{}/{}", vault_path, VAULT_USERS_DIR);
@@ -267,7 +258,7 @@ pub async fn create_vault_query(data: web::Json<(JWT, String)>) -> impl Responde
         fs::create_dir_all(&users_vault).unwrap();
         fs::File::create(&user_json).unwrap();
 
-        let info = VaultInfo::new(jwt.id, &name, &vault_path, time);
+        let info = VaultInfo::new(jwt.id, &name, time);
         create_vault(&connection, &info).unwrap();
 
         let vault_key = generate_random_key();
@@ -288,12 +279,20 @@ pub async fn create_vault_query(data: web::Json<(JWT, String)>) -> impl Responde
 }
 
 // Endpoint to load a vault for a user
-pub async fn load_vault_query(
-    mut jwt: web::Json<JWT>,
-    info: web::Json<VaultInfo>,
-) -> impl Responder {
+pub async fn load_vault_query(data: web::Json<(JWT, VaultInfo)>) -> impl Responder {
+    let (mut jwt, info) = data.into_inner();
+
     if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.email) {
-        let key_path = format!("{}{}{}.json", info.path, VAULTS_DATA, jwt.id);
+        let vault_name = format!("{}_{}", info.user_id, info.date);
+
+        let key_path = format!(
+            "{}/{}{}/{}{}.json",
+            ROOT.to_str().unwrap(),
+            VAULTS_DATA,
+            vault_name,
+            VAULT_USERS_DIR,
+            jwt.id
+        );
 
         let encrypted_content = fs::read_to_string(&key_path).unwrap();
         let decrypted_content =
