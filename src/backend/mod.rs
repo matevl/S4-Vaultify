@@ -1,9 +1,9 @@
 pub mod account_manager;
-pub mod encryption;
-pub mod file_manager;
 pub mod aes_keys;
-pub mod file_flow;
 pub mod auth;
+pub mod encryption;
+pub mod file_flow;
+pub mod file_manager;
 
 // Backend Const
 const VAULT_CONFIG_ROOT: &str = ".vault/";
