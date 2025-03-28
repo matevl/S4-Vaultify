@@ -1,18 +1,17 @@
 use crate::backend::file_manager::file_handling::save_binary;
 use crate::backend::file_manager::metadata_handling::process_file;
+use anyhow::{anyhow, Result};
+use rustls::ServerConfig;
+use rustls_pemfile::{certs, pkcs8_private_keys};
+use rustls_pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use std::env;
 use std::fs::File;
-use anyhow::{anyhow, Result};
 use std::io::BufReader;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpListener;
-use rustls::ServerConfig;
-use rustls_pemfile::{certs, pkcs8_private_keys};
 use tokio_rustls::TlsAcceptor;
-use rustls_pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
-
 
 pub async fn receive() -> Result<()> {
     let certs = load_certs("certificate/cert.pem")?;
@@ -20,7 +19,7 @@ pub async fn receive() -> Result<()> {
 
     let config = ServerConfig::builder()
         .with_no_client_auth()
-        .with_single_cert(certs, PrivateKeyDer::from(key))?;
+        .with_single_cert(certs, rustls_pki_types::PrivateKeyDer::Pkcs8(key))?;
     let acceptor = TlsAcceptor::from(Arc::new(config));
     let listener = TcpListener::bind("127.0.0.1:8080").await?;
     println!("TCP Server listening on 127.0.0.1:8080");
@@ -67,19 +66,15 @@ pub async fn receive() -> Result<()> {
 fn load_certs(path: &str) -> Result<Vec<CertificateDer>> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
-    let certs = certs(&mut reader)
-        .collect::<Result<Vec<_>, _>>()?;
+    let certs = certs(&mut reader).collect::<Result<Vec<_>, _>>()?;
     Ok(certs)
 }
 
 pub fn load_key(path: &str) -> Result<PrivatePkcs8KeyDer<'static>> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
-    let keys = pkcs8_private_keys(&mut reader)
-        .collect::<Result<Vec<_>, _>>()?;
+    let keys = pkcs8_private_keys(&mut reader).collect::<Result<Vec<_>, _>>()?;
     keys.into_iter()
         .next()
         .ok_or_else(|| anyhow!("Invalid key {}", path))
-
 }
-
