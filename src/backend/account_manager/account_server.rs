@@ -223,7 +223,11 @@ pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> Result<u32> {
  * @return A Result containing a vector of VaultInfo.
  */
 pub fn get_user_vaults(conn: &Connection, user_id: u32) -> Result<Vec<VaultInfo>> {
-    let mut stmt = conn.prepare("SELECT user_id, name, date FROM vaults WHERE user_id = ?")?;
+    let mut stmt = conn.prepare(
+        "SELECT user_id, name, date
+         FROM vaults
+         WHERE user_id = ?",
+    )?;
     let mut rows = stmt.query(params![user_id])?;
     let mut vaults = Vec::new();
 
@@ -387,7 +391,7 @@ pub async fn create_vault_query(data: web::Json<(JWT, String)>) -> impl Responde
 pub async fn load_vault_query(data: web::Json<(JWT, VaultInfo)>) -> impl Responder {
     let (mut jwt, info) = data.into_inner();
 
-    if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.email) {
+    if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.session_id) {
         let vault_name = format!("{}_{}", info.user_id, info.date);
 
         let key_path = format!(
@@ -399,9 +403,9 @@ pub async fn load_vault_query(data: web::Json<(JWT, VaultInfo)>) -> impl Respond
             jwt.id
         );
 
-        let encrypted_content = fs::read_to_string(&key_path).unwrap();
+        let encrypted_content = fs::read(&key_path).unwrap();
         let decrypted_content =
-            decrypt(encrypted_content.as_bytes(), cache.user_key.as_slice()).unwrap();
+            decrypt(encrypted_content.as_slice(), cache.user_key.as_slice()).unwrap();
         let (vault_key, vault_perms): (Vec<u8>, Perms) =
             serde_json::from_str(&String::from_utf8(decrypted_content).unwrap()).unwrap();
         cache.vault_key = vault_key;
@@ -443,10 +447,9 @@ pub fn init_server_config() {
     )
     .unwrap();
 
-    // Create the vaults table without the 'path' column
+    // Create the vaults table with a foreign key to users
     conn.execute(
         "CREATE TABLE IF NOT EXISTS vaults (
-            vault_id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             name TEXT NOT NULL,
             date INTEGER NOT NULL,

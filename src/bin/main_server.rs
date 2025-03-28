@@ -44,6 +44,7 @@ async fn main() -> std::io::Result<()> {
             .route("/create-user", web::post().to(create_user_query))
             .route("/login", web::post().to(login_user_query))
             .route("/vaults", web::get().to(get_vaults_list_query))
+            .route("/vaults", web::post().to(get_vaults_list_query))
             .route("/create-vault", web::post().to(create_vault_query))
             .route("/load-vault", web::post().to(load_vault_query))
             .service(actix_files::Files::new("/static", "./static").show_files_listing())
