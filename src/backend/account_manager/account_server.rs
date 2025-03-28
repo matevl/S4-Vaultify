@@ -19,6 +19,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
+/**
+ * Enum representing user permissions.
+ */
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Perms {
     Admin,
@@ -27,18 +30,27 @@ pub enum Perms {
     NoLoad,
 }
 
+/**
+ * Struct representing the form data for creating a new user.
+ */
 #[derive(serde::Deserialize, Debug)]
 pub struct CreateUserForm {
     username: String,
     password: String,
 }
 
+/**
+ * Struct representing the form data for logging in a user.
+ */
 #[derive(serde::Deserialize, Debug)]
 pub struct LoginForm {
     username: String,
     password: String,
 }
 
+/**
+ * Struct representing information about a vault.
+ */
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VaultInfo {
     pub user_id: u32,
@@ -47,16 +59,26 @@ pub struct VaultInfo {
 }
 
 impl VaultInfo {
+    /**
+     * Creates a new VaultInfo instance.
+     *
+     * @param user_id - The ID of the user.
+     * @param name - The name of the vault.
+     * @param date - The creation date of the vault.
+     * @return A new VaultInfo instance.
+     */
     pub fn new(user_id: u32, name: &str, date: u64) -> Self {
         Self {
             user_id,
             name: name.to_string(),
-
             date,
         }
     }
 }
 
+/**
+ * Struct representing a JSON Web Token (JWT).
+ */
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct JWT {
     pub session_id: String,
@@ -66,6 +88,14 @@ pub struct JWT {
 }
 
 impl JWT {
+    /**
+     * Creates a new JWT instance.
+     *
+     * @param session_id - The session ID.
+     * @param id - The user ID.
+     * @param email - The user's email.
+     * @return A new JWT instance.
+     */
     pub fn new(session_id: &str, id: u32, email: &str) -> Self {
         Self {
             session_id: session_id.to_string(),
@@ -76,6 +106,9 @@ impl JWT {
     }
 }
 
+/**
+ * Struct representing a user session.
+ */
 #[derive(Clone)]
 pub struct Session {
     pub user_id: u32,
@@ -87,6 +120,14 @@ pub struct Session {
 }
 
 impl Session {
+    /**
+     * Creates a new Session instance.
+     *
+     * @param user_id - The ID of the user.
+     * @param hash_pw - The hashed password of the user.
+     * @param user_key - The user's encryption key.
+     * @return A new Session instance.
+     */
     pub fn new(user_id: u32, hash_pw: &str, user_key: &[u8]) -> Self {
         Self {
             user_id,
@@ -110,15 +151,30 @@ lazy_static! {
      */
     pub static ref SESSION_CACHE: Arc<Mutex<HashMap<String, Session>>> = Arc::new(Mutex::new(HashMap::new()));
 
+    /**
+     * Global database connection.
+     */
     pub static ref CONNECTION: Arc<Mutex<Connection>> = Arc::new(Mutex::new(init_db_connection(&format!("{}/{}", ROOT.to_str().unwrap(), VAULTIFY_DATABASE)).unwrap()));
 }
 
-// Function to initialize the connection to the database
+/**
+ * Initializes the connection to the database.
+ *
+ * @param database_path - The path to the database file.
+ * @return A Result containing the Connection object.
+ */
 pub fn init_db_connection(database_path: &str) -> Result<Connection> {
     Connection::open(database_path)
 }
 
-// Function to create a new user
+/**
+ * Creates a new user in the database.
+ *
+ * @param conn - The database connection.
+ * @param email - The user's email.
+ * @param hash_password - The hashed password of the user.
+ * @return A Result containing the ID of the created user.
+ */
 pub fn create_user(conn: &Connection, email: &str, hash_password: &str) -> Result<u32> {
     conn.execute(
         "INSERT INTO users (email, hash_password) VALUES (?, ?)",
@@ -127,7 +183,13 @@ pub fn create_user(conn: &Connection, email: &str, hash_password: &str) -> Resul
     Ok(conn.last_insert_rowid() as u32)
 }
 
-// Function to get a user by email
+/**
+ * Retrieves a user from the database by email.
+ *
+ * @param conn - The database connection.
+ * @param email - The user's email.
+ * @return A Result containing an Option with the user's ID and hashed password.
+ */
 pub fn get_user_by_email(conn: &Connection, email: &str) -> Result<Option<(u32, String)>> {
     let mut stmt = conn.prepare("SELECT id, hash_password FROM users WHERE email = ?")?;
     let mut rows = stmt.query(params![email])?;
@@ -138,17 +200,28 @@ pub fn get_user_by_email(conn: &Connection, email: &str) -> Result<Option<(u32, 
     }
 }
 
-// Function to create a new vault for a user
-// Function to create a new vault for a user
+/**
+ * Creates a new vault for a user.
+ *
+ * @param conn - The database connection.
+ * @param vault_info - The information about the vault.
+ * @return A Result containing the ID of the created vault.
+ */
 pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> Result<u32> {
     conn.execute(
-        "INSERT INTO vaults (user_id, name, path, date) VALUES (?, ?, ?, ?)",
+        "INSERT INTO vaults (user_id, name, date) VALUES (?, ?, ?)",
         params![vault_info.user_id, vault_info.name, vault_info.date as i64],
     )?;
     Ok(conn.last_insert_rowid() as u32)
 }
 
-// Function to get the vaults of a user
+/**
+ * Retrieves the vaults of a user from the database.
+ *
+ * @param conn - The database connection.
+ * @param user_id - The ID of the user.
+ * @return A Result containing a vector of VaultInfo.
+ */
 pub fn get_user_vaults(conn: &Connection, user_id: u32) -> Result<Vec<VaultInfo>> {
     let mut stmt = conn.prepare("SELECT user_id, name, date FROM vaults WHERE user_id = ?")?;
     let mut rows = stmt.query(params![user_id])?;
@@ -165,12 +238,18 @@ pub fn get_user_vaults(conn: &Connection, user_id: u32) -> Result<Vec<VaultInfo>
     Ok(vaults)
 }
 
-// Function to generate a unique session identifier
+/**
+ * Generates a unique session identifier.
+ *
+ * @return A String representing the session ID.
+ */
 fn generate_session_id() -> String {
     Uuid::new_v4().to_string()
 }
 
-// Function to clean expired sessions
+/**
+ * Cleans expired sessions from the cache.
+ */
 fn clean_expired_sessions() {
     let mut cache = SESSION_CACHE.lock().unwrap();
     let now = SystemTime::now();
@@ -180,13 +259,18 @@ fn clean_expired_sessions() {
     });
 }
 
-// Endpoint to create a new user
+/**
+ * Endpoint to create a new user.
+ *
+ * @param form - The form data containing the username and password.
+ * @return An HTTP response indicating the result of the operation.
+ */
 pub async fn create_user_query(form: web::Form<CreateUserForm>) -> impl Responder {
     let conn = CONNECTION.lock().unwrap();
     let email = form.username.clone();
     let pw = form.password.clone();
 
-    // Vérifiez si l'utilisateur existe déjà
+    // Check if the user already exists
     if let Ok(Some(_)) = get_user_by_email(&conn, &email) {
         return HttpResponse::Conflict().body("User with this email already exists");
     }
@@ -204,6 +288,12 @@ pub async fn create_user_query(form: web::Form<CreateUserForm>) -> impl Responde
     HttpResponse::Ok().json("User created successfully")
 }
 
+/**
+ * Endpoint to log in a user.
+ *
+ * @param form - The form data containing the username and password.
+ * @return An HTTP response containing the JWT if the login is successful.
+ */
 pub async fn login_user_query(form: web::Form<LoginForm>) -> impl Responder {
     let conn = CONNECTION.lock().unwrap();
     let email = form.username.clone();
@@ -222,7 +312,12 @@ pub async fn login_user_query(form: web::Form<LoginForm>) -> impl Responder {
     HttpResponse::Unauthorized().finish()
 }
 
-// Endpoint to get the list of vaults for a user
+/**
+ * Endpoint to get the list of vaults for a user.
+ *
+ * @param user - The JWT containing the user information.
+ * @return An HTTP response containing the list of vaults.
+ */
 pub async fn get_vaults_list_query(user: web::Json<JWT>) -> impl Responder {
     let conn = CONNECTION.lock().unwrap();
     if let Ok(vaults) = get_user_vaults(&conn, user.id) {
@@ -232,7 +327,12 @@ pub async fn get_vaults_list_query(user: web::Json<JWT>) -> impl Responder {
     }
 }
 
-// Endpoint to create a new vault for a user
+/**
+ * Endpoint to create a new vault for a user.
+ *
+ * @param data - A tuple containing the JWT and the name of the vault.
+ * @return An HTTP response indicating the result of the operation.
+ */
 pub async fn create_vault_query(data: web::Json<(JWT, String)>) -> impl Responder {
     let connection = CONNECTION.lock().unwrap();
     let sessions = SESSION_CACHE.lock().unwrap();
@@ -278,7 +378,12 @@ pub async fn create_vault_query(data: web::Json<(JWT, String)>) -> impl Responde
     }
 }
 
-// Endpoint to load a vault for a user
+/**
+ * Endpoint to load a vault for a user.
+ *
+ * @param data - A tuple containing the JWT and the VaultInfo.
+ * @return An HTTP response containing the updated JWT with the loaded vault.
+ */
 pub async fn load_vault_query(data: web::Json<(JWT, VaultInfo)>) -> impl Responder {
     let (mut jwt, info) = data.into_inner();
 
@@ -309,6 +414,9 @@ pub async fn load_vault_query(data: web::Json<(JWT, VaultInfo)>) -> impl Respond
     }
 }
 
+/**
+ * Initializes the server configuration.
+ */
 pub fn init_server_config() {
     let config_path = ROOT.join(VAULTIFY_CONFIG);
     fs::create_dir_all(&config_path).unwrap_or_else(|why| {
@@ -324,6 +432,7 @@ pub fn init_server_config() {
 
     let conn = init_db_connection(database_path.to_str().unwrap()).unwrap();
 
+    // Create the users table
     conn.execute(
         "CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -334,13 +443,13 @@ pub fn init_server_config() {
     )
     .unwrap();
 
+    // Create the vaults table without the 'path' column
     conn.execute(
         "CREATE TABLE IF NOT EXISTS vaults (
             vault_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            name TEXT,
-            path TEXT,
-            date INTEGER,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            date INTEGER NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )",
         [],
