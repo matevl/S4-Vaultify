@@ -1,7 +1,7 @@
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
 use rand::Rng; // For handling current date and time
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub struct Timecode {
     pub code: String,
@@ -35,8 +35,10 @@ impl Timecode {
 
 // Function to generate a random 6-digit numeric code
 pub fn generate_code() -> String {
-    let mut rng = rand::thread_rng();
-    (0..6).map(|_| rng.gen_range(0..10).to_string()).collect()
+    let mut rng = rand::rng();
+    (0..6)
+        .map(|_| rng.random_range(0..10).to_string())
+        .collect()
 }
 
 // Function to send an email containing the verification code

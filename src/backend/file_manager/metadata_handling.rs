@@ -5,8 +5,7 @@ use exif::Reader;
 use ffmpeg_next;
 use lopdf::Document;
 use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::io::{self, Cursor, Read, Write};
+use std::io::{Cursor, Write};
 use std::path::Path;
 use std::{env, fs};
 use tempfile::NamedTempFile;
@@ -300,7 +299,7 @@ pub fn md_treatment(
                 .path()
                 .to_str()
                 .ok_or("Invalid temporary file path")?;
-            let mut ictx = ffmpeg_next::format::input(&temp_path)?;
+            let ictx = ffmpeg_next::format::input(&temp_path)?;
             println!("Métadonnées du format:");
             for (key, value) in ictx.metadata().iter() {
                 println!("  {}: {}", key, value);
