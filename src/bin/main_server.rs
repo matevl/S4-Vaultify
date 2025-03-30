@@ -31,6 +31,15 @@ async fn login_page() -> actix_web::Result<NamedFile> {
     Ok(NamedFile::open("./templates/login.html")?)
 }
 
+// Fonction pour afficher la page d'accueil personnalisée
+async fn home_page(user_id: web::Path<String>) -> actix_web::Result<NamedFile> {
+    // Construire le chemin vers le fichier HTML en fonction de l'ID de l'utilisateur
+    let file_path = format!("./templates/home_{}.html", user_id);
+
+    // Ouvrir et servir le fichier HTML
+    Ok(NamedFile::open(file_path)?)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let port = 8080;
@@ -41,6 +50,7 @@ async fn main() -> std::io::Result<()> {
             // Routes pour l'affichage HTML
             .route("/create-user", web::get().to(create_user_page)) // Affiche la page de création d'utilisateur
             .route("/login", web::get().to(login_page)) // Affiche la page de connexion
+            .route("/home/{user_id}", web::get().to(home_page))
             // Routes pour les appels API POST
             .route("/create-user", web::post().to(create_user_query)) // Gère le formulaire de création
             .route("/login", web::post().to(login_user_query)) // Gère le formulaire de connexion

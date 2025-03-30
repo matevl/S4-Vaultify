@@ -4,16 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Create User</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="../static/style.css">
+    <link rel="icon" href="../static/vaultify-grad.ico" type="image/x-icon"> <!-- Icône du site -->
 </head>
 <body>
-<h1>Create User Page</h1>
-<form action="/create-user" method="POST">
-    <label for="username">Username:</label>
-    <input type="text" id="username" name="username" required>
-    <label for="password">Password:</label>
-    <input type="password" id="password" name="password" required>
-    <button type="submit">Submit</button>
-</form>
+<div class="container">
+    <img src="../static/vault-text-svg.svg" alt="Bannière" class="banner-image svg"> <!-- Image en haut -->
+    <h2>Create User</h2>
+    <form action="/create-user" method="POST">
+        <div class="column">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" required>
+        </div>
+        <div class="column">
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" required>
+        </div>
+        <button type="submit">Submit</button>
+    </form>
+</div>
 </body>
 </html>
