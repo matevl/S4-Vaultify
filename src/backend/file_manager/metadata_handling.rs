@@ -299,7 +299,7 @@ pub fn md_treatment(
                 .path()
                 .to_str()
                 .ok_or("Invalid temporary file path")?;
-            let mut ictx = ffmpeg_next::format::input(&temp_path)?;
+            let ictx = ffmpeg_next::format::input(&temp_path)?;
             println!("Métadonnées du format:");
             for (key, value) in ictx.metadata().iter() {
                 println!("  {}: {}", key, value);
@@ -376,7 +376,7 @@ fn split_tiff(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
 fn split_jpeg(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     let mut content = Vec::new();
     let mut metadata = Vec::new();
-    let mut i = 0;
+    let mut i;
     if buffer.len() >= 2 && buffer[0] == 0xFF && buffer[1] == 0xD8 {
         content.extend_from_slice(&buffer[0..2]);
         i = 2;
