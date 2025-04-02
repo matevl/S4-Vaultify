@@ -1,5 +1,4 @@
 pub mod account_manager;
-pub mod encryption;
 pub mod file_manager;
 
 pub mod aes_keys;
@@ -17,4 +16,4 @@ pub const VAULTIFY_DATABASE: &str = ".vaultify/database.sqlite";
 
 pub const PASSWORD: &str = "password.json";
 
-pub mod passw;
+pub mod pw_manager;
