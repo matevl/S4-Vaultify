@@ -1,13 +1,12 @@
+use crate::backend::aes_keys::crypted_key::encrypt;
+use crate::backend::aes_keys::decrypted_key::decrypt;
+use crate::backend::VAULTS_DATA;
 use actix_web::{web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use crate::backend::VAULTS_DATA;
-use crate::backend::aes_keys::crypted_key::encrypt;
-use crate::backend::aes_keys::decrypted_key::decrypt;
 
-use crate::backend::account_manager::account_server::{SESSION_CACHE, JWT, ROOT};
-
+use crate::backend::account_manager::account_server::{JWT, ROOT, SESSION_CACHE};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PasswordEntry {
@@ -17,13 +16,11 @@ pub struct PasswordEntry {
     pub password: String,
 }
 
-
 fn get_passwords_path(user_id: u32) -> PathBuf {
     let mut path = ROOT.clone();
     path.push(format!("{}{}password.json", VAULTS_DATA, user_id));
     path
 }
-
 
 pub async fn get_user_passwords(user: web::Json<JWT>) -> impl Responder {
     let path = get_passwords_path(user.id);
@@ -32,7 +29,8 @@ pub async fn get_user_passwords(user: web::Json<JWT>) -> impl Responder {
     if let Some(session) = session_cache.get(&user.session_id) {
         if let Ok(encrypted_data) = fs::read(&path) {
             if let Ok(decrypted_data) = decrypt(&encrypted_data, session.user_key.as_slice()) {
-                if let Ok(passwords) = serde_json::from_slice::<Vec<PasswordEntry>>(&decrypted_data) {
+                if let Ok(passwords) = serde_json::from_slice::<Vec<PasswordEntry>>(&decrypted_data)
+                {
                     return HttpResponse::Ok().json(passwords);
                 }
             }
@@ -42,7 +40,6 @@ pub async fn get_user_passwords(user: web::Json<JWT>) -> impl Responder {
         HttpResponse::Unauthorized().body("Invalid session")
     }
 }
-
 
 pub async fn add_user_password(data: web::Json<(JWT, PasswordEntry)>) -> impl Responder {
     let (jwt, new_entry) = data.into_inner();
@@ -70,7 +67,6 @@ pub async fn add_user_password(data: web::Json<(JWT, PasswordEntry)>) -> impl Re
         HttpResponse::Unauthorized().body("Invalid session")
     }
 }
-
 
 pub async fn remove_user_password(data: web::Json<(JWT, String)>) -> impl Responder {
     let (jwt, password_to_remove) = data.into_inner();
