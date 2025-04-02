@@ -16,3 +16,5 @@ pub const VAULTS_DATA: &str = "VaultsData/";
 pub const VAULTIFY_DATABASE: &str = ".vaultify/database.sqlite";
 
 pub const PASSWORD: &str = "password.json";
+
+pub mod passw;

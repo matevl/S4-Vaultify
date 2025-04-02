@@ -4,7 +4,7 @@ use s4_vaultify::backend::account_manager::account_server::{
     create_user_query, create_vault_query, get_vaults_list_query, init_db_connection,
     init_server_config, load_vault_query, login_user_query,
 };
-
+use s4_vaultify::backend::passw::manager::{add_user_password, get_user_passwords, remove_user_password};
 // Gestion des formulaires (POST)
 
 // Définition des structures des données du formulaire
@@ -47,6 +47,10 @@ async fn main() -> std::io::Result<()> {
             .route("/vaults", web::post().to(get_vaults_list_query))
             .route("/create-vault", web::post().to(create_vault_query))
             .route("/load-vault", web::post().to(load_vault_query))
+            // 👇👇👇 nouvelles routes à ajouter
+            .route("/passwords", web::get().to(get_user_passwords))
+            .route("/passwords", web::post().to(add_user_password))
+            .route("/passwords/remove", web::post().to(remove_user_password))
             .service(actix_files::Files::new("/static", "./static").show_files_listing())
             .service(actix_files::Files::new("/", "./templates").index_file("index.html"))
     })
