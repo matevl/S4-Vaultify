@@ -1,10 +1,11 @@
 use actix_files::NamedFile;
-use actix_web::{web, App, HttpServer, HttpResponse, Responder, HttpRequest, cookie::{Cookie, time::Duration}};
+use actix_web::{web, App, HttpServer};
 use s4_vaultify::backend::account_manager::account_server::{
     create_user_query, create_vault_query, get_vaults_list_query, init_db_connection,
     init_server_config, load_vault_query, login_user_query,
 };
 use serde::{Deserialize, Serialize};
+// Gestion des formulaires (POST)
 
 // Définition des structures des données du formulaire
 #[derive(serde::Deserialize, Debug)]

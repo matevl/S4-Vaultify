@@ -116,7 +116,7 @@ pub enum FType {
  * Processes a file by reading its bytes, detecting its type,
  * extracting metadata, saving the binary, and updating the map.
  */
-pub fn process_file<P: AsRef<Path>>(file_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+pub fn process_file(file_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let original_name = get_name(file_path);
     println!("DEBUG: File path: {:?}", file_path);
     let buffer = read_bytes(file_path)?;
@@ -376,7 +376,7 @@ fn split_tiff(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
 fn split_jpeg(buffer: &[u8]) -> (Vec<u8>, Vec<u8>) {
     let mut content = Vec::new();
     let mut metadata = Vec::new();
-    let mut i = 0;
+    let mut i;
     if buffer.len() >= 2 && buffer[0] == 0xFF && buffer[1] == 0xD8 {
         content.extend_from_slice(&buffer[0..2]);
         i = 2;
