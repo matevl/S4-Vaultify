@@ -3,6 +3,7 @@ use crate::backend::aes_keys::decrypted_key::decrypt;
 use crate::backend::aes_keys::keys_password::{
     derive_key, generate_random_key, generate_salt_from_login,
 };
+use crate::backend::file_manager::mapping::init_map;
 use crate::backend::{
     VAULTIFY_CONFIG, VAULTIFY_DATABASE, VAULTS_DATA, VAULT_CONFIG_ROOT, VAULT_USERS_DIR,
 };
@@ -376,6 +377,12 @@ pub async fn create_vault_query(data: web::Json<(JWT, String)>) -> impl Responde
         let content = serde_json::to_string(&(vault_key, Perms::Admin)).unwrap();
         let encrypted_content = encrypt(content.as_bytes(), cache.user_key.as_slice());
         fs::write(&user_json, &encrypted_content).unwrap();
+
+        init_map(
+            &format!("{}/map.json", vault_path),
+            cache.user_key.as_slice(),
+        );
+
         HttpResponse::Ok().json(format!("vault {} created successfully", name))
     } else {
         HttpResponse::ExpectationFailed().finish()
