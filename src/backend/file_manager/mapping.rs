@@ -1,8 +1,8 @@
+use crate::backend::account_manager::account_server::{VaultInfo, JWT};
+use actix_web::{web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use actix_web::{web, HttpResponse, Responder};
-use crate::backend::account_manager::account_server::{VaultInfo, JWT};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct FileMap {

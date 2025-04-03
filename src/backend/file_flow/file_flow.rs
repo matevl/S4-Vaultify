@@ -2,21 +2,21 @@ use crate::backend::file_manager::file_handling::save_binary;
 use crate::backend::file_manager::metadata_handling::process_file;
 use anyhow::{anyhow, Result};
 use rustls::ServerConfig;
-use rustls_pemfile::{certs, pkcs8_private_keys};
-use rustls_pki_types::{PrivatePkcs8KeyDer};
-use std::env;
-use std::path::PathBuf;
-use tokio::io::AsyncReadExt;
-use tokio::net::TcpListener;
-use tokio_rustls::TlsAcceptor;
 use rustls::{ClientConfig, RootCertStore};
 use rustls_pemfile;
+use rustls_pemfile::{certs, pkcs8_private_keys};
+use rustls_pki_types::PrivatePkcs8KeyDer;
 use rustls_pki_types::{CertificateDer, ServerName};
 use std::convert::TryInto;
-use tokio::io::AsyncWriteExt;
-use tokio::net::TcpStream;
-use tokio_rustls::TlsConnector;
+use std::env;
+use std::path::PathBuf;
 use std::{error::Error, fs::File, io::BufReader, path::Path, sync::Arc};
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpListener;
+use tokio::net::TcpStream;
+use tokio_rustls::TlsAcceptor;
+use tokio_rustls::TlsConnector;
 
 pub async fn receive() -> Result<()> {
     let certs = load_certs("certificate/cert.pem")?;
@@ -83,7 +83,6 @@ pub fn load_key(path: &str) -> Result<PrivatePkcs8KeyDer<'static>> {
         .next()
         .ok_or_else(|| anyhow!("Invalid key {}", path))
 }
-
 
 pub async fn send<P: AsRef<Path>>(file_path: P) -> Result<(), Box<dyn Error>> {
     let mut cert_reader = BufReader::new(File::open("certificate/cert.pem")?);
