@@ -48,6 +48,13 @@ pub struct LoginForm {
     password: String,
 }
 
+#[derive(Serialize)]
+pub struct CreateUserResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+
 /**
  * Struct representing information about a vault.
  */
@@ -269,28 +276,43 @@ fn clean_expired_sessions() {
  * @param form - The form data containing the username and password.
  * @return An HTTP response indicating the result of the operation.
  */
-pub async fn create_user_query(form: web::Form<CreateUserForm>) -> impl Responder {
+pub async fn create_user_query(form: web::Json<CreateUserForm>) -> impl Responder {
     let conn = CONNECTION.lock().unwrap();
     let email = form.username.clone();
     let pw = form.password.clone();
 
-    // Check if the user already exists
+    // Vérifier si l'utilisateur existe déjà
     if let Ok(Some(_)) = get_user_by_email(&conn, &email) {
-        return HttpResponse::Conflict().body("User with this email already exists");
+        return HttpResponse::Conflict().json(serde_json::json!({
+            "success": false,
+            "message": "Un utilisateur avec cet email existe déjà"
+        }));
     }
 
+    // Hachage du mot de passe
     let hash_pw = match hash(&pw, DEFAULT_COST) {
         Ok(hashed) => hashed,
-        Err(_) => return HttpResponse::InternalServerError().body("Error hashing password"),
+        Err(_) => return HttpResponse::InternalServerError().json(serde_json::json!({
+            "success": false,
+            "message": "Erreur lors du hachage du mot de passe"
+        })),
     };
 
+    // Créer l'utilisateur dans la base de données
     let _ = match create_user(&conn, &email, &hash_pw) {
         Ok(id) => id,
-        Err(_) => return HttpResponse::InternalServerError().body("Error creating user"),
+        Err(_) => return HttpResponse::InternalServerError().json(serde_json::json!({
+            "success": false,
+            "message": "Erreur lors de la création de l'utilisateur"
+        })),
     };
 
-    HttpResponse::Ok().json("User created successfully")
+    HttpResponse::Ok().json(serde_json::json!({
+        "success": true,
+        "message": "Utilisateur créé avec succès"
+    }))
 }
+
 
 /**
  * Endpoint to log in a user.
@@ -298,10 +320,11 @@ pub async fn create_user_query(form: web::Form<CreateUserForm>) -> impl Responde
  * @param form - The form data containing the username and password.
  * @return An HTTP response containing the JWT if the login is successful.
  */
-pub async fn login_user_query(form: web::Form<LoginForm>) -> impl Responder {
+pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
     let conn = CONNECTION.lock().unwrap();
     let email = form.username.clone();
     let pw = form.password.clone();
+
     if let Some((user_id, hash_pw)) = get_user_by_email(&conn, &email).unwrap() {
         if verify(&pw, &hash_pw).unwrap() {
             let user_key = derive_key(&pw, &generate_salt_from_login(&email), 10000);
@@ -313,8 +336,12 @@ pub async fn login_user_query(form: web::Form<LoginForm>) -> impl Responder {
             return HttpResponse::Ok().json(JWT::new(&session_id, user_id, &email));
         }
     }
-    HttpResponse::Unauthorized().finish()
+    HttpResponse::Unauthorized().json(serde_json::json!({
+        "success": false,
+        "message": "Email ou mot de passe incorrect"
+    }))
 }
+
 
 /**
  * Endpoint to get the list of vaults for a user.
@@ -381,6 +408,7 @@ pub async fn create_vault_query(data: web::Json<(JWT, String)>) -> impl Responde
         HttpResponse::ExpectationFailed().finish()
     }
 }
+
 
 /**
  * Endpoint to load a vault for a user.

@@ -32,6 +32,7 @@ rusqlite = { version = "0.34.0", features = ["bundled"] }
 rustls = "0.23.25"
 tokio-rustls = "0.23"
 base64 = "0.22.1"
+actix-session = { version = "0.7", features = ["cookie-session"] }
 
 
 

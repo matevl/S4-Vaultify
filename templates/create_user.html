@@ -1,27 +1,38 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create User</title>
-    <link rel="stylesheet" href="../static/style.css">
-    <link rel="icon" href="../static/vaultify-grad.ico" type="image/x-icon"> <!-- Icône du site -->
-</head>
-<body>
-<div class="container">
-    <img src="../static/vault-text-svg.svg" alt="Bannière" class="banner-image svg"> <!-- Image en haut -->
-    <h2>Create User</h2>
-    <form action="/create-user" method="POST">
-        <div class="column">
-            <label for="username">Username:</label>
-            <input type="text" id="username" name="username" required>
-        </div>
-        <div class="column">
-            <label for="password">Password:</label>
-            <input type="password" id="password" name="password" required>
-        </div>
-        <button type="submit">Submit</button>
-    </form>
-</div>
-</body>
-</html>
+<script>
+    document.getElementById('createUserForm').addEventListener('submit', async function(event) {
+        event.preventDefault(); // Empêcher la soumission normale du formulaire
+
+        // Récupérer les valeurs du formulaire
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+
+        // Créer l'objet de données à envoyer
+        const userData = {
+            username: username,
+            password: password
+        };
+
+        // Envoyer les données au serveur via fetch
+        try {
+            const response = await fetch('/create-user', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json' // Spécifier que l'on envoie des données en JSON
+                },
+                body: JSON.stringify(userData) // Convertir les données en JSON
+            });
+
+            if (response.ok) {
+                const responseData = await response.json();
+                alert('User created successfully: ' + responseData.message); // Afficher le message de succès
+                window.location.href = '/home'; // Rediriger vers la page d'accueil après l'inscription
+            } else {
+                const errorData = await response.json();
+                alert('Error: ' + errorData.message); // Afficher l'erreur
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('There was an error while creating the user');
+        }
+    });
+</script>

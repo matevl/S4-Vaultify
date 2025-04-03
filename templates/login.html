@@ -26,6 +26,46 @@
         <p>Pas encore inscrit? <a href="/register">S'inscrire</a></p>
     </form>
 </div>
+
+<script>
+    document.getElementById('loginForm').addEventListener('submit', async function(event) {
+        event.preventDefault(); // Empêcher la soumission normale du formulaire
+
+        // Récupérer les valeurs du formulaire
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+
+        // Créer l'objet de données à envoyer
+        const loginData = {
+            username: email,
+            password: password
+        };
+
+        // Envoyer les données au serveur via fetch
+        try {
+            const response = await fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json' // Spécifier que l'on envoie des données en JSON
+                },
+                body: JSON.stringify(loginData) // Convertir les données en JSON
+            });
+
+            if (response.ok) {
+                // Si la connexion est réussie, rediriger vers /home
+                window.location.href = '/home';
+            } else {
+                // Afficher un message d'erreur si la connexion échoue
+                const errorData = await response.json();
+                alert('Erreur: ' + errorData.message);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Une erreur est survenue lors de la connexion');
+        }
+    });
+</script>
+
 <script src="../static/app.js"></script>
 </body>
 </html>

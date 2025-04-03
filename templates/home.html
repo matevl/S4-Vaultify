@@ -9,8 +9,19 @@
 <body>
 <div class="container">
     <h1>Bienvenue sur votre page d'accueil !</h1>
-    <p>Bonjour, [Nom de l'utilisateur] ! Vous êtes maintenant connecté.</p>
-    <!-- Ajoutez d'autres éléments selon vos besoins -->
+    <!-- Message d'accueil personnalisé qui sera mis à jour avec le nom de l'utilisateur -->
+    <p id="welcome-message">Chargement...</p>
+
+    <!-- Autres éléments pour la page d'accueil -->
+    <div id="user-info">
+        <p>Voici vos informations :</p>
+        <ul>
+            <li>Email : <span id="user-email"></span></li>
+            <!-- Ajoutez d'autres informations de l'utilisateur ici -->
+        </ul>
+    </div>
 </div>
+
+<script src="../static/app.js"></script> <!-- Ajoutez votre script JS ici -->
 </body>
 </html>
