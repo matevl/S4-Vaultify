@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use crate::backend::account_manager::account_server::{JWT, ROOT, SESSION_CACHE};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct PasswordEntry {
     pub email: String,
     pub identifiant: String,
@@ -68,7 +68,7 @@ pub async fn add_user_password(data: web::Json<(JWT, PasswordEntry)>) -> impl Re
     }
 }
 
-pub async fn remove_user_password(data: web::Json<(JWT, String)>) -> impl Responder {
+pub async fn remove_user_password(data: web::Json<(JWT, PasswordEntry)>) -> impl Responder {
     let (jwt, password_to_remove) = data.into_inner();
     let path = get_passwords_path(jwt.id);
     let mut session_cache = SESSION_CACHE.lock().unwrap();
@@ -84,7 +84,7 @@ pub async fn remove_user_password(data: web::Json<(JWT, String)>) -> impl Respon
             Vec::new()
         };
 
-        passwords.retain(|entry| entry.password != password_to_remove);
+        passwords.retain(|entry| entry != &password_to_remove);
 
         let json_data = serde_json::to_vec(&passwords).unwrap();
         let encrypted_data = encrypt(&json_data, session.user_key.as_slice());
