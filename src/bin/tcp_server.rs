@@ -1,4 +1,4 @@
-use s4_vaultify::backend::file_flow::receive_from::receive;
+use s4_vaultify::backend::file_flow::file_flow::receive;
 
 #[tokio::main]
 async fn main() {

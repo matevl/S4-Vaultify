@@ -1,4 +1,4 @@
-use s4_vaultify::backend::file_flow::send_to::send;
+use s4_vaultify::backend::file_flow::file_flow::send;
 
 #[tokio::main]
 async fn main() {
