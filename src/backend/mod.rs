@@ -1,9 +1,10 @@
 pub mod account_manager;
+pub mod file_manager;
+
 pub mod aes_keys;
 pub mod auth;
-pub mod encryption;
+
 pub mod file_flow;
-pub mod file_manager;
 
 // Backend Const
 const VAULT_CONFIG_ROOT: &str = ".vault/";
@@ -16,3 +17,5 @@ pub const VAULTS_DATA: &str = "VaultsData/";
 pub const VAULTIFY_DATABASE: &str = ".vaultify/database.sqlite";
 
 pub const PASSWORD: &str = "password.json";
+
+pub mod pw_manager;
