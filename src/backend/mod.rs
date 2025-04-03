@@ -4,6 +4,8 @@ pub mod file_manager;
 pub mod aes_keys;
 pub mod auth;
 
+pub mod file_flow;
+
 // Backend Const
 const VAULT_CONFIG_ROOT: &str = ".vault/";
 const VAULT_USERS_DIR: &str = ".vault/users/";
