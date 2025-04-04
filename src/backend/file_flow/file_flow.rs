@@ -10,6 +10,9 @@ use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
+use crate::backend::account_manager::account_server::{VaultInfo, JWT, ROOT, SESSION_CACHE};
+use crate::backend::{VAULTS_DATA, VAULT_USERS_DIR};
+use crate::backend::aes_keys::crypted_key::encrypt;
 
 pub fn tcp_server() {
     let certs = load_certs("certificate/cert.pem")?;
@@ -34,39 +37,24 @@ pub fn tcp_server() {
                 Ok(mut tls_stream) => {
                     let mut buffer = [0; 4096];
 
-                    if let Ok(first_data)=serde_json::from_str(buffer){
-                        let ()
-                    }
-                    match tls_stream.read(&mut buffer).await {
-                        Ok(size) if size > 0 => {
-                            let request = String::from_utf8_lossy(&buffer[..size]);
-                            let parts: Vec<&str> = request.splitn(2, '|').collect();
+                    if let Ok(nb) = tls_stream.read(&mut buffer).await {
+                        if let Ok((jwt, vault_info, filename)) = serde_json::from_str::<(JWT, VaultInfo, String)>(buffer) {
+                            let key = {
+                                let sessions = SESSION_CACHE.lock().unwrap();
+                                sessions.get(&jwt.session_id).expect("no key loaded").clone()
+                            };
 
-                            if parts.len() == 2 {
-                                let path = parts[0].trim();
-                                let data = parts[1].as_bytes();
+                            let tmp_path = format!("{}/{}{}/{}", ROOT.to_str().unwrap(), VAULTS_DATA, vault_info.name, filename);
+                            let mut file = File::create(tmp_path).expect("create_vault");
 
-                                if let Ok(mut file) = File::create(path) {
-                                    if let Err(e) = file.write_all(data) {
-                                        eprintln!("Erreur d’écriture : {}", e);
-                                    } else {
-                                        println!("Fichier sauvegardé : {}", path);
-                                    }
-                                } else {
-                                    eprintln!("Impossible de créer le fichier : {}", path);
-                                }
-                            } else {
-                                eprintln!("Format invalide reçu depuis {}", addr);
+                            while let Ok(size)= tls_stream.read(&mut buffer).await {
+                                let content = String::from_utf8_lossy(&buffer[..size]);
+                                let encrypt_content = encrypt(content, &key);
+
+                                file.write_all(encrypt_content.as_bytes()).await.expect("write_file");
                             }
                         }
-                        Ok(_) => {
-                            eprintln!("Connexion vide depuis {}", addr);
-                        }
-                        Err(e) => {
-                            eprintln!("Erreur de lecture TLS : {}", e);
-                        }
                     }
-
                 }
                 Err(e) => eprintln!("Échec handshake TLS avec {} : {}", addr, e),
             }
