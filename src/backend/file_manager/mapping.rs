@@ -220,3 +220,20 @@ fn delete_file_at_path(tree: &mut FileTree, path: &[&str]) -> Result<(), String>
 
     Err("Failed to delete file".into())
 }
+
+fn get_file_at_path_mut<'a>(tree: &'a mut FileTree, path: &[&str]) -> Option<&'a mut FileTree> {
+    let mut current = tree;
+    for part in path {
+        match &mut current.file_type {
+            FileType::Folder(children) => {
+                if let Some(next) = children.iter_mut().find(|c| c.name == *part) {
+                    current = next;
+                } else {
+                    return None; // Fichier/Dossier introuvable
+                }
+            }
+            FileType::File(_) => return None, // Impossible de naviguer dans un fichier
+        }
+    }
+    Some(current)
+}
