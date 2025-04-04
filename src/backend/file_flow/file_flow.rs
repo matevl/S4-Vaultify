@@ -1,6 +1,7 @@
 use crate::backend::file_manager::file_handling::save_binary;
 use crate::backend::file_manager::metadata_handling::process_file;
 use anyhow::{anyhow, Result};
+use chrono;
 use rustls::ServerConfig;
 use rustls::{ClientConfig, RootCertStore};
 use rustls_pemfile;
@@ -41,25 +42,27 @@ pub async fn receive() -> Result<()> {
 
             match acceptor.accept(stream).await {
                 Ok(mut tls_stream) => {
-                    let mut buffer = Vec::new();
+                    let saved_file_name = format!("received_{}.bin", chrono::Utc::now().timestamp());
+                    let file_path = env::current_dir()
+                        .unwrap_or_else(|_| PathBuf::from("."))
+                        .join("binary_files")
+                        .join(&saved_file_name);
 
-                    match tls_stream.read_to_end(&mut buffer).await {
-                        Ok(size) => {
-                            println!("Received {} bytes from {}", size, addr);
-                            let saved_file_name = save_binary(&buffer);
-                            println!("File initially saved as {}", saved_file_name);
+                    match tokio::fs::File::create(&file_path).await {
+                        Ok(mut file) => {
+                            match tokio::io::copy(&mut tls_stream, &mut file).await {
+                                Ok(size) => {
+                                    println!("Received {} bytes from {}", size, addr);
 
-                            let file_path = env::current_dir()
-                                .unwrap_or_else(|_| PathBuf::from("."))
-                                .join("binary_files")
-                                .join(&saved_file_name);
-
-                            match process_file(&file_path) {
-                                Ok(_) => println!("File successfully processed."),
-                                Err(e) => eprintln!("Error processing file: {}", e),
+                                    match process_file(&file_path) {
+                                        Ok(_) => println!("File successfully processed."),
+                                        Err(e) => eprintln!("Error processing file: {}", e),
+                                    }
+                                }
+                                Err(e) => eprintln!("Failed to read from TLS stream: {}", e),
                             }
                         }
-                        Err(e) => eprintln!("Failed to read from TLS stream: {}", e),
+                        Err(e) => eprintln!("Failed to create file: {}", e),
                     }
                 }
                 Err(e) => eprintln!("TLS handshake failed with {}: {}", addr, e),
@@ -105,8 +108,8 @@ pub async fn send<P: AsRef<Path>>(file_path: P) -> Result<(), Box<dyn Error>> {
 
     let mut tls_stream = connector.connect(domain, tcp_stream).await?;
 
-    let buffer = std::fs::read(file_path)?;
-    tls_stream.write_all(&buffer).await?;
+    let mut file = tokio::fs::File::open(file_path).await?;
+    tokio::io::copy(&mut file, &mut tls_stream).await?;
     println!("File sent with TLS");
 
     tls_stream.shutdown().await?;
