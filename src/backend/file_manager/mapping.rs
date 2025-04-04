@@ -140,3 +140,83 @@ pub fn server_map_to_client_map(tree: &FileTree) -> FrontFileType {
 pub async fn get_tree_vault(data: web::Json<(JWT, VaultInfo)>) -> impl Responder {
     HttpResponse::Ok().json("")
 }
+
+fn convert_to_front(tree: &FileTree) -> FrontFileTree {
+    match &tree.file_type {
+        FileType::File(file_map) => {
+            FrontFileTree::new(
+                tree.name.clone(),
+                FrontFileType::File(FrontFileMap::new(file_map.binary.clone())),
+            )
+        }
+        FileType::Folder(children) => {
+            let converted_children = children.iter().map(convert_to_front).collect();
+            FrontFileTree::new(tree.name.clone(), FrontFileType::Folder(converted_children))
+        }
+    }
+}
+
+fn add_file_at_path(
+    tree: &mut FileTree,
+    path: &[&str],
+    new_file: FileTree,
+) -> Result<(), String> {
+    if path.is_empty() {
+        return Err("Path cannot be empty".into());
+    }
+
+    let mut current = tree;
+    for (i, part) in path.iter().enumerate() {
+        match &mut current.file_type {
+            FileType::Folder(children) => {
+                if i == path.len() - 1 {
+                    // Dernier niveau — on ajoute
+                    children.push(new_file);
+                    return Ok(());
+                } else {
+                    // On descend dans l’arborescence
+                    if let Some(next) = children.iter_mut().find(|c| c.name == *part) {
+                        current = next;
+                    } else {
+                        return Err(format!("Folder '{}' not found", part));
+                    }
+                }
+            }
+            FileType::File(_) => return Err("Cannot navigate into a file".into()),
+        }
+    }
+
+    Err("Failed to add file".into())
+}
+
+fn delete_file_at_path(tree: &mut FileTree, path: &[&str]) -> Result<(), String> {
+    if path.is_empty() {
+        return Err("Path cannot be empty".into());
+    }
+
+    let mut current = tree;
+    for (i, part) in path.iter().enumerate() {
+        match &mut current.file_type {
+            FileType::Folder(children) => {
+                if i == path.len() - 1 {
+                    let index = children.iter().position(|c| c.name == *part);
+                    if let Some(idx) = index {
+                        children.remove(idx);
+                        return Ok(());
+                    } else {
+                        return Err(format!("File or folder '{}' not found", part));
+                    }
+                } else {
+                    if let Some(next) = children.iter_mut().find(|c| c.name == *part) {
+                        current = next;
+                    } else {
+                        return Err(format!("Folder '{}' not found", part));
+                    }
+                }
+            }
+            FileType::File(_) => return Err("Cannot navigate into a file".into()),
+        }
+    }
+
+    Err("Failed to delete file".into())
+}
