@@ -471,7 +471,7 @@ pub fn init_server_config() {
 pub async fn clean_cache() {
     loop {
         let now = SystemTime::now();
-        let value = {
+        let _ = {
             let mut session = SESSION_CACHE.lock().unwrap();
             session.retain(|_, session| {
                 now.duration_since(session.last_activity)
