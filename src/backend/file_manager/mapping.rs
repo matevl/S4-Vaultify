@@ -143,12 +143,10 @@ pub async fn get_tree_vault(data: web::Json<(JWT, VaultInfo)>) -> impl Responder
 
 fn convert_to_front(tree: &FileTree) -> FrontFileTree {
     match &tree.file_type {
-        FileType::File(file_map) => {
-            FrontFileTree::new(
-                tree.name.clone(),
-                FrontFileType::File(FrontFileMap::new(file_map.binary.clone())),
-            )
-        }
+        FileType::File(file_map) => FrontFileTree::new(
+            tree.name.clone(),
+            FrontFileType::File(FrontFileMap::new(file_map.binary.clone())),
+        ),
         FileType::Folder(children) => {
             let converted_children = children.iter().map(convert_to_front).collect();
             FrontFileTree::new(tree.name.clone(), FrontFileType::Folder(converted_children))
@@ -156,11 +154,7 @@ fn convert_to_front(tree: &FileTree) -> FrontFileTree {
     }
 }
 
-fn add_file_at_path(
-    tree: &mut FileTree,
-    path: &[&str],
-    new_file: FileTree,
-) -> Result<(), String> {
+fn add_file_at_path(tree: &mut FileTree, path: &[&str], new_file: FileTree) -> Result<(), String> {
     if path.is_empty() {
         return Err("Path cannot be empty".into());
     }

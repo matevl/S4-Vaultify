@@ -15,9 +15,10 @@ use lazy_static::lazy_static;
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{fs, thread};
+use tokio::time::sleep;
 use uuid::Uuid;
 
 /**
@@ -115,7 +116,7 @@ pub struct Session {
     pub user_id: u32,
     pub hash_pw: String,
     pub user_key: Vec<u8>,
-    pub vault_key: Vec<u8>,
+    pub vault_keys: HashMap<String, Vec<u8>>,
     pub vault_perms: Perms,
     pub last_activity: SystemTime,
 }
@@ -134,7 +135,7 @@ impl Session {
             user_id,
             hash_pw: hash_pw.to_string(),
             user_key: user_key.to_vec(),
-            vault_key: vec![],
+            vault_keys: HashMap::new(),
             vault_perms: Perms::NoLoad,
             last_activity: SystemTime::now(),
         }
@@ -398,7 +399,7 @@ pub async fn create_vault_query(data: web::Json<(JWT, String)>) -> impl Responde
 pub async fn load_vault_query(data: web::Json<(JWT, VaultInfo)>) -> impl Responder {
     let (mut jwt, info) = data.into_inner();
 
-    if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.session_id) {
+    if let Some(mut cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.session_id) {
         let vault_name = format!("{}_{}", info.user_id, info.date);
 
         let key_path = format!(
@@ -415,7 +416,7 @@ pub async fn load_vault_query(data: web::Json<(JWT, VaultInfo)>) -> impl Respond
             decrypt(encrypted_content.as_slice(), cache.user_key.as_slice()).unwrap();
         let (vault_key, vault_perms): (Vec<u8>, Perms) =
             serde_json::from_str(&String::from_utf8(decrypted_content).unwrap()).unwrap();
-        cache.vault_key = vault_key;
+        cache.vault_keys.insert(vault_name, vault_key);
         cache.vault_perms = vault_perms;
 
         jwt.loaded_vault = Some(info.clone());
@@ -465,4 +466,20 @@ pub fn init_server_config() {
         [],
     )
     .unwrap();
+}
+
+pub async fn clean_cache() {
+    loop {
+        let now = SystemTime::now();
+        let value = {
+            let mut session = SESSION_CACHE.lock().unwrap();
+            session.retain(|_, session| {
+                now.duration_since(session.last_activity)
+                    .unwrap_or(Duration::new(0, 0))
+                    < Duration::from_secs(1800) // 30 minutes
+            });
+        };
+
+        sleep(Duration::from_secs(1000)).await;
+    }
 }
