@@ -1,116 +1,99 @@
-use crate::backend::file_manager::file_handling::save_binary;
-use crate::backend::file_manager::metadata_handling::process_file;
-use anyhow::{anyhow, Result};
+use crate::backend::account_manager::account_server::{VaultInfo, JWT, ROOT, SESSION_CACHE};
+use crate::backend::aes_keys::crypted_key::encrypt;
+use crate::backend::{VAULTS_DATA, VAULT_USERS_DIR};
 use rustls::ServerConfig;
-use rustls::{ClientConfig, RootCertStore};
 use rustls_pemfile;
 use rustls_pemfile::{certs, pkcs8_private_keys};
-use rustls_pki_types::PrivatePkcs8KeyDer;
-use rustls_pki_types::{CertificateDer, ServerName};
+use rustls_pki_types::CertificateDer;
+use rustls_pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
 use std::convert::TryInto;
-use std::env;
-use std::path::PathBuf;
-use std::{error::Error, fs::File, io::BufReader, path::Path, sync::Arc};
+use std::io::Write;
+use std::{error::Error, fs::File, io::BufReader, sync::Arc};
 use tokio::io::AsyncReadExt;
-use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
-use tokio::net::TcpStream;
 use tokio_rustls::TlsAcceptor;
-use tokio_rustls::TlsConnector;
 
-pub async fn receive() -> Result<()> {
+pub async fn tcp_server() -> Result<(), Box<dyn Error>> {
     let certs = load_certs("certificate/cert.pem")?;
     let key = load_key("certificate/key.pem")?;
 
     let config = ServerConfig::builder()
         .with_no_client_auth()
-        .with_single_cert(certs, rustls_pki_types::PrivateKeyDer::Pkcs8(key))?;
-    let acceptor = TlsAcceptor::from(Arc::new(config));
-    let listener = TcpListener::bind("127.0.0.1:8080").await?;
-    println!("TCP Server listening on 127.0.0.1:8080");
+        .with_single_cert(certs, PrivateKeyDer::Pkcs8(key))?;
 
-    let binary_files_path = env::current_dir()?.join("binary_files");
-    std::fs::create_dir_all(&binary_files_path)?;
+    let acceptor = TlsAcceptor::from(Arc::new(config));
+    let listener = TcpListener::bind("127.0.0.1:445").await?;
+    println!("Serveur TLS en écoute sur 127.0.0.1:445");
 
     loop {
         let (stream, addr) = listener.accept().await?;
-        let acceptor = acceptor.clone(); // important : clone pour le déplacer dans le spawn
+        let acceptor = acceptor.clone();
 
         tokio::spawn(async move {
-            println!("New connection from {}", addr);
+            println!("Nouvelle connexion de {}", addr);
 
             match acceptor.accept(stream).await {
                 Ok(mut tls_stream) => {
-                    let mut buffer = Vec::new();
+                    let mut buffer = [0; 4096];
 
-                    match tls_stream.read_to_end(&mut buffer).await {
-                        Ok(size) => {
-                            println!("Received {} bytes from {}", size, addr);
-                            let saved_file_name = save_binary(&buffer);
-                            println!("File initially saved as {}", saved_file_name);
+                    if let Ok(nb) = tls_stream.read(&mut buffer).await {
+                        if let Ok((jwt, vault_info, filename)) =
+                            serde_json::from_str::<(JWT, VaultInfo, String)>(
+                                &String::from_utf8_lossy(&buffer[..nb]),
+                            )
+                        {
+                            let key = {
+                                let sessions = SESSION_CACHE.lock().unwrap();
+                                let session = sessions.get(&jwt.session_id).expect("no key loaded");
 
-                            let file_path = env::current_dir()
-                                .unwrap_or_else(|_| PathBuf::from("."))
-                                .join("binary_files")
-                                .join(&saved_file_name);
+                                if let Some(key) = session.vault_keys.get(&vault_info.name) {
+                                    key.clone()
+                                } else {
+                                    panic!("no key loaded");
+                                }
+                            };
 
-                            match process_file(&file_path) {
-                                Ok(_) => println!("File successfully processed."),
-                                Err(e) => eprintln!("Error processing file: {}", e),
+                            let tmp_path = format!(
+                                "{}/{}{}/{}",
+                                ROOT.to_str().unwrap(),
+                                VAULTS_DATA,
+                                vault_info.name,
+                                filename
+                            );
+                            let mut file = File::create(tmp_path).expect("create_vault");
+
+                            while let Ok(size) = tls_stream.read(&mut buffer).await {
+                                let content = String::from_utf8_lossy(&buffer[..size]);
+                                let encrypt_content = encrypt(content.as_bytes(), &key);
+
+                                file.write_all(encrypt_content.as_slice())
+                                    .expect("write_file");
                             }
                         }
-                        Err(e) => eprintln!("Failed to read from TLS stream: {}", e),
                     }
                 }
-                Err(e) => eprintln!("TLS handshake failed with {}: {}", addr, e),
+                Err(e) => {
+                    eprintln!("Failed to accept TLS connection: {}", e);
+                }
             }
         });
     }
 }
 
-fn load_certs(path: &str) -> Result<Vec<CertificateDer>> {
+fn load_certs(path: &str) -> Result<Vec<CertificateDer>, Box<dyn Error>> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     let certs = certs(&mut reader).collect::<Result<Vec<_>, _>>()?;
     Ok(certs)
 }
 
-pub fn load_key(path: &str) -> Result<PrivatePkcs8KeyDer<'static>> {
+pub fn load_key(path: &str) -> Result<PrivatePkcs8KeyDer<'static>, Box<dyn Error>> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     let keys = pkcs8_private_keys(&mut reader).collect::<Result<Vec<_>, _>>()?;
-    keys.into_iter()
-        .next()
-        .ok_or_else(|| anyhow!("Invalid key {}", path))
-}
-
-pub async fn send<P: AsRef<Path>>(file_path: P) -> Result<(), Box<dyn Error>> {
-    let mut cert_reader = BufReader::new(File::open("certificate/cert.pem")?);
-    let certs: Vec<CertificateDer<'static>> =
-        rustls_pemfile::certs(&mut cert_reader).collect::<Result<_, _>>()?;
-
-    let mut root_cert_store = RootCertStore::empty();
-    root_cert_store.add_parsable_certificates(certs);
-
-    let config = ClientConfig::builder()
-        .with_root_certificates(root_cert_store)
-        .with_no_client_auth();
-    let connector = TlsConnector::from(Arc::new(config));
-
-    let tcp_stream = TcpStream::connect("127.0.0.1:8080").await?;
-
-    let domain: ServerName = "localhost"
-        .try_into()
-        .map_err(|_| "Nom de domaine TLS invalide")?;
-
-    let mut tls_stream = connector.connect(domain, tcp_stream).await?;
-
-    let buffer = std::fs::read(file_path)?;
-    tls_stream.write_all(&buffer).await?;
-    println!("File sent with TLS");
-
-    tls_stream.shutdown().await?;
-    println!("TLS connection closed gracefully");
-
-    Ok(())
+    if let Some(key) = keys.into_iter().next() {
+        Ok(key)
+    } else {
+        Err("no rsa private key found".into())
+    }
 }
