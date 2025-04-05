@@ -7,7 +7,7 @@ use crate::backend::file_manager::mapping::init_map;
 use crate::backend::{
     VAULTIFY_CONFIG, VAULTIFY_DATABASE, VAULTS_DATA, VAULT_CONFIG_ROOT, VAULT_USERS_DIR,
 };
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{web, HttpResponse, Responder, HttpRequest};
 use base64;
 use bcrypt::{hash, verify, DEFAULT_COST};
 use dirs;
@@ -17,8 +17,15 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{ SystemTime, UNIX_EPOCH};
+use std::time::{Duration};
 use uuid::Uuid;
+use actix_web::cookie::{Cookie, SameSite};
+use actix_web::cookie::time::Duration as Dudu; // Remplacer std::time::Duration par actix_web::cookie::time::Duration
+use JWT as OJWT;
+use jsonwebtoken::{Header, Algorithm, EncodingKey, DecodingKey, encode, decode, Validation};
+
+use serde_json::json;
 
 /**
  * Enum representing user permissions.
@@ -98,7 +105,6 @@ pub struct JWT {
 impl JWT {
     /**
      * Creates a new JWT instance.
-     *
      * @param session_id - The session ID.
      * @param id - The user ID.
      * @param email - The user's email.
@@ -111,6 +117,28 @@ impl JWT {
             email: email.to_string(),
             loaded_vault: None,
         }
+    }
+
+    pub fn encode(&self, secret: &str) -> String {
+        let header = Header::new(Algorithm::HS256);  // Utilisation de l'algorithme HMAC-SHA256
+        let encoding_key = EncodingKey::from_secret(secret.as_ref());
+
+        encode(&header, &self, &encoding_key).unwrap()
+    }
+    // Décoder un token JWT en JWT struct
+    pub fn decode(token: &str, secret: &str) -> Option<Self> {
+        let decoding_key = DecodingKey::from_secret(secret.as_ref());
+        let validation = Validation {
+            leeway: 0,
+            validate_exp: false,  // Passez à true si vous voulez valider l'expiration
+            algorithms: vec![Algorithm::HS256],
+            ..Validation::default()
+        };
+
+        // Appeler la fonction `jsonwebtoken::decode`, et non `Self::decode`
+        jsonwebtoken::decode::<Self>(token, &decoding_key, &validation)
+            .ok()
+            .map(|data| data.claims)
     }
 }
 
@@ -277,14 +305,14 @@ fn clean_expired_sessions() {
  * @param form - The form data containing the username and password.
  * @return An HTTP response indicating the result of the operation.
  */
-pub async fn create_user_query(form: web::Json<CreateUserForm>) -> impl Responder {
+pub async fn create_user_query(form: web::Json<CreateUserForm>) -> HttpResponse {
     let conn = CONNECTION.lock().unwrap();
     let email = form.username.clone();
     let pw = form.password.clone();
 
     // Vérifier si l'utilisateur existe déjà
     if let Ok(Some(_)) = get_user_by_email(&conn, &email) {
-        return HttpResponse::Conflict().json(serde_json::json!({
+        return HttpResponse::Conflict().json(json!({
             "success": false,
             "message": "Un utilisateur avec cet email existe déjà"
         }));
@@ -293,7 +321,7 @@ pub async fn create_user_query(form: web::Json<CreateUserForm>) -> impl Responde
     // Hachage du mot de passe
     let hash_pw = match hash(&pw, DEFAULT_COST) {
         Ok(hashed) => hashed,
-        Err(_) => return HttpResponse::InternalServerError().json(serde_json::json!({
+        Err(_) => return HttpResponse::InternalServerError().json(json!({
             "success": false,
             "message": "Erreur lors du hachage du mot de passe"
         })),
@@ -302,18 +330,17 @@ pub async fn create_user_query(form: web::Json<CreateUserForm>) -> impl Responde
     // Créer l'utilisateur dans la base de données
     let _ = match create_user(&conn, &email, &hash_pw) {
         Ok(id) => id,
-        Err(_) => return HttpResponse::InternalServerError().json(serde_json::json!({
+        Err(_) => return HttpResponse::InternalServerError().json(json!({
             "success": false,
             "message": "Erreur lors de la création de l'utilisateur"
         })),
     };
 
-    HttpResponse::Ok().json(serde_json::json!({
+    HttpResponse::Ok().json(json!({
         "success": true,
         "message": "Utilisateur créé avec succès"
     }))
 }
-
 
 /**
  * Endpoint to log in a user.
@@ -321,6 +348,7 @@ pub async fn create_user_query(form: web::Json<CreateUserForm>) -> impl Responde
  * @param form - The form data containing the username and password.
  * @return An HTTP response containing the JWT if the login is successful.
  */
+
 pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
     let conn = CONNECTION.lock().unwrap();
     let email = form.username.clone();
@@ -328,20 +356,37 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
 
     if let Some((user_id, hash_pw)) = get_user_by_email(&conn, &email).unwrap() {
         if verify(&pw, &hash_pw).unwrap() {
-            let user_key = derive_key(&pw, &generate_salt_from_login(&email), 10000);
             let session_id = generate_session_id();
-            SESSION_CACHE.lock().unwrap().insert(
-                session_id.clone(),
-                Session::new(user_id, &hash_pw, &user_key),
-            );
-            return HttpResponse::Ok().json(JWT::new(&session_id, user_id, &email));
+            let jwt_token = OJWT::new(&session_id, user_id, &email); // ✅ user_id est accessible
+            let secret = "test"; // Utiliser le secret de l'env
+
+            // Créer le token JWT
+            let jwt_string = jwt_token.encode(&secret);
+
+            // Créer le cookie avec le JWT
+            let cookie = Cookie::build("user_token", &jwt_string)
+                .http_only(true)
+                .secure(true) // Utiliser secure(true) si tu es en production (HTTPS)
+                .path("/")
+                .max_age(Dudu::days(7))  // Le cookie expire après 7 jours
+                .finish();
+              // Affiche le JWT pour voir s'il est généré correctement
+            return HttpResponse::Ok()
+                .cookie(cookie)
+                .json(json!({
+                    "success": true,
+                    "message": "Connexion réussie"
+                }));
         }
     }
-    HttpResponse::Unauthorized().json(serde_json::json!({
+
+    HttpResponse::Unauthorized().json(json!({
         "success": false,
         "message": "Email ou mot de passe incorrect"
     }))
 }
+
+
 
 
 /**

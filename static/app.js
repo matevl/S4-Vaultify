@@ -10,12 +10,18 @@ function getCookie(name) {
     return null;
 }
 
-// Fonction pour définir un cookie
+// Fonction pour définir un cookie avec des paramètres de sécurité
 function setCookie(name, value, days) {
     let d = new Date();
     d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
     let expires = "expires=" + d.toUTCString();
-    document.cookie = name + "=" + value + ";" + expires + ";path=/";
+    // Ajout de l'attribut Secure (nécessite HTTPS) et HttpOnly pour plus de sécurité
+    document.cookie = name + "=" + value + ";" + expires + ";path=/;Secure;HttpOnly";
+}
+
+// Fonction pour supprimer un cookie
+function deleteCookie(name) {
+    document.cookie = name + "=; Max-Age=-99999999; path=/;";
 }
 
 // Fonction pour afficher le formulaire de login et cacher celui d'enregistrement
@@ -52,7 +58,7 @@ document.getElementById('login').addEventListener('submit', function(event) {
         .then(data => {
             if (data.success) {
                 console.log('Connexion réussie:', data);
-                // Stocke le token d'authentification dans un cookie
+                // Stocke le token d'authentification dans un cookie sécurisé
                 setCookie('user_token', data.token, 7); // Le cookie expire après 7 jours
                 // Redirige vers la page d'accueil après la connexion réussie
                 window.location.href = "/home"; // La redirection vers /home
@@ -125,18 +131,60 @@ window.addEventListener('load', function() {
                 if (data.success) {
                     // Personnaliser l'affichage en fonction des informations utilisateur
                     document.getElementById('welcome-message').innerText = `Bienvenue, ${data.username}!`;
-                    document.getElementById('user-email').innerText = data.email;
-                    // Par exemple, afficher l'email de l'utilisateur dans l'élément avec id 'user-email'
+                    document.getElementById('user-email').innerText = data.email; // Affiche l'email de l'utilisateur
+                } else {
+                    // Si la récupération échoue
+                    document.getElementById('welcome-message').innerText = 'Cookie introuvable, veuillez vous connecter.';
+                    document.getElementById('user-email').innerText = 'Aucune information disponible';
                 }
             })
             .catch(error => {
                 console.error('Erreur lors de la récupération des données utilisateur:', error);
+                document.getElementById('welcome-message').innerText = 'Erreur lors de la récupération des données utilisateur.';
+                document.getElementById('user-email').innerText = 'Aucune information disponible';
             });
     } else {
-        // Si le token n'existe pas, rediriger l'utilisateur vers la page de login
-        window.location.href = "/login";
+        // Si le token n'existe pas, afficher un message d'erreur
+        document.getElementById('welcome-message').innerText = 'Cookie introuvable, veuillez vous connecter.';
+        document.getElementById('user-email').innerText = 'Aucune information disponible';
     }
 });
 
 // Initialiser la page sur le formulaire de login
-showLoginForm();
+// Logique spécifique pour la page /home
+window.addEventListener('load', function() {
+    const userToken = getCookie('user_token');
+
+    if (userToken) {
+        // Si le token existe, faire une requête pour récupérer les informations de l'utilisateur
+        fetch('/user/profile', {
+            method: 'GET',
+            headers: {
+                'Authorization': 'Bearer ' + userToken // Ajouter le token dans l'en-tête
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Personnaliser l'affichage en fonction des informations utilisateur
+                    document.getElementById('welcome-message').innerText = `Bienvenue, ${data.username}!`;
+                    document.getElementById('user-email').innerText = data.email; // Affiche l'email de l'utilisateur
+                } else {
+                    // Si la récupération échoue
+                    document.getElementById('welcome-message').innerText = 'Erreur de récupération des informations utilisateur';
+                    document.getElementById('user-email').innerText = 'Aucune information disponible';
+                }
+            })
+            .catch(error => {
+                console.error('Erreur lors de la récupération des données utilisateur:', error);
+                document.getElementById('welcome-message').innerText = 'Erreur lors de la récupération des données utilisateur';
+                document.getElementById('user-email').innerText = 'Aucune information disponible';
+            });
+    } else {
+        // Si le token n'existe pas, afficher un message d'erreur
+        document.getElementById('welcome-message').innerText = 'Cookie introuvable, veuillez vous connecter.';
+        document.getElementById('user-email').innerText = 'Aucune information disponible';
+    }
+});
+
+

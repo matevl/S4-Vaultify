@@ -11,7 +11,7 @@ serde_json = "1.0.48"
 bcrypt = "0.12"
 ring = "0.17.9"
 sha2 = "0.10"
-actix-web = "4.0.1"
+actix-web = { version = "4.0.1", features = ["rustls"] }
 lazy_static = "1.5.0"
 dirs = "6.0.0"
 reqwest = { version = "0.12.12", features = ["json"] }
@@ -25,19 +25,17 @@ ffmpeg-next = "7.1.0"
 tempfile = "3.16.0"
 zip = "2.2.2"
 lopdf = "=0.35.0"
-rustls = "0.23.25"
-tokio-rustls = "0.26.2"
+tokio-rustls = "0.23"
 anyhow = "1.0.97"
 rustls-pemfile = "2.2.0"
-rustls-pki-types = "1.11.0"
 uuid = { version = "1.16.0", features = ["v4"] }
 rusqlite = { version = "0.34.0", features = ["bundled"] }
 base64 = "0.22.1"
 actix-session = { version = "0.7", features = ["cookie-session"] }
-
-
-
-
+jsonwebtoken = "7.2"
+actix-rt = "2.5"
+rustls = "0.20"
+askama = "0.12"
 
 [profile.wasm-dev]
 inherits = "dev"
