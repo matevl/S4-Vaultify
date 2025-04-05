@@ -10,7 +10,6 @@ use std::path::Path;
 struct FileMap {
     original_filename: String,
     binary: String,
-    metadata: String,
     file_type: String,
 }
 
@@ -47,13 +46,11 @@ impl FileMap {
     pub fn new(
         original_filename: String,
         binary: String,
-        metadata: String,
         file_type: String,
     ) -> Self {
         Self {
             original_filename,
             binary,
-            metadata,
             file_type,
         }
     }
@@ -81,10 +78,9 @@ impl FileType {
     pub fn new_file(
         original_filename: String,
         binary: String,
-        metadata: String,
         file_type: String,
     ) -> Self {
-        FileType::File(FileMap::new(original_filename, binary, metadata, file_type))
+        FileType::File(FileMap::new(original_filename, binary, file_type))
     }
 
     pub fn new_folder(files: Vec<FileTree>) -> Self {
@@ -109,28 +105,25 @@ pub fn init_map(path: &str, key: &[u8]) {
     fs::write(path, encrypted_content).unwrap();
 }
 
-/**
- * Updates the file mapping JSON by appending a new entry.
- * Stores original filename, binary name, metadata path, and file type.
- */
-pub fn update_map(original_filename: String, binary: String, metadata: String, file_type: String) {
+pub fn update_map(original_filename: String, binary: String, file_type: String, path: String) {
     let map_path = Path::new("binary_files").join("map.json");
-    let mut map: Vec<FileMap> = if map_path.exists() {
+
+    let mut tree: FileTree = if map_path.exists() {
         let content = fs::read_to_string(&map_path).unwrap();
-        serde_json::from_str(&content).unwrap_or_default()
+        serde_json::from_str(&content).unwrap_or_else(|_| {
+            FileTree::new("/".to_string(), FileType::new_folder(Vec::new()))
+        })
     } else {
-        Vec::new()
+        FileTree::new("/".to_string(), FileType::new_folder(Vec::new()))
     };
 
-    map.push(FileMap {
-        original_filename,
-        binary,
-        metadata,
-        file_type,
-    });
+    match add_file_with_path(&mut tree, &path, original_filename, binary.clone(), file_type) {
+        Ok(_) => {},
+        Err(e) => eprintln!("Error when adding file at {}", e),
+    }
 
-    let json = serde_json::to_string_pretty(&map).unwrap();
-    fs::write(map_path, json).unwrap(); //le rendre en dictionnaire.
+    let json = serde_json::to_string_pretty(&tree).unwrap();
+    fs::write(map_path, json).unwrap();
 }
 
 pub fn server_map_to_client_map(tree: &FileTree) -> FrontFileType {
@@ -160,27 +153,29 @@ fn add_file_at_path(tree: &mut FileTree, path: &[&str], new_file: FileTree) -> R
     }
 
     let mut current = tree;
-    for (i, part) in path.iter().enumerate() {
+    for part in &path[..path.len()-1] {
         match &mut current.file_type {
             FileType::Folder(children) => {
-                if i == path.len() - 1 {
-                    // Dernier niveau — on ajoute
-                    children.push(new_file);
-                    return Ok(());
+                let idx_opt = children.iter().position(|c| c.name == *part);
+                if let Some(i) = idx_opt {
+                    current = &mut children[i];
                 } else {
-                    // On descend dans l’arborescence
-                    if let Some(next) = children.iter_mut().find(|c| c.name == *part) {
-                        current = next;
-                    } else {
-                        return Err(format!("Folder '{}' not found", part));
-                    }
+                    children.push(FileTree::new(part.to_string(), FileType::new_folder(Vec::new())));
+                    let len = children.len();
+                    current = &mut children[len - 1];
                 }
-            }
-            FileType::File(_) => return Err("Cannot navigate into a file".into()),
+            },
+            FileType::File(_) => return Err(format!("Cannot navigate into a file: '{}'", part)),
         }
     }
 
-    Err("Failed to add file".into())
+    match &mut current.file_type {
+        FileType::Folder(children) => {
+            children.push(new_file);
+            Ok(())
+        },
+        FileType::File(_) => Err("Internal error: attempting to add a file into a file".into()),
+    }
 }
 
 fn delete_file_at_path(tree: &mut FileTree, path: &[&str]) -> Result<(), String> {
@@ -223,11 +218,32 @@ fn get_file_at_path_mut<'a>(tree: &'a mut FileTree, path: &[&str]) -> Option<&'a
                 if let Some(next) = children.iter_mut().find(|c| c.name == *part) {
                     current = next;
                 } else {
-                    return None; // Fichier/Dossier introuvable
+                    return None;
                 }
             }
-            FileType::File(_) => return None, // Impossible de naviguer dans un fichier
+            FileType::File(_) => return None,
         }
     }
     Some(current)
+}
+
+fn add_file_with_path(
+    root: &mut FileTree,
+    full_path: &str,
+    original_filename: String,
+    binary: String,
+    file_type: String,
+) -> Result<(), String> {
+    let parts: Vec<&str> = full_path.split('/').filter(|s| !s.is_empty()).collect();
+    if parts.is_empty() {
+        return Err("Invalid Path".into());
+    }
+    let file_name = parts.last().unwrap();
+
+    let new_file = FileTree::new(
+        file_name.to_string(),
+        FileType::new_file(original_filename, binary, file_type),
+    );
+
+    add_file_at_path(root, &parts, new_file)
 }
