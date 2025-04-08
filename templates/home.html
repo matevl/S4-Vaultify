@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accueil</title>
+    <link rel="stylesheet" href="../static/style.css"> <!-- Fichier CSS -->
+</head>
+<body>
+<div class="container">
+    <h1>Bienvenue sur votre page d'accueil !</h1>
+
+    <!-- Message d'accueil personnalisé -->
+    <p id="welcome-message">Bonjour {{ username }} !</p>
+
+    <!-- Informations de l'utilisateur -->
+    <div id="user-info">
+        <p>Voici vos informations :</p>
+        <ul>
+            <li>Email : <span id="user-email">{{ email }}</span></li>
+            <li>Vault info : {{ vault_info }}</li>
+        </ul>
+    </div>
+
+    <!-- ✅ Nouveau bouton pour accéder aux vaults -->
+    <div class="vault-access">
+        <form action="/vaults" method="get">
+            <button type="submit">Accès au Vault</button>
+        </form>
+    </div>
+
+    <!-- ✅ Nouveau bouton pour créer un nouveau vault -->
+    <div class="vault-create">
+        <form action="/create-vault" method="post">
+            <label for="name">Vault Name:</label>
+            <input type="text" id="name" name="name" required>
+            <button type="submit">Create Vault</button>
+        </form>
+
+    </div>
+</div>
+
+<script src="../static/app.js"></script>
+</body>
+</html>

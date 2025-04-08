@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vaults</title>
+    <style>
+        .vault-box {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 10px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .vault-box:hover {
+            background-color: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+<h1>Liste des Vaults</h1>
+<div>
+    {% for vault in vaults %}
+    <div class="vault-box">
+        <p><strong>Nom :</strong> {{ vault.name }}</p>
+        <p><strong>Utilisateur ID :</strong> {{ vault.user_id }}</p>
+        <p><strong>Date :</strong> {{ vault.date }}</p>
+    </div>
+    {% else %}
+    <p>Aucun vault trouvé.</p>
+    {% endfor %}
+</div>
+</body>
+</html>

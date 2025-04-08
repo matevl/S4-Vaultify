@@ -1,0 +1,120 @@
+body {
+    font-family: 'Poppins', Arial, sans-serif;
+    background: #001f3f; /* Fond bleu foncé */
+    color: #ffffff; /* Texte en blanc */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    text-align: center; /* Ajout pour centrer le texte globalement */
+}
+
+.container {
+    background-color: #003366; /* Bleu légèrement plus clair */
+    padding: 25px 30px;
+    border-radius: 16px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    max-width: 800px; /* Largeur plus grande pour accueillir les colonnes */
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.banner-image {
+    width: 100%;
+    max-height: 200px; /* Définir une hauteur maximale */
+    border-radius: 12px;
+    margin-bottom: 20px;
+}
+
+.banner-image svg {
+    width: 10%;
+    height: auto; /* Assure que la hauteur s'ajuste proportionnellement */
+}
+
+
+h2 {
+    font-size: 24px;
+    color: #ffffff;
+    margin-bottom: 20px;
+    letter-spacing: 1px;
+    width: 100%;
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    align-items: center; /* Centrer les éléments du formulaire */
+    width: 100%; /* Assurez-vous que le formulaire prend toute la largeur disponible */
+}
+
+.column {
+    background-color: #00509e; /* Contraste pour les colonnes */
+    padding: 20px;
+    border-radius: 12px;
+    width: 100%;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    box-sizing: border-box; /* Inclure le padding et les bordures dans la largeur totale */
+}
+
+input {
+    padding: 12px 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 16px;
+    color: #333;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    width: 100%; /* Assurez-vous que l'input prend toute la largeur disponible */
+    box-sizing: border-box; /* Inclure le padding et les bordures dans la largeur totale */
+}
+
+input:focus {
+    outline: none;
+    border-color: #74ebd5;
+    box-shadow: 0 0 8px rgba(116, 235, 213, 0.2);
+}
+
+button {
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    width: 100%; /* Assurez-vous que le bouton prend toute la largeur disponible */
+    box-sizing: border-box; /* Inclure le padding et les bordures dans la largeur totale */
+}
+
+button[type="submit"] {
+    background-color: #74ebd5;
+    color: #001f3f;
+}
+
+button[type="submit"]:hover {
+    background-color: #52c7b8;
+    transform: scale(1.05);
+}
+
+button[type="button"] {
+    background-color: #6c757d;
+    color: #ffffff;
+}
+
+button[type="button"]:hover {
+    background-color: #5a6268;
+    transform: scale(1.05);
+}
+
+button:active {
+    transform: scale(0.95);
+}
+
+@media (max-width: 768px) {
+    .column {
+        width: 100%; /* Ajustement pour petits écrans */
+    }
+}
