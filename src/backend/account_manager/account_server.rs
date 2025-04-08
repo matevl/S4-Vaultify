@@ -406,7 +406,6 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
 pub async fn get_vaults_list_query(user: web::Json<JWT>) -> HttpResponse {
     let conn = CONNECTION.lock().unwrap();
     if let Ok(vaults) = get_user_vaults(&conn, user.id) {
-        println!("{:?}", &vaults);
         HttpResponse::Ok().json(vaults)
     } else {
         HttpResponse::Unauthorized().finish()
