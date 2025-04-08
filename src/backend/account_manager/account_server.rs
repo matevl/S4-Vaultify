@@ -342,14 +342,6 @@ pub async fn create_user_query(form: web::Json<CreateUserForm>) -> HttpResponse 
         }
     };
 
-    let session_id = generate_session_id();
-    let user_key = derive_key(&pw, &generate_salt_from_login(&email), 10000);
-
-    SESSION_CACHE
-        .lock()
-        .unwrap()
-        .insert(session_id.clone(), Session::new(id, &hash_pw, &user_key));
-
     HttpResponse::Ok().json(json!({
         "success": true,
         "message": "Utilisateur créé avec succès"
