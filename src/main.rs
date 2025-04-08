@@ -2,48 +2,22 @@ use actix_files::NamedFile;
 use actix_web::{cookie::Cookie, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use rustls_pemfile::{certs, pkcs8_private_keys};
 use s4_vaultify::backend::account_manager::account_server::{
-    create_user_query, create_vault_query, get_vaults_list_query, init_db_connection,
-    init_server_config, load_vault_query, login_user_query, JWT,
+    clean_expired_sessions, create_user_query, create_vault_query, get_vaults_list_query,
+    init_server_config, load_vault_query, login_user_query, CreateUserForm, VaultInfo, JWT,
 };
-use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::fs::File;
 use std::io::{BufReader, Cursor};
 use std::sync::Arc;
 use tera::Context;
 //use tokio_rustls::rustls::HandshakeType::Certificate;
+use actix_files::Files;
 use askama::Template;
+use rusqlite::{Connection, Result};
 use rustls::Certificate;
 use rustls::PrivateKey;
-use s4_vaultify::backend::account_manager::account_server::get_user_vaults;
-use s4_vaultify::backend::account_manager::account_server::CreateUserForm;
-use tokio_rustls::rustls::ServerConfig;
-//use s4_vaultify::bin::main_server::CONNECTION;
-use actix_files::Files;
-use lazy_static::lazy_static;
-use reqwest::Body;
-use rusqlite::params;
-use rusqlite::{Connection, Result};
-use s4_vaultify::backend::account_manager::account_server::create_vault;
-use s4_vaultify::backend::account_manager::account_server::Perms;
-use s4_vaultify::backend::account_manager::account_server::VaultInfo;
-use s4_vaultify::backend::aes_keys::keys_password::derive_key;
-use s4_vaultify::backend::aes_keys::keys_password::generate_random_key;
-use s4_vaultify::backend::aes_keys::keys_password::generate_salt_from_login;
-use s4_vaultify::backend::file_manager::mapping::init_map;
-use s4_vaultify::backend::VAULTS_DATA;
-use std::fs;
-use std::fs::read_to_string;
-use std::path::Path;
 use std::sync::Mutex;
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
 use tera::Tera;
-
-lazy_static! {
-    pub static ref CONNECTION: Mutex<Connection> =
-        Mutex::new(Connection::open("my_db.sqlite").unwrap());
-}
+use tokio_rustls::rustls::ServerConfig;
 
 fn load_rustls_config(cert_path: &str, key_path: &str) -> Arc<ServerConfig> {
     // Open certificate and private key files
@@ -273,11 +247,6 @@ pub async fn get_user_vaults_query(req: HttpRequest) -> impl Responder {
     }
 }
 
-pub fn get_connection() -> Connection {
-    let database_path = "./vaultify.db"; // Path configured in init_server_config
-    Connection::open(database_path).expect("Error connecting to the database")
-}
-
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let port = 443;
@@ -295,6 +264,10 @@ async fn main() -> std::io::Result<()> {
 
     // Initialize Tera to handle templates
     let tera = Tera::new("../templates/**/*").unwrap(); // Load templates from the directory
+
+    tokio::spawn(async {
+        clean_expired_sessions().await;
+    });
 
     // Start Actix Web server
     HttpServer::new(move || {

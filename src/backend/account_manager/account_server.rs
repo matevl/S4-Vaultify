@@ -26,7 +26,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tera::Context;
 use tera::Tera;
 use uuid::Uuid;
-use JWT as OJWT;
 
 /**
  * Enum representing user permissions.
@@ -161,7 +160,7 @@ pub struct Session {
     pub user_id: u32,
     pub hash_pw: String,
     pub user_key: Vec<u8>,
-    pub vault_key: Vec<u8>,
+    pub vault_key: HashMap<String, Vec<u8>>,
     pub vault_perms: Perms,
     pub last_activity: SystemTime,
 }
@@ -180,7 +179,7 @@ impl Session {
             user_id,
             hash_pw: hash_pw.to_string(),
             user_key: user_key.to_vec(),
-            vault_key: vec![],
+            vault_key: HashMap::new(),
             vault_perms: Perms::NoLoad,
             last_activity: SystemTime::now(),
         }
@@ -293,7 +292,7 @@ fn generate_session_id() -> String {
 /**
  * Cleans expired sessions from the cache.
  */
-fn clean_expired_sessions() {
+pub async fn clean_expired_sessions() {
     let mut cache = SESSION_CACHE.lock().unwrap();
     let now = SystemTime::now();
     cache.retain(|_, session| {
@@ -364,7 +363,14 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
     if let Some((user_id, hash_pw)) = get_user_by_email(&conn, &email).unwrap() {
         if verify(&pw, &hash_pw).unwrap() {
             let session_id = generate_session_id();
-            let jwt_token = OJWT::new(&session_id, user_id, &email); // ✅ user_id is accessible
+            let user_key = derive_key(&pw, &generate_salt_from_login(&email), 10000);
+
+            SESSION_CACHE.lock().unwrap().insert(
+                session_id.clone(),
+                Session::new(user_id, &hash_pw, &user_key),
+            );
+
+            let jwt_token = JWT::new(&session_id, user_id, &email); // ✅ user_id is accessible
             let secret = "test"; // Use the secret from the environment
 
             // Create the JWT token
@@ -380,14 +386,14 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
             // Display the JWT to see if it is generated correctly
             return HttpResponse::Ok().cookie(cookie).json(json!({
                 "success": true,
-                "message": "Connexion réussie"
+                "message": "Successful connection"
             }));
         }
     }
 
     HttpResponse::Unauthorized().json(json!({
         "success": false,
-        "message": "Email ou mot de passe incorrect"
+        "message": "incorrect Email or Password"
     }))
 }
 
@@ -446,6 +452,7 @@ pub async fn create_vault_query(
     form: web::Form<VaultForm>, // The form contains only one field (name)
 ) -> impl Responder {
     let connection = CONNECTION.lock().unwrap();
+    let sessions = SESSION_CACHE.lock().unwrap();
     let name: &str = &form.name; // Get the name from the form
 
     // Retrieve the JWT token from the cookies
@@ -454,25 +461,60 @@ pub async fn create_vault_query(
 
         // Decode the JWT token
         if let Some(decoded_jwt) = JWT::decode(&cookie, secret) {
-            let time = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
+            if let Some(cache) = sessions.get(&decoded_jwt.session_id) {
+                let time = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs();
 
-            let info = VaultInfo::new(decoded_jwt.id, name, time);
+                let vault_name = format!("{}_{}", decoded_jwt.id, time);
 
-            // Create the vault in the database
-            match create_vault(&connection, &info) {
-                Ok(res) => HttpResponse::Ok().json(json!({
-                    "message": format!("Coffre '{}' créé avec succès !", res.name),
-                    "vault_id": res.id,
-                    "date": res.date,
-                })),
-                Err(e) => {
-                    eprintln!("Erreur lors de la création du coffre : {:?}", e);
-                    HttpResponse::InternalServerError()
-                        .body("Erreur lors de la création du coffre.")
+                let vault_path =
+                    format!("{}/{}{}", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
+
+                let vault_config = format!("{}/{}", vault_path, VAULT_CONFIG_ROOT);
+                let users_vault = format!("{}/{}", vault_path, VAULT_USERS_DIR);
+                let user_json = format!("{users_vault}{}.json", decoded_jwt.id);
+
+                fs::create_dir_all(&vault_path).unwrap();
+                fs::create_dir_all(&vault_config).unwrap();
+                fs::create_dir_all(&users_vault).unwrap();
+                fs::File::create(&user_json).unwrap();
+
+                let info = VaultInfo::new(decoded_jwt.id, &name, time);
+                create_vault(&connection, &info).unwrap();
+
+                let vault_key = generate_random_key();
+
+                let vault_key = derive_key(
+                    &String::from_utf8_lossy(vault_key.as_slice()),
+                    generate_salt_from_login(&decoded_jwt.email).as_slice(),
+                    10000,
+                );
+
+                let content = serde_json::to_string(&(vault_key, Perms::Admin)).unwrap();
+                let encrypted_content = encrypt(content.as_bytes(), cache.user_key.as_slice());
+                fs::write(&user_json, &encrypted_content).unwrap();
+
+                init_map(
+                    &format!("{}/map.json", vault_path),
+                    cache.user_key.as_slice(),
+                );
+
+                match create_vault(&connection, &info) {
+                    Ok(res) => HttpResponse::Ok().json(json!({
+                        "message": format!("Coffre '{}' créé avec succès !", res.name),
+                        "vault_id": res.id,
+                        "date": res.date,
+                    })),
+                    Err(e) => {
+                        eprintln!("Erreur lors de la création du coffre : {:?}", e);
+                        HttpResponse::InternalServerError()
+                            .body("Erreur lors de la création du coffre.")
+                    }
                 }
+            } else {
+                HttpResponse::Unauthorized().body("incorrect email or password")
             }
         } else {
             HttpResponse::Unauthorized().body("Token JWT invalide.")
@@ -508,8 +550,11 @@ pub async fn load_vault_query(data: web::Json<(JWT, VaultInfo)>) -> impl Respond
             decrypt(encrypted_content.as_slice(), cache.user_key.as_slice()).unwrap();
         let (vault_key, vault_perms): (Vec<u8>, Perms) =
             serde_json::from_str(&String::from_utf8(decrypted_content).unwrap()).unwrap();
-        cache.vault_key = vault_key;
-        cache.vault_perms = vault_perms;
+
+        if let None = cache.vault_key.get(&vault_name) {
+            cache.vault_key.insert(vault_name, vault_key);
+            cache.vault_perms = vault_perms;
+        }
 
         jwt.loaded_vault = Some(info.clone());
         HttpResponse::Ok().json(jwt)
