@@ -24,8 +24,9 @@ use actix_web::cookie::{Cookie, SameSite};
 use actix_web::cookie::time::Duration as Dudu; // Remplacer std::time::Duration par actix_web::cookie::time::Duration
 use JWT as OJWT;
 use jsonwebtoken::{Header, Algorithm, EncodingKey, DecodingKey, encode, decode, Validation};
-
 use serde_json::json;
+use tera::Tera;
+use tera::Context;
 
 /**
  * Enum representing user permissions.
@@ -36,6 +37,13 @@ pub enum Perms {
     Write,
     Read,
     NoLoad,
+}
+fn get_user_from_cookie(req: &HttpRequest) -> Option<String> {
+    if let Some(cookie) = req.cookie("user_token") {
+        Some(cookie.value().to_string()) // Retourner directement la valeur du token
+    } else {
+        None
+    }
 }
 
 /**
@@ -100,6 +108,7 @@ pub struct JWT {
     pub id: u32,
     pub email: String,
     pub loaded_vault: Option<VaultInfo>,
+    pub user_key: Vec<u8>,
 }
 
 impl JWT {
@@ -116,6 +125,7 @@ impl JWT {
             id,
             email: email.to_string(),
             loaded_vault: None,
+            user_key: vec![],
         }
     }
 
@@ -203,6 +213,12 @@ pub fn init_db_connection(database_path: &str) -> Result<Connection> {
     Connection::open(database_path)
 }
 
+
+struct Vault {
+    id: u32,
+    name: String,
+    date: i64,
+}
 /**
  * Creates a new user in the database.
  *
@@ -236,20 +252,6 @@ pub fn get_user_by_email(conn: &Connection, email: &str) -> Result<Option<(u32, 
     }
 }
 
-/**
- * Creates a new vault for a user.
- *
- * @param conn - The database connection.
- * @param vault_info - The information about the vault.
- * @return A Result containing the ID of the created vault.
- */
-pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> Result<u32> {
-    conn.execute(
-        "INSERT INTO vaults (user_id, name, date) VALUES (?, ?, ?)",
-        params![vault_info.user_id, vault_info.name, vault_info.date as i64],
-    )?;
-    Ok(conn.last_insert_rowid() as u32)
-}
 
 /**
  * Retrieves the vaults of a user from the database.
@@ -259,6 +261,7 @@ pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> Result<u32> {
  * @return A Result containing a vector of VaultInfo.
  */
 pub fn get_user_vaults(conn: &Connection, user_id: u32) -> Result<Vec<VaultInfo>> {
+
     let mut stmt = conn.prepare(
         "SELECT user_id, name, date
          FROM vaults
@@ -404,60 +407,77 @@ pub async fn get_vaults_list_query(user: web::Json<JWT>) -> impl Responder {
     }
 }
 
+#[derive(Deserialize)]
+pub struct VaultForm {
+    name: String, // Le nom du champ doit correspondre à l'attribut `name` du formulaire HTML
+}
+/**
+ * Creates a new vault for a user.
+ *
+ * @param conn - The database connection.
+ * @param vault_info - The information about the vault.
+ * @return A Result containing the ID of the created vault.
+ */
+
+pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> Result<Vault> {
+    conn.execute(
+        "INSERT INTO vaults (user_id, name, date) VALUES (?, ?, ?)",
+        params![vault_info.user_id, vault_info.name, vault_info.date as i64],
+    )?;
+
+    let vault_id = conn.last_insert_rowid() as u32;
+
+    // Construire et retourner l'objet Vault
+    Ok(Vault {
+        id: vault_id,
+        name: vault_info.name.clone(),
+        date: vault_info.date as i64,
+    })
+}
+
 /**
  * Endpoint to create a new vault for a user.
  *
  * @param data - A tuple containing the JWT and the name of the vault.
  * @return An HTTP response indicating the result of the operation.
  */
-pub async fn create_vault_query(data: web::Json<(JWT, String)>) -> impl Responder {
+pub async fn create_vault_query(
+    req: HttpRequest,
+    form: web::Form<VaultForm>, // Le formulaire ne contient qu'un seul champ (nom)
+) -> impl Responder {
     let connection = CONNECTION.lock().unwrap();
-    let sessions = SESSION_CACHE.lock().unwrap();
+    let name: &str = &form.name; // Récupère le nom depuis le formulaire
 
-    let (jwt, name) = data.into_inner();
+    // Récupérer le token JWT depuis les cookies
+    if let Some(cookie) = get_user_from_cookie(&req){
+        let secret = "test";
 
-    if let Some(cache) = sessions.get(&jwt.session_id) {
-        let time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        // Décoder le token JWT
+        if let Some(decoded_jwt) = JWT::decode(&cookie, secret) {
+            let time = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
 
-        let vault_name = format!("{}_{}", jwt.id, time);
+            let info = VaultInfo::new(decoded_jwt.id, name, time);
 
-        let vault_path = format!("{}/{}{}", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
-
-        let vault_config = format!("{}/{}", vault_path, VAULT_CONFIG_ROOT);
-        let users_vault = format!("{}/{}", vault_path, VAULT_USERS_DIR);
-        let user_json = format!("{users_vault}{}.json", jwt.id);
-
-        fs::create_dir_all(&vault_path).unwrap();
-        fs::create_dir_all(&vault_config).unwrap();
-        fs::create_dir_all(&users_vault).unwrap();
-        fs::File::create(&user_json).unwrap();
-
-        let info = VaultInfo::new(jwt.id, &name, time);
-        create_vault(&connection, &info).unwrap();
-
-        let vault_key = generate_random_key();
-
-        let vault_key = derive_key(
-            &base64::encode(&vault_key),
-            generate_salt_from_login(&jwt.email).as_slice(),
-            10000,
-        );
-
-        let content = serde_json::to_string(&(vault_key, Perms::Admin)).unwrap();
-        let encrypted_content = encrypt(content.as_bytes(), cache.user_key.as_slice());
-        fs::write(&user_json, &encrypted_content).unwrap();
-
-        init_map(
-            &format!("{}/map.json", vault_path),
-            cache.user_key.as_slice(),
-        );
-
-        HttpResponse::Ok().json(format!("vault {} created successfully", name))
+            // Créer le coffre dans la base de données
+            match create_vault(&connection, &info) {
+                Ok(res) => HttpResponse::Ok().json(json!({
+                    "message": format!("Coffre '{}' créé avec succès !", res.name),
+                    "vault_id": res.id,
+                    "date": res.date,
+                })),
+                Err(e) => {
+                    eprintln!("Erreur lors de la création du coffre : {:?}", e);
+                    HttpResponse::InternalServerError().body("Erreur lors de la création du coffre.")
+                }
+            }
+        } else {
+            HttpResponse::Unauthorized().body("Token JWT invalide.")
+        }
     } else {
-        HttpResponse::ExpectationFailed().finish()
+        HttpResponse::BadRequest().body("Token JWT non trouvé dans les cookies.")
     }
 }
 

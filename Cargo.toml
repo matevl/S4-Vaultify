@@ -36,6 +36,8 @@ jsonwebtoken = "7.2"
 actix-rt = "2.5"
 rustls = "0.20"
 askama = "0.12"
+tera = "1.19.0"
+actix-multipart = "0.5"
 
 [profile.wasm-dev]
 inherits = "dev"

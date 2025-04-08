@@ -1,10 +1,27 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <title>Vos Vaults</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<div class="container">
+    <h1>Bienvenue, {{ username }}</h1>
+    <p>Voici vos vaults :</p>
 
+    <!-- Liste des vaults -->
+    <ul id="vault-list">
+        {% for vault in vaults %}
+        <li>
+            <strong>{{ vault.name }}</strong> (ID: {{ vault.id }})<br>
+            <small>Créé le : {{ vault.created_at }}</small>
+        </li>
+        {% endfor %}
+    </ul>
+
+    <!-- Lien de retour -->
+    <a href="/">Retour à l'accueil</a>
+</div>
 </body>
 </html>
