@@ -214,6 +214,7 @@ pub fn init_db_connection(database_path: &str) -> Result<Connection> {
 }
 
 
+#[derive(Serialize)]
 struct Vault {
     id: u32,
     name: String,
@@ -398,7 +399,7 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
  * @param user - The JWT containing the user information.
  * @return An HTTP response containing the list of vaults.
  */
-pub async fn get_vaults_list_query(user: web::Json<JWT>) -> impl Responder {
+pub async fn get_vaults_list_query(user: web::Json<JWT>) -> HttpResponse {
     let conn = CONNECTION.lock().unwrap();
     if let Ok(vaults) = get_user_vaults(&conn, user.id) {
         HttpResponse::Ok().json(vaults)
@@ -518,6 +519,8 @@ pub async fn load_vault_query(data: web::Json<(JWT, VaultInfo)>) -> impl Respond
     }
 }
 
+
+
 /**
  * Initializes the server configuration.
  */
@@ -559,3 +562,4 @@ pub fn init_server_config() {
     )
     .unwrap();
 }
+

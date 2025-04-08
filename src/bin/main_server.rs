@@ -38,7 +38,7 @@ use s4_vaultify::backend::VAULTS_DATA;
 use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
 use actix_files::Files;
-
+use rusqlite::params;
 
 
 
@@ -106,6 +106,91 @@ fn get_user_from_cookie(req: &HttpRequest) -> Option<String> {
     }
 }
 
+/*pub fn add_file_to_db(conn: &Connection, vault_id: u32, name: &str, path: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO files (vault_id, name, path, uploaded_at) VALUES (?, ?, ?, ?)",
+        params![vault_id, name, path, chrono::Utc::now().timestamp()],
+    )?;
+    Ok(())
+}*/
+
+/*async fn add_file_to_vault(
+    vault_id: web::Path<u32>,
+    mut payload: Multipart,
+) -> HttpResponse {
+    let vault_id = vault_id.into_inner();
+    let upload_dir = format!("./uploads/vault_{}", vault_id);
+
+    // Vérifier si le répertoire existe, sinon le créer
+    if let Err(e) = fs::create_dir_all(&upload_dir) {
+        eprintln!("Erreur lors de la création du répertoire : {:?}", e);
+        return HttpResponse::InternalServerError().body("Erreur lors de la création du répertoire.");
+    }
+
+    // Parcourir les parties de la requête (fichiers)
+    while let Ok(Some(mut field)) = payload.try_next().await {
+        // Récupérer le nom du fichier
+        let content_disposition = match field.content_disposition() {
+            Some(cd) => cd,
+            None => {
+                eprintln!("Disposition du contenu manquante.");
+                continue;
+            }
+        };
+
+        let filename = match content_disposition.get_filename() {
+            Some(name) => sanitize_filename::sanitize(name),
+            None => {
+                eprintln!("Nom du fichier manquant.");
+                continue;
+            }
+        };
+
+        let filepath = format!("{}/{}", upload_dir, filename);
+
+        // Écrire le fichier sur le disque
+        let mut f = match web::block(|| std::fs::File::create(&filepath)).await {
+            Ok(file) => file,
+            Err(e) => {
+                eprintln!("Erreur lors de la création du fichier : {:?}", e);
+                return HttpResponse::InternalServerError().body("Erreur lors de l'écriture du fichier.");
+            }
+        };
+
+        while let Some(chunk) = field.next().await {
+            let data = match chunk {
+                Ok(data) => data,
+                Err(e) => {
+                    eprintln!("Erreur lors de la lecture du chunk : {:?}", e);
+                    return HttpResponse::InternalServerError().body("Erreur lors de la lecture des données.");
+                }
+            };
+
+            if let Err(e) = web::block(move || f.write_all(&data).map(|_| f)).await {
+                eprintln!("Erreur lors de l'écriture sur le disque : {:?}", e);
+                return HttpResponse::InternalServerError().body("Erreur lors de l'écriture des données.");
+            }
+        }
+
+        // Enregistrer l'information dans la base de données
+        if let Err(e) = save_file_to_db(vault_id, &filename, &filepath).await {
+            eprintln!("Erreur lors de l'insertion dans la base de données : {:?}", e);
+            return HttpResponse::InternalServerError().body("Erreur lors de l'enregistrement en base.");
+        }
+    }
+
+    HttpResponse::Ok().body("Fichier(s) ajouté(s) avec succès !")
+}*/
+
+/*async fn save_file_to_db(vault_id: u32, filename: &str, filepath: &str) -> Result<(), rusqlite::Error> {
+    let conn = get_connection(); // À implémenter pour récupérer votre connexion
+    conn.execute(
+        "INSERT INTO files (vault_id, name, path, uploaded_at) VALUES (?, ?, ?, ?)",
+        params![vault_id, filename, filepath, chrono::Utc::now().timestamp()],
+    )?;
+    Ok(())
+}*/
+
 // Création d'utilisateur
 async fn create_user(form: web::Json<CreateUserForm>) -> HttpResponse {
     create_user_query(web::Json(form.into_inner())).await
@@ -162,53 +247,29 @@ pub async fn home(req: HttpRequest) -> impl Responder {
 pub async fn get_user_vaults_query(req: HttpRequest) -> impl Responder {
     // Récupérer le cookie JWT de la requête
     if let Some(token) = get_user_from_cookie(&req) {
-        let secret = "test";
+        let secret = "test";  // Remplacer par votre clé secrète pour JWT
 
         // Décoder le token JWT
         match JWT::decode(&token, secret) {
             Some(decoded_jwt) => {
-                // Charger les vaults depuis la base de données
-                let conn = CONNECTION.lock().unwrap();
-                match get_user_vaults(&conn, decoded_jwt.id) {
-                    Ok(vaults) => {
-                        // Lire le fichier HTML
-                        let file_path = Path::new("templates/vaults.html");
-                        let html_content = match read_to_string(file_path) {
-                            Ok(content) => content,
-                            Err(_) => {
-                                return HttpResponse::InternalServerError()
-                                    .body("Erreur lors du chargement du fichier HTML.");
-                            }
-                        };
+                // Appeler la fonction qui retourne un `impl Responder` (ici un `HttpResponse`)
+                let vaults = get_vaults_list_query(web::Json(decoded_jwt)).await;
 
-                        // Convertir les vaults en une chaîne HTML
-                        let vaults_html = vaults
-                            .iter()
-                            .map(|vault| {
-                                format!(
-                                    "<li><strong>{}</strong> (Utilisateur ID: {})<br><small>Date : {}</small></li>",
-                                    vault.name, vault.user_id, vault.date
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                            .join("\n");
+                // Créer un contexte pour Tera
+                let mut context = Context::new();
+                context.insert("vaults", &vaults);
 
-                        // Injecter les données dans le contenu HTML
-                        let html = html_content
-                            .replace("{{ username }}", &decoded_jwt.email)
-                            .replace("{% for vault in vaults %}{% endfor %}", &vaults_html);
+                // Charger le template Tera
+                let tera = Tera::new("templates/**/*").unwrap(); // Assurez-vous que les templates sont dans le dossier `templates`
 
-                        // Retourner le fichier HTML modifié
-                        HttpResponse::Ok().content_type("text/html").body(html)
-                    }
-                    Err(e) => {
-                        // Ici on renvoie l'erreur détaillée pour mieux comprendre le problème
-                        return HttpResponse::InternalServerError().body(format!("Erreur lors de la récupération des vaults : {:?}", e));
-                    }
-                }
-            }
+                // Rendre le template avec les données
+                let rendered_html = tera.render("vaults.html", &context).unwrap();
+
+                // Retourner la réponse HTTP avec le contenu généré
+                HttpResponse::Ok().content_type("text/html").body(rendered_html)
+            },
             None => {
-                // Si le token est invalide, renvoyer une erreur
+                // Retourner une réponse "Token invalide" ou toute autre erreur
                 HttpResponse::Unauthorized().body("Token invalide ou expiré.")
             }
         }
@@ -217,9 +278,10 @@ pub async fn get_user_vaults_query(req: HttpRequest) -> impl Responder {
         HttpResponse::Unauthorized().body("Token manquant.")
     }
 }
-
-
-
+pub fn get_connection() -> Connection {
+    let database_path = "./vaultify.db"; // Chemin configuré dans init_server_config
+    Connection::open(database_path).expect("Erreur lors de la connexion à la base de données")
+}
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let port = 443;
@@ -255,7 +317,7 @@ async fn main() -> std::io::Result<()> {
             .route("/login", web::post().to(login_user_query))
             .route("/create-vault", web::post().to(create_vault_query))
             .route("/load-vault", web::post().to(load_vault_query))
-
+            //.route("/vault/{vault_id}/add-file", web::post().to(add_file_to_vault))
             // Routes pour les fichiers statiques (images, CSS, JS, etc.)
             .service(Files::new("/static", "../static").show_files_listing())  // Servir le contenu statique
             .service(Files::new("/", "../templates").index_file("index.html"))  // Servir les templates, avec un fichier par défaut
