@@ -1,80 +1,77 @@
 use actix_files::NamedFile;
-use actix_web::{web, App, HttpServer, HttpResponse, HttpRequest, Responder, cookie::Cookie};
-use s4_vaultify::backend::account_manager::account_server::{create_vault_query,
-    create_user_query,  get_vaults_list_query, init_db_connection,
-    init_server_config, load_vault_query, login_user_query, JWT
+use actix_web::{cookie::Cookie, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
+use rustls_pemfile::{certs, pkcs8_private_keys};
+use s4_vaultify::backend::account_manager::account_server::{
+    create_user_query, create_vault_query, get_vaults_list_query, init_db_connection,
+    init_server_config, load_vault_query, login_user_query, JWT,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use rustls_pemfile::{certs, pkcs8_private_keys};
 use std::fs::File;
 use std::io::{BufReader, Cursor};
 use std::sync::Arc;
 use tera::Context;
 //use tokio_rustls::rustls::HandshakeType::Certificate;
+use askama::Template;
+use rustls::Certificate;
 use rustls::PrivateKey;
+use s4_vaultify::backend::account_manager::account_server::get_user_vaults;
 use s4_vaultify::backend::account_manager::account_server::CreateUserForm;
 use tokio_rustls::rustls::ServerConfig;
-use rustls::Certificate;
-use askama::Template;
-use s4_vaultify::backend::account_manager::account_server::get_user_vaults;
 //use s4_vaultify::bin::main_server::CONNECTION;
+use actix_files::Files;
 use lazy_static::lazy_static;
-use rusqlite::{Connection , Result};
-use std::sync::Mutex;
-use tera::Tera;
 use reqwest::Body;
-use std::path::Path;
-use std::fs::read_to_string;
+use rusqlite::params;
+use rusqlite::{Connection, Result};
 use s4_vaultify::backend::account_manager::account_server::create_vault;
-use std::fs;
-use s4_vaultify::backend::file_manager::mapping::init_map;
 use s4_vaultify::backend::account_manager::account_server::Perms;
-use s4_vaultify::backend::aes_keys::keys_password::generate_salt_from_login;
+use s4_vaultify::backend::account_manager::account_server::VaultInfo;
 use s4_vaultify::backend::aes_keys::keys_password::derive_key;
 use s4_vaultify::backend::aes_keys::keys_password::generate_random_key;
-use s4_vaultify::backend::account_manager::account_server::VaultInfo;
+use s4_vaultify::backend::aes_keys::keys_password::generate_salt_from_login;
+use s4_vaultify::backend::file_manager::mapping::init_map;
 use s4_vaultify::backend::VAULTS_DATA;
-use std::time::UNIX_EPOCH;
+use std::fs;
+use std::fs::read_to_string;
+use std::path::Path;
+use std::sync::Mutex;
 use std::time::SystemTime;
-use actix_files::Files;
-use rusqlite::params;
-
-
-
-
+use std::time::UNIX_EPOCH;
+use tera::Tera;
 
 lazy_static! {
     pub static ref CONNECTION: Mutex<Connection> =
         Mutex::new(Connection::open("my_db.sqlite").unwrap());
 }
-fn load_rustls_config(cert_path: &str, key_path: &str) -> Arc<ServerConfig> {
-    // Ouverture des fichiers de certificat et de clé privée
-    let cert_file = File::open(cert_path).expect("Impossible d'ouvrir le fichier du certificat");
-    let key_file = File::open(key_path).expect("Impossible d'ouvrir le fichier de clé privée");
 
-    // Chargement de la chaîne de certificats
+fn load_rustls_config(cert_path: &str, key_path: &str) -> Arc<ServerConfig> {
+    // Open certificate and private key files
+    let cert_file = File::open(cert_path).expect("Unable to open certificate file");
+    let key_file = File::open(key_path).expect("Unable to open private key file");
+
+    // Load certificate chain
     let cert_chain: Vec<Certificate> = certs(&mut BufReader::new(cert_file))
         .map(|cert| cert.map(|cert_der| Certificate(cert_der.as_ref().to_vec())))
         .collect::<Result<Vec<_>, _>>()
-        .expect("Erreur de chargement de la chaîne de certificats");
+        .expect("Error loading certificate chain");
 
-    // Chargement de la clé privée
+    // Load private key
     let key = pkcs8_private_keys(&mut BufReader::new(key_file))
         .collect::<Result<Vec<_>, _>>()
-        .expect("Erreur de chargement de la clé privée")
+        .expect("Error loading private key")
         .into_iter()
         .next()
-        .expect("Aucune clé privée trouvée");
+        .expect("No private key found");
 
-    // Conversion de la clé privée en PrivateKey
+    // Convert private key to PrivateKey
     let private_key = PrivateKey(key.secret_pkcs8_der().to_vec());
-    // Création de la configuration du serveur
+    // Create server configuration
     let config = ServerConfig::builder()
-        .with_safe_defaults() // Utiliser des paramètres de sécurité par défaut pour la configuration
-        .with_no_client_auth() // Désactiver l'authentification du client
-        .with_single_cert(cert_chain, private_key) // Ajouter le certificat et la clé privée
-        .expect("Impossible de configurer le certificat");
+        .with_safe_defaults() // Use default security parameters for configuration
+        .with_no_client_auth() // Disable client authentication
+        .with_single_cert(cert_chain, private_key) // Add certificate and private key
+        .expect("Unable to configure certificate");
 
     Arc::new(config)
 }
@@ -87,20 +84,20 @@ struct HomeTemplate {
     vault_info: String,
 }
 
-// Page d'inscription
+// Sign-up page
 async fn create_user_page() -> actix_web::Result<NamedFile> {
     Ok(NamedFile::open("../templates/create_user.html")?)
 }
 
-// Page de connexion
+// Login page
 async fn login_page() -> actix_web::Result<NamedFile> {
     Ok(NamedFile::open("../templates/login.html")?)
 }
 
-// Récupérer l'utilisateur à partir du cookie
+// Retrieve user from cookie
 fn get_user_from_cookie(req: &HttpRequest) -> Option<String> {
     if let Some(cookie) = req.cookie("user_token") {
-        Some(cookie.value().to_string()) // Retourner directement la valeur du token
+        Some(cookie.value().to_string()) // Directly return the token value
     } else {
         None
     }
@@ -121,19 +118,19 @@ fn get_user_from_cookie(req: &HttpRequest) -> Option<String> {
     let vault_id = vault_id.into_inner();
     let upload_dir = format!("./uploads/vault_{}", vault_id);
 
-    // Vérifier si le répertoire existe, sinon le créer
+    // Check if the directory exists, if not, create it
     if let Err(e) = fs::create_dir_all(&upload_dir) {
-        eprintln!("Erreur lors de la création du répertoire : {:?}", e);
-        return HttpResponse::InternalServerError().body("Erreur lors de la création du répertoire.");
+        eprintln!("Error creating directory: {:?}", e);
+        return HttpResponse::InternalServerError().body("Error creating directory.");
     }
 
-    // Parcourir les parties de la requête (fichiers)
+    // Iterate over the parts of the request (files)
     while let Ok(Some(mut field)) = payload.try_next().await {
-        // Récupérer le nom du fichier
+        // Get the file name
         let content_disposition = match field.content_disposition() {
             Some(cd) => cd,
             None => {
-                eprintln!("Disposition du contenu manquante.");
+                eprintln!("Missing content disposition.");
                 continue;
             }
         };
@@ -141,19 +138,19 @@ fn get_user_from_cookie(req: &HttpRequest) -> Option<String> {
         let filename = match content_disposition.get_filename() {
             Some(name) => sanitize_filename::sanitize(name),
             None => {
-                eprintln!("Nom du fichier manquant.");
+                eprintln!("Missing file name.");
                 continue;
             }
         };
 
         let filepath = format!("{}/{}", upload_dir, filename);
 
-        // Écrire le fichier sur le disque
+        // Write the file to disk
         let mut f = match web::block(|| std::fs::File::create(&filepath)).await {
             Ok(file) => file,
             Err(e) => {
-                eprintln!("Erreur lors de la création du fichier : {:?}", e);
-                return HttpResponse::InternalServerError().body("Erreur lors de l'écriture du fichier.");
+                eprintln!("Error creating file: {:?}", e);
+                return HttpResponse::InternalServerError().body("Error writing file.");
             }
         };
 
@@ -161,29 +158,29 @@ fn get_user_from_cookie(req: &HttpRequest) -> Option<String> {
             let data = match chunk {
                 Ok(data) => data,
                 Err(e) => {
-                    eprintln!("Erreur lors de la lecture du chunk : {:?}", e);
-                    return HttpResponse::InternalServerError().body("Erreur lors de la lecture des données.");
+                    eprintln!("Error reading chunk: {:?}", e);
+                    return HttpResponse::InternalServerError().body("Error reading data.");
                 }
             };
 
             if let Err(e) = web::block(move || f.write_all(&data).map(|_| f)).await {
-                eprintln!("Erreur lors de l'écriture sur le disque : {:?}", e);
-                return HttpResponse::InternalServerError().body("Erreur lors de l'écriture des données.");
+                eprintln!("Error writing to disk: {:?}", e);
+                return HttpResponse::InternalServerError().body("Error writing data.");
             }
         }
 
-        // Enregistrer l'information dans la base de données
+        // Save information to the database
         if let Err(e) = save_file_to_db(vault_id, &filename, &filepath).await {
-            eprintln!("Erreur lors de l'insertion dans la base de données : {:?}", e);
-            return HttpResponse::InternalServerError().body("Erreur lors de l'enregistrement en base.");
+            eprintln!("Error inserting into database: {:?}", e);
+            return HttpResponse::InternalServerError().body("Error saving to database.");
         }
     }
 
-    HttpResponse::Ok().body("Fichier(s) ajouté(s) avec succès !")
+    HttpResponse::Ok().body("File(s) added successfully!")
 }*/
 
 /*async fn save_file_to_db(vault_id: u32, filename: &str, filepath: &str) -> Result<(), rusqlite::Error> {
-    let conn = get_connection(); // À implémenter pour récupérer votre connexion
+    let conn = get_connection(); // Implement to retrieve your connection
     conn.execute(
         "INSERT INTO files (vault_id, name, path, uploaded_at) VALUES (?, ?, ?, ?)",
         params![vault_id, filename, filepath, chrono::Utc::now().timestamp()],
@@ -191,14 +188,12 @@ fn get_user_from_cookie(req: &HttpRequest) -> Option<String> {
     Ok(())
 }*/
 
-// Création d'utilisateur
+// Create user
 async fn create_user(form: web::Json<CreateUserForm>) -> HttpResponse {
     create_user_query(web::Json(form.into_inner())).await
-
-
 }
 
-// Route principale
+// Main route
 pub async fn home(req: HttpRequest) -> impl Responder {
     if let Some(token) = get_user_from_cookie(&req) {
         let secret = "test";
@@ -209,16 +204,18 @@ pub async fn home(req: HttpRequest) -> impl Responder {
                     username: decoded_jwt.email.clone(),
                     email: decoded_jwt.email.clone(),
                     vault_info: match &decoded_jwt.loaded_vault {
-                        Some(vault) => vault.name.clone(), // ou vault.id, ou un champ que tu veux
-                        None => "Aucune donnée".to_string(),
+                        Some(vault) => vault.name.clone(), // or vault.id, or any field you want
+                        None => "No data".to_string(),
                     },
                 };
-                HttpResponse::Ok().content_type("text/html").body(html.render().unwrap())
+                HttpResponse::Ok()
+                    .content_type("text/html")
+                    .body(html.render().unwrap())
             }
-            None => HttpResponse::Unauthorized().body("Token invalide ou expiré."),
+            None => HttpResponse::Unauthorized().body("Invalid or expired token."),
         }
     } else {
-        HttpResponse::Unauthorized().body("Aucun token trouvé.")
+        HttpResponse::Unauthorized().body("No token found.")
     }
 }
 
@@ -227,15 +224,15 @@ pub async fn home(req: HttpRequest) -> impl Responder {
         let secret = "test";
         if let Some(decoded_jwt) = JWT::decode(&token, secret) {
             let jwt_payload = web::Json(decoded_jwt);
-            // Assure-toi que la réponse est un Box<dyn Responder> avec le type Body = String
+            // Ensure the response is a Box<dyn Responder> with the type Body = String
             Box::new(get_vaults_list_query(jwt_payload).await) as Box<dyn Responder<Body = String>>
         } else {
-            // Retourne une réponse avec le corps type String
-            Box::new(HttpResponse::Unauthorized().body("Token invalide.")) as Box<dyn Responder<Body = String>>
+            // Return a response with the body type String
+            Box::new(HttpResponse::Unauthorized().body("Invalid token.")) as Box<dyn Responder<Body = String>>
         }
     } else {
-        // Retourne une autre réponse avec le corps type String
-        Box::new(HttpResponse::Unauthorized().body("Non authentifié.")) as Box<dyn Responder<Body = String>>
+        // Return another response with the body type String
+        Box::new(HttpResponse::Unauthorized().body("Not authenticated.")) as Box<dyn Responder<Body = String>>
     }
 }*/
 /**
@@ -245,85 +242,82 @@ pub async fn home(req: HttpRequest) -> impl Responder {
  * @return An HTTP response containing the user's vaults or an error message.
  */
 pub async fn get_user_vaults_query(req: HttpRequest) -> impl Responder {
-    // Récupérer le cookie JWT de la requête
     if let Some(token) = get_user_from_cookie(&req) {
-        let secret = "test";  // Remplacer par votre clé secrète pour JWT
+        let secret = "test"; // Replace with your secret key for JWT
 
-        // Décoder le token JWT
         match JWT::decode(&token, secret) {
             Some(decoded_jwt) => {
-                // Appeler la fonction qui retourne un `impl Responder` (ici un `HttpResponse`)
-                let vaults = get_vaults_list_query(web::Json(decoded_jwt)).await;
+                let vaults_response = get_vaults_list_query(web::Json(decoded_jwt)).await;
 
-                // Créer un contexte pour Tera
+                // Extract the body and deserialize into Vec<VaultInfo>
+                let body = vaults_response.into_body();
+                let body_bytes = actix_web::body::to_bytes(body).await.unwrap();
+                let vaults: Vec<VaultInfo> = serde_json::from_slice(&body_bytes).unwrap();
+
+                // Create the context for Tera
                 let mut context = Context::new();
                 context.insert("vaults", &vaults);
 
-                // Charger le template Tera
-                let tera = Tera::new("templates/**/*").unwrap(); // Assurez-vous que les templates sont dans le dossier `templates`
-
-                // Rendre le template avec les données
+                // Load and render the template
+                let tera = Tera::new("../templates/**/*").unwrap();
                 let rendered_html = tera.render("vaults.html", &context).unwrap();
 
-                // Retourner la réponse HTTP avec le contenu généré
-                HttpResponse::Ok().content_type("text/html").body(rendered_html)
-            },
-            None => {
-                // Retourner une réponse "Token invalide" ou toute autre erreur
-                HttpResponse::Unauthorized().body("Token invalide ou expiré.")
+                HttpResponse::Ok()
+                    .content_type("text/html")
+                    .body(rendered_html)
             }
+            None => HttpResponse::Unauthorized().body("Invalid or expired token."),
         }
     } else {
-        // Si aucun token n'est trouvé, renvoyer une erreur
-        HttpResponse::Unauthorized().body("Token manquant.")
+        HttpResponse::Unauthorized().body("Missing token.")
     }
 }
+
 pub fn get_connection() -> Connection {
-    let database_path = "./vaultify.db"; // Chemin configuré dans init_server_config
-    Connection::open(database_path).expect("Erreur lors de la connexion à la base de données")
+    let database_path = "./vaultify.db"; // Path configured in init_server_config
+    Connection::open(database_path).expect("Error connecting to the database")
 }
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let port = 443;
-    println!("Démarrage du serveur sur le port {}", port);
+    println!("Starting server on port {}", port);
 
-    // Initialiser la configuration du serveur (si nécessaire)
+    // Initialize server configuration (if necessary)
     init_server_config();
 
-    // Charger les fichiers de certificats pour SSL
-    let cert_path = "../certs/certificate.crt"; // Vérifie l'emplacement des fichiers
+    // Load certificate files for SSL
+    let cert_path = "../certs/certificate.crt"; // Verify the file locations
     let key_path = "../certs/private_unencrypted.key";
 
-    // Charger la configuration Rustls
+    // Load Rustls configuration
     let rustls_config = load_rustls_config(cert_path, key_path);
 
-    // Initialiser Tera pour gérer les templates
-    let tera = Tera::new("templates/**/*").unwrap();  // Charger les templates de la directory
+    // Initialize Tera to handle templates
+    let tera = Tera::new("../templates/**/*").unwrap(); // Load templates from the directory
 
-    // Démarrer le serveur Actix Web
+    // Start Actix Web server
     HttpServer::new(move || {
         App::new()
-            .app_data(web::Data::new(tera.clone()))  // Injecter Tera dans les handlers
-            .app_data(web::Data::new(Mutex::new(Vec::<String>::new())))  // Exemple de session partagée, adapte comme nécessaire
-
-            // Routes GET
+            .app_data(web::Data::new(tera.clone())) // Inject Tera into handlers
+            .app_data(web::Data::new(Mutex::new(Vec::<String>::new()))) // Example of shared session, adapt as needed
+            // GET routes
             .route("/create-user", web::get().to(create_user_page))
             .route("/login", web::get().to(login_page))
             .route("/home", web::get().to(home))
             .route("/vaults", web::get().to(get_user_vaults_query))
-
-            // Routes POST
+            // POST routes
             .route("/create-user", web::post().to(create_user))
             .route("/login", web::post().to(login_user_query))
             .route("/create-vault", web::post().to(create_vault_query))
             .route("/load-vault", web::post().to(load_vault_query))
             //.route("/vault/{vault_id}/add-file", web::post().to(add_file_to_vault))
-            // Routes pour les fichiers statiques (images, CSS, JS, etc.)
-            .service(Files::new("/static", "../static").show_files_listing())  // Servir le contenu statique
-            .service(Files::new("/", "../templates").index_file("index.html"))  // Servir les templates, avec un fichier par défaut
+            // Routes for static files (images, CSS, JS, etc.)
+            .service(Files::new("/static", "../static").show_files_listing()) // Serve static content
+            .service(Files::new("/", "../templates").index_file("index.html")) // Serve templates, with a default file
     })
-        .bind_rustls("0.0.0.0:443", Arc::try_unwrap(rustls_config).unwrap())?  // Utiliser SSL avec Rustls
-        .workers(8)  // Nombre de workers (threads) pour améliorer les performances
-        .run()
-        .await
+    .bind_rustls("0.0.0.0:443", Arc::try_unwrap(rustls_config).unwrap())? // Use SSL with Rustls
+    .workers(8) // Number of workers (threads) to improve performance
+    .run()
+    .await
 }

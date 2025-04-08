@@ -7,26 +7,26 @@ use crate::backend::file_manager::mapping::init_map;
 use crate::backend::{
     VAULTIFY_CONFIG, VAULTIFY_DATABASE, VAULTS_DATA, VAULT_CONFIG_ROOT, VAULT_USERS_DIR,
 };
-use actix_web::{web, HttpResponse, Responder, HttpRequest};
+use actix_web::cookie::time::Duration as Dudu; // Replace std::time::Duration with actix_web::cookie::time::Duration
+use actix_web::cookie::{Cookie, SameSite};
+use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use base64;
 use bcrypt::{hash, verify, DEFAULT_COST};
 use dirs;
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use lazy_static::lazy_static;
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, Mutex};
-use std::time::{ SystemTime, UNIX_EPOCH};
-use std::time::{Duration};
-use uuid::Uuid;
-use actix_web::cookie::{Cookie, SameSite};
-use actix_web::cookie::time::Duration as Dudu; // Remplacer std::time::Duration par actix_web::cookie::time::Duration
-use JWT as OJWT;
-use jsonwebtoken::{Header, Algorithm, EncodingKey, DecodingKey, encode, decode, Validation};
-use serde_json::json;
-use tera::Tera;
+use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tera::Context;
+use tera::Tera;
+use uuid::Uuid;
+use JWT as OJWT;
 
 /**
  * Enum representing user permissions.
@@ -38,9 +38,10 @@ pub enum Perms {
     Read,
     NoLoad,
 }
+
 fn get_user_from_cookie(req: &HttpRequest) -> Option<String> {
     if let Some(cookie) = req.cookie("user_token") {
-        Some(cookie.value().to_string()) // Retourner directement la valeur du token
+        Some(cookie.value().to_string()) // Directly return the token value
     } else {
         None
     }
@@ -69,7 +70,6 @@ pub struct CreateUserResponse {
     pub success: bool,
     pub message: String,
 }
-
 
 /**
  * Struct representing information about a vault.
@@ -130,22 +130,23 @@ impl JWT {
     }
 
     pub fn encode(&self, secret: &str) -> String {
-        let header = Header::new(Algorithm::HS256);  // Utilisation de l'algorithme HMAC-SHA256
+        let header = Header::new(Algorithm::HS256); // Use the HMAC-SHA256 algorithm
         let encoding_key = EncodingKey::from_secret(secret.as_ref());
 
         encode(&header, &self, &encoding_key).unwrap()
     }
-    // Décoder un token JWT en JWT struct
+
+    // Decode a JWT token into JWT struct
     pub fn decode(token: &str, secret: &str) -> Option<Self> {
         let decoding_key = DecodingKey::from_secret(secret.as_ref());
         let validation = Validation {
             leeway: 0,
-            validate_exp: false,  // Passez à true si vous voulez valider l'expiration
+            validate_exp: false, // Set to true if you want to validate expiration
             algorithms: vec![Algorithm::HS256],
             ..Validation::default()
         };
 
-        // Appeler la fonction `jsonwebtoken::decode`, et non `Self::decode`
+        // Call the `jsonwebtoken::decode` function, not `Self::decode`
         jsonwebtoken::decode::<Self>(token, &decoding_key, &validation)
             .ok()
             .map(|data| data.claims)
@@ -213,13 +214,13 @@ pub fn init_db_connection(database_path: &str) -> Result<Connection> {
     Connection::open(database_path)
 }
 
-
 #[derive(Serialize)]
 struct Vault {
     id: u32,
     name: String,
     date: i64,
 }
+
 /**
  * Creates a new user in the database.
  *
@@ -253,7 +254,6 @@ pub fn get_user_by_email(conn: &Connection, email: &str) -> Result<Option<(u32, 
     }
 }
 
-
 /**
  * Retrieves the vaults of a user from the database.
  *
@@ -262,7 +262,6 @@ pub fn get_user_by_email(conn: &Connection, email: &str) -> Result<Option<(u32, 
  * @return A Result containing a vector of VaultInfo.
  */
 pub fn get_user_vaults(conn: &Connection, user_id: u32) -> Result<Vec<VaultInfo>> {
-
     let mut stmt = conn.prepare(
         "SELECT user_id, name, date
          FROM vaults
@@ -314,7 +313,7 @@ pub async fn create_user_query(form: web::Json<CreateUserForm>) -> HttpResponse 
     let email = form.username.clone();
     let pw = form.password.clone();
 
-    // Vérifier si l'utilisateur existe déjà
+    // Check if the user already exists
     if let Ok(Some(_)) = get_user_by_email(&conn, &email) {
         return HttpResponse::Conflict().json(json!({
             "success": false,
@@ -322,22 +321,26 @@ pub async fn create_user_query(form: web::Json<CreateUserForm>) -> HttpResponse 
         }));
     }
 
-    // Hachage du mot de passe
+    // Hash the password
     let hash_pw = match hash(&pw, DEFAULT_COST) {
         Ok(hashed) => hashed,
-        Err(_) => return HttpResponse::InternalServerError().json(json!({
-            "success": false,
-            "message": "Erreur lors du hachage du mot de passe"
-        })),
+        Err(_) => {
+            return HttpResponse::InternalServerError().json(json!({
+                "success": false,
+                "message": "Erreur lors du hachage du mot de passe"
+            }))
+        }
     };
 
-    // Créer l'utilisateur dans la base de données
+    // Create the user in the database
     let _ = match create_user(&conn, &email, &hash_pw) {
         Ok(id) => id,
-        Err(_) => return HttpResponse::InternalServerError().json(json!({
-            "success": false,
-            "message": "Erreur lors de la création de l'utilisateur"
-        })),
+        Err(_) => {
+            return HttpResponse::InternalServerError().json(json!({
+                "success": false,
+                "message": "Erreur lors de la création de l'utilisateur"
+            }))
+        }
     };
 
     HttpResponse::Ok().json(json!({
@@ -361,26 +364,24 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
     if let Some((user_id, hash_pw)) = get_user_by_email(&conn, &email).unwrap() {
         if verify(&pw, &hash_pw).unwrap() {
             let session_id = generate_session_id();
-            let jwt_token = OJWT::new(&session_id, user_id, &email); // ✅ user_id est accessible
-            let secret = "test"; // Utiliser le secret de l'env
+            let jwt_token = OJWT::new(&session_id, user_id, &email); // ✅ user_id is accessible
+            let secret = "test"; // Use the secret from the environment
 
-            // Créer le token JWT
+            // Create the JWT token
             let jwt_string = jwt_token.encode(&secret);
 
-            // Créer le cookie avec le JWT
+            // Create the cookie with the JWT
             let cookie = Cookie::build("user_token", &jwt_string)
                 .http_only(true)
-                .secure(true) // Utiliser secure(true) si tu es en production (HTTPS)
+                .secure(true) // Use secure(true) if you are in production (HTTPS)
                 .path("/")
-                .max_age(Dudu::days(7))  // Le cookie expire après 7 jours
+                .max_age(Dudu::days(7)) // The cookie expires after 7 days
                 .finish();
-              // Affiche le JWT pour voir s'il est généré correctement
-            return HttpResponse::Ok()
-                .cookie(cookie)
-                .json(json!({
-                    "success": true,
-                    "message": "Connexion réussie"
-                }));
+            // Display the JWT to see if it is generated correctly
+            return HttpResponse::Ok().cookie(cookie).json(json!({
+                "success": true,
+                "message": "Connexion réussie"
+            }));
         }
     }
 
@@ -389,9 +390,6 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
         "message": "Email ou mot de passe incorrect"
     }))
 }
-
-
-
 
 /**
  * Endpoint to get the list of vaults for a user.
@@ -410,8 +408,9 @@ pub async fn get_vaults_list_query(user: web::Json<JWT>) -> HttpResponse {
 
 #[derive(Deserialize)]
 pub struct VaultForm {
-    name: String, // Le nom du champ doit correspondre à l'attribut `name` du formulaire HTML
+    name: String, // The name must match the `name` attribute of the HTML form
 }
+
 /**
  * Creates a new vault for a user.
  *
@@ -428,7 +427,7 @@ pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> Result<Vault> 
 
     let vault_id = conn.last_insert_rowid() as u32;
 
-    // Construire et retourner l'objet Vault
+    // Construct and return the Vault object
     Ok(Vault {
         id: vault_id,
         name: vault_info.name.clone(),
@@ -444,16 +443,16 @@ pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> Result<Vault> 
  */
 pub async fn create_vault_query(
     req: HttpRequest,
-    form: web::Form<VaultForm>, // Le formulaire ne contient qu'un seul champ (nom)
+    form: web::Form<VaultForm>, // The form contains only one field (name)
 ) -> impl Responder {
     let connection = CONNECTION.lock().unwrap();
-    let name: &str = &form.name; // Récupère le nom depuis le formulaire
+    let name: &str = &form.name; // Get the name from the form
 
-    // Récupérer le token JWT depuis les cookies
-    if let Some(cookie) = get_user_from_cookie(&req){
+    // Retrieve the JWT token from the cookies
+    if let Some(cookie) = get_user_from_cookie(&req) {
         let secret = "test";
 
-        // Décoder le token JWT
+        // Decode the JWT token
         if let Some(decoded_jwt) = JWT::decode(&cookie, secret) {
             let time = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -462,7 +461,7 @@ pub async fn create_vault_query(
 
             let info = VaultInfo::new(decoded_jwt.id, name, time);
 
-            // Créer le coffre dans la base de données
+            // Create the vault in the database
             match create_vault(&connection, &info) {
                 Ok(res) => HttpResponse::Ok().json(json!({
                     "message": format!("Coffre '{}' créé avec succès !", res.name),
@@ -471,7 +470,8 @@ pub async fn create_vault_query(
                 })),
                 Err(e) => {
                     eprintln!("Erreur lors de la création du coffre : {:?}", e);
-                    HttpResponse::InternalServerError().body("Erreur lors de la création du coffre.")
+                    HttpResponse::InternalServerError()
+                        .body("Erreur lors de la création du coffre.")
                 }
             }
         } else {
@@ -481,7 +481,6 @@ pub async fn create_vault_query(
         HttpResponse::BadRequest().body("Token JWT non trouvé dans les cookies.")
     }
 }
-
 
 /**
  * Endpoint to load a vault for a user.
@@ -518,8 +517,6 @@ pub async fn load_vault_query(data: web::Json<(JWT, VaultInfo)>) -> impl Respond
         HttpResponse::ExpectationFailed().finish()
     }
 }
-
-
 
 /**
  * Initializes the server configuration.
@@ -562,4 +559,3 @@ pub fn init_server_config() {
     )
     .unwrap();
 }
-
