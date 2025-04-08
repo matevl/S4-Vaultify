@@ -49,7 +49,7 @@
                 if (response.ok) {
                     const responseData = await response.json();
                     alert('User created successfully: ' + responseData.message); // Afficher le message de succès
-                    window.location.href = '/home'; // Rediriger vers la page d'accueil après l'inscription
+                    window.location.href = '/login'; // Rediriger vers la page d'accueil après l'inscription
                 } else {
                     const errorData = await response.json();
                     alert('Error: ' + errorData.message); // Afficher l'erreur
