@@ -406,6 +406,7 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
 pub async fn get_vaults_list_query(user: web::Json<JWT>) -> HttpResponse {
     let conn = CONNECTION.lock().unwrap();
     if let Ok(vaults) = get_user_vaults(&conn, user.id) {
+        println!("{:?}", &vaults);
         HttpResponse::Ok().json(vaults)
     } else {
         HttpResponse::Unauthorized().finish()
@@ -482,7 +483,6 @@ pub async fn create_vault_query(
                 fs::File::create(&user_json).unwrap();
 
                 let info = VaultInfo::new(decoded_jwt.id, &name, time);
-                create_vault(&connection, &info).unwrap();
 
                 let vault_key = generate_random_key();
 
