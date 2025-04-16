@@ -27,7 +27,11 @@
 <div class="button-group">
     <button onclick="window.location.href='/vaults'">Go Back to Vaults</button>
     <button onclick="openShareModal()">Share Vault</button>
+    <button onclick="triggerUpload()">Upload to DST</button>
+    <button onclick="triggerDownload()">Download from DST</button>
 </div>
+
+<input type="file" id="uploadInput" style="display: none;" onchange="handleUpload(event)">
 
 <div id="tree" class="tree-view"></div>
 
@@ -77,14 +81,14 @@
         for (const item of node.children) {
             const itemPath = path + '/' + item.name;
             html += `<li
-                            draggable="true"
-                            ondragstart="onDragStart('${itemPath}')"
-                            ondragover="event.preventDefault()"
-                            ondrop="onDrop('${itemPath}')"
-                        >
-                            ${item.type === 'folder' ? '📁' : '📄'} ${item.name}
-                            ${item.type === 'folder' ? renderTree(item, itemPath) : ''}
-                        </li>`;
+                        draggable="true"
+                        ondragstart="onDragStart('${itemPath}')"
+                        ondragover="event.preventDefault()"
+                        ondrop="onDrop('${itemPath}')"
+                    >
+                        ${item.type === 'folder' ? '📁' : '📄'} ${item.name}
+                        ${item.type === 'folder' ? renderTree(item, itemPath) : ''}
+                    </li>`;
         }
         html += '</ul>';
         return html;
@@ -92,6 +96,7 @@
 
     function onDragStart(path) {
         draggedItemPath = path;
+        dropTargetPath = path; // Allow selecting even without dropping
     }
 
     function onDrop(targetPath) {
@@ -143,7 +148,40 @@
         });
     }
 
-    // Load tree on page load
+    function triggerUpload() {
+        if (!dropTargetPath) {
+            alert("Select a destination by dragging an item.");
+            return;
+        }
+        document.getElementById('uploadInput').click();
+    }
+
+    function handleUpload(event) {
+        const file = event.target.files[0];
+        if (!file || !dropTargetPath) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('destination', dropTargetPath);
+
+        fetch(`/vaults/${vaultId}/upload`, {
+            method: 'POST',
+            body: formData
+        }).then(() => {
+            alert("File uploaded successfully.");
+            fetchTree();
+        });
+    }
+
+    function triggerDownload() {
+        if (!dropTargetPath) {
+            alert("Select a file by dragging it first.");
+            return;
+        }
+
+        window.location.href = `/vaults/${vaultId}/download?path=${encodeURIComponent(dropTargetPath)}`;
+    }
+
     window.onload = fetchTree;
 </script>
 </body>
