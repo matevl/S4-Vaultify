@@ -183,13 +183,13 @@ async fn main() -> std::io::Result<()> {
             .route("/login", web::get().to(login_page))
             .route("/home", web::get().to(home))
             .route("/vaults", web::get().to(get_user_vaults_query))
-            .route("/vaults/{vault_id}/tree", web::get().to(get_tree_vault))
+            .route("/vaults/{vault_id}", web::get().to(vault_detail_page))
             // POST routes
             .route("/create-user", web::post().to(create_user))
             .route("/login", web::post().to(login_user_query))
             .route("/create-vault", web::post().to(create_vault_query))
             .route("/load-vault", web::post().to(load_vault_query))
-            .route("/vaults/{vault_id}", web::get().to(vault_detail_page))
+            .route("/vaults/{vault_id}/tree", web::post().to(get_tree_vault))
             //.route("/vault/{vault_id}/add-file", web::post().to(add_file_to_vault))
             // Routes for static files (images, CSS, JS, etc.)
             .service(Files::new("/static", "../static").show_files_listing()) // Serve static content

@@ -70,7 +70,7 @@
         }
 
         fetch(`/vaults/${vaultId}/tree`, {
-            method: "GET",
+            method: "POST",
             credentials: "include",                    // send HttpOnly cookie
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(vaultInfo)             // just your VaultInfo struct

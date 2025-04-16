@@ -50,8 +50,11 @@
 
 <div class="vault-container">
     {% for vault in vaults %}
-    <a href="/vaults/{{ vault.user_id }}_{{ vault.date }}"
-       onclick='storeVaultInfo({{ vault.user_id }}, "{{ vault.name }}", {{ vault.date }})'>
+    <a href="#"
+       data-user="{{ vault.user_id }}"
+       data-name="{{ vault.name | escape }}"
+       data-date="{{ vault.date }}"
+       onclick="event.preventDefault(); handleVaultClick(this)">
         <div class="vault-box">
             <p><strong>Name:</strong> {{ vault.name }}</p>
             <p><strong>User ID:</strong> {{ vault.user_id }}</p>
@@ -62,10 +65,43 @@
     <p>No vaults found.</p>
     {% endfor %}
 </div>
+
 <script>
-    function storeVaultInfo(user_id, name, date) {
-        const info = { user_id, name, date };
-        localStorage.setItem('vault_info', JSON.stringify(info));
+    async function loadVault(vaultInfo) {
+        try {
+            const response = await fetch("/load-vault", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                credentials: "include", // send cookies with the request
+                body: JSON.stringify(vaultInfo)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Erreur (${response.status}): ${errorText}`);
+            }
+
+            const updatedJwt = await response.json();
+            console.log("✅ Vault chargé :", updatedJwt);
+
+            const vaultPath = `/vaults/${vaultInfo.user_id}_${vaultInfo.date}`;
+            window.location.href = vaultPath;
+        } catch (err) {
+            console.error("❌ Erreur loadVault :", err.message);
+            alert("Erreur lors du chargement du vault !");
+        }
+    }
+
+    function handleVaultClick(element) {
+        const vaultInfo = {
+            user_id: Number(element.dataset.user),
+            name: element.dataset.name,
+            date: Number(element.dataset.date)
+        };
+        localStorage.setItem('vault_info', JSON.stringify(vaultInfo));
+        loadVault(vaultInfo);
     }
 </script>
 </body>

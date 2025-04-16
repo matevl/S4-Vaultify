@@ -527,36 +527,64 @@ pub async fn create_vault_query(
  * @param data - A tuple containing the JWT and the VaultInfo.
  * @return An HTTP response containing the updated JWT with the loaded vault.
  */
-pub async fn load_vault_query(data: web::Json<(JWT, VaultInfo)>) -> impl Responder {
-    let (mut jwt, info) = data.into_inner();
+pub async fn load_vault_query(
+    req: HttpRequest,
+    vault_info: web::Json<VaultInfo>,
+) -> impl Responder {
+    let info = vault_info.into_inner();
 
-    if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.session_id) {
-        let vault_name = format!("{}_{}", info.user_id, info.date);
+    if let Some(cookie) = get_user_from_cookie(&req) {
+        let secret = "test";
+        if let Some(mut jwt) = JWT::decode(&cookie, secret) {
+            if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.session_id) {
+                let vault_name = format!("{}_{}", info.user_id, info.date);
 
-        let key_path = format!(
-            "{}/{}{}/{}{}.json",
-            ROOT.to_str().unwrap(),
-            VAULTS_DATA,
-            vault_name,
-            VAULT_USERS_DIR,
-            jwt.id
-        );
+                let key_path = format!(
+                    "{}/{}{}/{}{}.json",
+                    ROOT.to_str().unwrap(),
+                    VAULTS_DATA,
+                    vault_name,
+                    VAULT_USERS_DIR,
+                    jwt.id
+                );
 
-        let encrypted_content = fs::read(&key_path).unwrap();
-        let decrypted_content =
-            decrypt(encrypted_content.as_slice(), cache.user_key.as_slice()).unwrap();
-        let (vault_key, vault_perms): (Vec<u8>, Perms) =
-            serde_json::from_str(&String::from_utf8(decrypted_content).unwrap()).unwrap();
+                let encrypted_content = match fs::read(&key_path) {
+                    Ok(data) => data,
+                    Err(_) => return HttpResponse::NotFound().body("Vault file not found"),
+                };
 
-        if let None = cache.vault_key.get(&vault_name) {
-            cache.vault_key.insert(vault_name, vault_key);
-            cache.vault_perms = vault_perms;
+                let decrypted_content =
+                    match decrypt(encrypted_content.as_slice(), cache.user_key.as_slice()) {
+                        Ok(data) => data,
+                        Err(_) => {
+                            return HttpResponse::InternalServerError().body("Failed to decrypt")
+                        }
+                    };
+
+                let (vault_key, vault_perms): (Vec<u8>, Perms) =
+                    match serde_json::from_str(&String::from_utf8(decrypted_content).unwrap()) {
+                        Ok(parsed) => parsed,
+                        Err(_) => {
+                            return HttpResponse::InternalServerError().body("Invalid vault data")
+                        }
+                    };
+
+                if cache.vault_key.get(&vault_name).is_none() {
+                    cache.vault_key.insert(vault_name.clone(), vault_key);
+                    cache.vault_perms = vault_perms;
+                }
+
+                jwt.loaded_vault = Some(info.clone());
+
+                HttpResponse::Ok().json(jwt)
+            } else {
+                HttpResponse::Unauthorized().body("Invalid session")
+            }
+        } else {
+            HttpResponse::InternalServerError().body("Failed to decrypt")
         }
-
-        jwt.loaded_vault = Some(info.clone());
-        HttpResponse::Ok().json(jwt)
     } else {
-        HttpResponse::ExpectationFailed().finish()
+        HttpResponse::InternalServerError().body("Failed to decrypt")
     }
 }
 
