@@ -1,33 +1,64 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vaults</title>
     <style>
-        .vault-box {
-            border: 1px solid #ccc;
-            padding: 10px;
-            margin: 10px;
-            border-radius: 5px;
-            background-color: #f9f9f9;
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f2f5;
+            padding: 20px;
         }
+
+        h1 {
+            color: #333;
+        }
+
+        .vault-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        a {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .vault-box {
+            flex: 1 1 300px;
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #fff;
+            transition: background-color 0.2s, box-shadow 0.2s;
+        }
+
         .vault-box:hover {
             background-color: #e0e0e0;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .vault-box p {
+            margin: 5px 0;
         }
     </style>
 </head>
 <body>
-<h1>Liste des Vaults</h1>
-<div>
+<h1>All Vaults</h1>
+
+<div class="vault-container">
     {% for vault in vaults %}
-    <div class="vault-box">
-        <p><strong>Nom :</strong> {{ vault.name }}</p>
-        <p><strong>Utilisateur ID :</strong> {{ vault.user_id }}</p>
-        <p><strong>Date :</strong> {{ vault.date }}</p>
-    </div>
+    <a href="/vaults/{{ vault.user_id }}_{{ vault.date }}">
+        <div class="vault-box">
+            <p><strong>Name:</strong> {{ vault.name }}</p>
+            <p><strong>User ID:</strong> {{ vault.user_id }}</p>
+            <p><strong>Created:</strong> {{ vault.date }}</p>
+        </div>
+    </a>
     {% else %}
-    <p>Aucun vault trouvé.</p>
+    <p>No vaults found.</p>
     {% endfor %}
 </div>
 </body>
