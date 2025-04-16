@@ -107,7 +107,6 @@ pub struct JWT {
     pub id: u32,
     pub email: String,
     pub loaded_vault: Option<VaultInfo>,
-    pub user_key: Vec<u8>,
 }
 
 impl JWT {
@@ -124,7 +123,6 @@ impl JWT {
             id,
             email: email.to_string(),
             loaded_vault: None,
-            user_key: vec![],
         }
     }
 
