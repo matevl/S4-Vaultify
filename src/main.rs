@@ -18,6 +18,7 @@ use rustls::PrivateKey;
 use std::sync::Mutex;
 use tera::Tera;
 use tokio_rustls::rustls::ServerConfig;
+use s4_vaultify::backend::file_manager::mapping::get_tree_vault;
 
 fn load_rustls_config(cert_path: &str, key_path: &str) -> Arc<ServerConfig> {
     // Open certificate and private key files
@@ -279,6 +280,7 @@ async fn main() -> std::io::Result<()> {
             .route("/login", web::get().to(login_page))
             .route("/home", web::get().to(home))
             .route("/vaults", web::get().to(get_user_vaults_query))
+            .route("/vaults/{vault_id}/tree", web::get().to(get_tree_vault))
             // POST routes
             .route("/create-user", web::post().to(create_user))
             .route("/login", web::post().to(login_user_query))

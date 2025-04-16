@@ -1,10 +1,10 @@
-use crate::backend::account_manager::account_server::{VaultInfo, JWT};
-use crate::backend::aes_keys::crypted_key::encrypt;
-use crate::backend::file_manager::mapping::FileType::Folder;
+use crate::backend::account_manager::account_server::{VaultInfo, JWT, SESSION_CACHE};
+use crate::backend::aes_keys::crypted_key::{encrypt};
 use actix_web::{web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use crate::backend::aes_keys::decrypted_key::decrypt;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct FileMap {
@@ -28,7 +28,7 @@ struct FileTree {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct FrontFileMap {
-    binary: String,
+    original_filename: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -66,8 +66,8 @@ impl FileTree {
 }
 
 impl FrontFileMap {
-    pub fn new(binary: String) -> Self {
-        Self { binary }
+    pub fn new(original_filename: String) -> Self {
+        Self { original_filename }
     }
 }
 
@@ -93,8 +93,8 @@ impl FileType {
 }
 
 impl FrontFileType {
-    pub fn new_file(binary: String) -> Self {
-        FrontFileType::File(FrontFileMap::new(binary))
+    pub fn new_file(original_filename: String) -> Self {
+        FrontFileType::File(FrontFileMap::new(original_filename))
     }
 
     pub fn new_folder(files: Vec<FrontFileTree>) -> Self {
@@ -134,9 +134,60 @@ pub fn update_map(original_filename: String, binary: String, metadata: String, f
 }
 
 pub fn server_map_to_client_map(tree: &FileTree) -> FrontFileType {
-    todo!()
+    match &tree.file_type {
+        FileType::File(file_map) => {
+            FrontFileType::new_file(file_map.original_filename.clone())
+        }
+        FileType::Folder(children) => {
+            let client_children = children
+                .iter()
+                .map(|child| {
+                    FrontFileTree::new(child.name.clone(), server_map_to_client_map(child))
+                })
+                .collect();
+            FrontFileType::new_folder(client_children)
+        }
+    }
 }
 
-pub async fn get_tree_vault(data: web::Json<(JWT, VaultInfo)>) -> impl Responder {
-    HttpResponse::Ok().json("")
+pub async fn get_tree_vault(
+    path: web::Path<String>,
+    data: web::Json<(String, JWT, VaultInfo)>
+) -> impl Responder {
+    let vault_id = path.into_inner();
+    let (vault_name, jwt, _vault_info) = data.into_inner();
+
+    let map_path = Path::new("vaults")
+        .join(vault_id)
+        .join("map.json");
+
+    if !map_path.exists() {
+        return HttpResponse::NotFound().body("Vault not found");
+    }
+
+    let encrypted = match fs::read(&map_path) {
+        Ok(data) => data,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read map"),
+    };
+
+    let session_cache = SESSION_CACHE.lock().unwrap();
+    let key = match session_cache.get(&jwt.session_id)
+        .and_then(|cache| cache.vault_key.get(&vault_name)) {
+        Some(k) => k,
+        None => return HttpResponse::Unauthorized().body("Vault key not found in session"),
+    };
+
+    let decrypted = match decrypt(&encrypted, key) {
+        Ok(data) => data,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to decrypt map"),
+    };
+
+    let tree: FileTree = match serde_json::from_slice(&decrypted) {
+        Ok(t) => t,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to parse map"),
+    };
+
+    let client_tree = server_map_to_client_map(&tree);
+
+    HttpResponse::Ok().json(client_tree)
 }
