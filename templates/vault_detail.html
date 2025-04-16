@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="/static/style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vault Detail</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .button-group { margin-bottom: 20px; }
+        button { padding: 10px 20px; margin-right: 10px; cursor: pointer; }
+
+        .tree-view ul { list-style: none; padding-left: 20px; }
+        .tree-view li { cursor: pointer; padding: 5px; }
+
+        .drop-target { border: 2px dashed #aaa; background-color: #f0f0f0; }
+
+        /* Modal styles */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 20px; border-radius: 10px; width: 300px; }
+        .modal-content input, .modal-content select { width: 100%; margin-bottom: 10px; padding: 5px; }
+        .modal-buttons { display: flex; justify-content: space-between; }
+    </style>
+</head>
+<body>
+<div class="button-group">
+    <button onclick="window.location.href='/vaults'">Go Back to Vaults</button>
+    <button onclick="openShareModal()">Share Vault</button>
+</div>
+
+<div id="tree" class="tree-view"></div>
+
+<!-- Share Vault Modal -->
+<div id="shareModal" class="modal">
+    <div class="modal-content">
+        <h3>Share this Vault</h3>
+        <input type="email" id="shareEmail" placeholder="User email">
+        <select id="sharePerms">
+            <option value="read">Read</option>
+            <option value="write">Write</option>
+        </select>
+        <div class="modal-buttons">
+            <button onclick="submitShare()">Share</button>
+            <button onclick="closeShareModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Move confirmation -->
+<div id="moveConfirm" class="modal">
+    <div class="modal-content">
+        <p id="moveMsg"></p>
+        <div class="modal-buttons">
+            <button onclick="confirmMove()">Confirm</button>
+            <button onclick="cancelMove()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const vaultId = window.location.pathname.split("/").pop();
+    let draggedItemPath = null;
+    let dropTargetPath = null;
+
+    function fetchTree() {
+        fetch(`/vaults/${vaultId}/tree`)
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('tree').innerHTML = renderTree(data);
+            });
+    }
+
+    function renderTree(node, path = "") {
+        if (!node) return "";
+        let html = '<ul>';
+        for (const item of node.children) {
+            const itemPath = path + '/' + item.name;
+            html += `<li
+                            draggable="true"
+                            ondragstart="onDragStart('${itemPath}')"
+                            ondragover="event.preventDefault()"
+                            ondrop="onDrop('${itemPath}')"
+                        >
+                            ${item.type === 'folder' ? '📁' : '📄'} ${item.name}
+                            ${item.type === 'folder' ? renderTree(item, itemPath) : ''}
+                        </li>`;
+        }
+        html += '</ul>';
+        return html;
+    }
+
+    function onDragStart(path) {
+        draggedItemPath = path;
+    }
+
+    function onDrop(targetPath) {
+        dropTargetPath = targetPath;
+        document.getElementById("moveMsg").textContent = `Move ${draggedItemPath} to ${dropTargetPath}?`;
+        document.getElementById("moveConfirm").style.display = "flex";
+    }
+
+    function confirmMove() {
+        fetch(`/vaults/${vaultId}/move`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ from_path: draggedItemPath, to_path: dropTargetPath })
+        }).then(() => {
+            fetchTree();
+            closeMoveModal();
+        });
+    }
+
+    function cancelMove() {
+        closeMoveModal();
+    }
+
+    function closeMoveModal() {
+        document.getElementById("moveConfirm").style.display = "none";
+        draggedItemPath = null;
+        dropTargetPath = null;
+    }
+
+    function openShareModal() {
+        document.getElementById("shareModal").style.display = "flex";
+    }
+
+    function closeShareModal() {
+        document.getElementById("shareModal").style.display = "none";
+        document.getElementById("shareEmail").value = "";
+    }
+
+    function submitShare() {
+        const email = document.getElementById("shareEmail").value;
+        const permission = document.getElementById("sharePerms").value;
+        fetch(`/vaults/${vaultId}/share`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, permission })
+        }).then(() => {
+            closeShareModal();
+            alert("Vault shared successfully.");
+        });
+    }
+
+    // Load tree on page load
+    window.onload = fetchTree;
+</script>
+</body>
+</html>
