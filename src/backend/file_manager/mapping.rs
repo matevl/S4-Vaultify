@@ -1,10 +1,11 @@
-use crate::backend::account_manager::account_server::{VaultInfo, JWT, SESSION_CACHE};
+use crate::backend::account_manager::account_server::{VaultInfo, JWT, ROOT, SESSION_CACHE};
 use crate::backend::aes_keys::crypted_key::{encrypt};
 use actix_web::{web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use crate::backend::aes_keys::decrypted_key::decrypt;
+use crate::backend::{VAULTS_DATA, VAULT_USERS_DIR};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct FileMap {
@@ -151,43 +152,47 @@ pub fn server_map_to_client_map(tree: &FileTree) -> FrontFileType {
 }
 
 pub async fn get_tree_vault(
-    path: web::Path<String>,
-    data: web::Json<(String, JWT, VaultInfo)>
+    data: web::Json<(JWT, VaultInfo)>
 ) -> impl Responder {
-    let vault_id = path.into_inner();
-    let (vault_name, jwt, _vault_info) = data.into_inner();
 
-    let map_path = Path::new("vaults")
-        .join(vault_id)
-        .join("map.json");
+    let (jwt, vault_info) = data.into_inner();
 
-    if !map_path.exists() {
-        return HttpResponse::NotFound().body("Vault not found");
-    }
+    let vault_name = format!("{}_{}", vault_info.user_id, vault_info.date);
+
+    let mut vault_path = format!(
+        "{}/{}{}/",
+        ROOT.to_str().unwrap(),
+        VAULTS_DATA,
+        vault_name
+    );
+
+    let mut map_path = vault_path.clone();
+    map_path.push_str("map.json");
+
 
     let encrypted = match fs::read(&map_path) {
         Ok(data) => data,
         Err(_) => return HttpResponse::InternalServerError().body("Failed to read map"),
     };
 
-    let session_cache = SESSION_CACHE.lock().unwrap();
-    let key = match session_cache.get(&jwt.session_id)
-        .and_then(|cache| cache.vault_key.get(&vault_name)) {
-        Some(k) => k,
-        None => return HttpResponse::Unauthorized().body("Vault key not found in session"),
-    };
+    if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.session_id) {
+        let key = cache.user_key.clone();
 
-    let decrypted = match decrypt(&encrypted, key) {
-        Ok(data) => data,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to decrypt map"),
-    };
+        let decrypted = match decrypt(&encrypted, key.as_slice()) {
+            Ok(data) => data,
+            Err(_) => return HttpResponse::InternalServerError().body("Failed to decrypt map"),
+        };
 
-    let tree: FileTree = match serde_json::from_slice(&decrypted) {
-        Ok(t) => t,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to parse map"),
-    };
+        let tree: FileTree = match serde_json::from_slice(&decrypted) {
+            Ok(t) => t,
+            Err(_) => return HttpResponse::InternalServerError().body("Failed to parse map"),
+        };
 
-    let client_tree = server_map_to_client_map(&tree);
+        let client_tree = server_map_to_client_map(&tree);
 
-    HttpResponse::Ok().json(client_tree)
+        HttpResponse::Ok().json(client_tree)
+    }
+    else {
+        HttpResponse::InternalServerError().body("Failed to get vault")
+    }
 }
