@@ -1,11 +1,11 @@
 use crate::backend::account_manager::account_server::{VaultInfo, JWT, ROOT, SESSION_CACHE};
-use crate::backend::aes_keys::crypted_key::{encrypt};
+use crate::backend::aes_keys::crypted_key::encrypt;
+use crate::backend::aes_keys::decrypted_key::decrypt;
+use crate::backend::{VAULTS_DATA, VAULT_USERS_DIR};
 use actix_web::{web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use crate::backend::aes_keys::decrypted_key::decrypt;
-use crate::backend::{VAULTS_DATA, VAULT_USERS_DIR};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct FileMap {
@@ -136,9 +136,7 @@ pub fn update_map(original_filename: String, binary: String, metadata: String, f
 
 pub fn server_map_to_client_map(tree: &FileTree) -> FrontFileType {
     match &tree.file_type {
-        FileType::File(file_map) => {
-            FrontFileType::new_file(file_map.original_filename.clone())
-        }
+        FileType::File(file_map) => FrontFileType::new_file(file_map.original_filename.clone()),
         FileType::Folder(children) => {
             let client_children = children
                 .iter()
@@ -151,24 +149,15 @@ pub fn server_map_to_client_map(tree: &FileTree) -> FrontFileType {
     }
 }
 
-pub async fn get_tree_vault(
-    data: web::Json<(JWT, VaultInfo)>
-) -> impl Responder {
-
+pub async fn get_tree_vault(data: web::Json<(JWT, VaultInfo)>) -> impl Responder {
     let (jwt, vault_info) = data.into_inner();
 
     let vault_name = format!("{}_{}", vault_info.user_id, vault_info.date);
 
-    let mut vault_path = format!(
-        "{}/{}{}/",
-        ROOT.to_str().unwrap(),
-        VAULTS_DATA,
-        vault_name
-    );
+    let mut vault_path = format!("{}/{}{}/", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
 
     let mut map_path = vault_path.clone();
     map_path.push_str("map.json");
-
 
     let encrypted = match fs::read(&map_path) {
         Ok(data) => data,
@@ -191,8 +180,7 @@ pub async fn get_tree_vault(
         let client_tree = server_map_to_client_map(&tree);
 
         HttpResponse::Ok().json(client_tree)
-    }
-    else {
+    } else {
         HttpResponse::InternalServerError().body("Failed to get vault")
     }
 }

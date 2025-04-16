@@ -15,10 +15,10 @@ use askama::Template;
 use rusqlite::{Connection, Result};
 use rustls::Certificate;
 use rustls::PrivateKey;
+use s4_vaultify::backend::file_manager::mapping::get_tree_vault;
 use std::sync::Mutex;
 use tera::Tera;
 use tokio_rustls::rustls::ServerConfig;
-use s4_vaultify::backend::file_manager::mapping::get_tree_vault;
 
 fn load_rustls_config(cert_path: &str, key_path: &str) -> Arc<ServerConfig> {
     // Open certificate and private key files
@@ -248,6 +248,10 @@ pub async fn get_user_vaults_query(req: HttpRequest) -> impl Responder {
     }
 }
 
+async fn vault_detail_page() -> actix_web::Result<NamedFile> {
+    Ok(NamedFile::open("../templates/vault_detail.html")?)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let port = 443;
@@ -286,6 +290,7 @@ async fn main() -> std::io::Result<()> {
             .route("/login", web::post().to(login_user_query))
             .route("/create-vault", web::post().to(create_vault_query))
             .route("/load-vault", web::post().to(load_vault_query))
+            .route("/vaults/{vault_id}", web::get().to(vault_detail_page))
             //.route("/vault/{vault_id}/add-file", web::post().to(add_file_to_vault))
             // Routes for static files (images, CSS, JS, etc.)
             .service(Files::new("/static", "../static").show_files_listing()) // Serve static content
