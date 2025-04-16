@@ -2,7 +2,7 @@ use crate::backend::account_manager::account_server::{VaultInfo, JWT, ROOT, SESS
 use crate::backend::aes_keys::crypted_key::encrypt;
 use crate::backend::aes_keys::decrypted_key::decrypt;
 use crate::backend::{VAULTS_DATA, VAULT_USERS_DIR};
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -149,8 +149,18 @@ pub fn server_map_to_client_map(tree: &FileTree) -> FrontFileType {
     }
 }
 
-pub async fn get_tree_vault(data: web::Json<(JWT, VaultInfo)>) -> impl Responder {
-    let (jwt, vault_info) = data.into_inner();
+pub async fn get_tree_vault(req: HttpRequest, info: web::Json<VaultInfo>) -> impl Responder {
+    // 1) extract and decode JWT from the HttpOnly cookie
+    let token = match req.cookie("user_token") {
+        Some(c) => c.value().to_string(),
+        None => return HttpResponse::Unauthorized().body("Not authenticated"),
+    };
+    let secret = "test"; // your secret
+    let jwt = match JWT::decode(&token, secret) {
+        Some(j) => j,
+        None => return HttpResponse::Unauthorized().body("Invalid token"),
+    };
+    let vault_info = info.into_inner();
 
     let vault_name = format!("{}_{}", vault_info.user_id, vault_info.date);
 
