@@ -195,8 +195,8 @@ pub async fn get_tree_vault(req: HttpRequest, info: web::Json<VaultInfo>) -> imp
     }
 }
 
-
-fn extract_node(tree: &mut FileTree, path: &[&str]) -> Option<FileTree> { //&[&str] for reference to slice
+fn extract_node(tree: &mut FileTree, path: &[&str]) -> Option<FileTree> {
+    //&[&str] for reference to slice
     if path.is_empty() {
         return None;
     }
@@ -232,18 +232,70 @@ fn insert_node(tree: &mut FileTree, path: &[&str], node: FileTree) -> bool {
     false
 }
 
-pub fn move_in_map(from_path: &str, to_path: &str) {
-    let map_path = Path::new("binary_files").join("map.json");
-    let content = fs::read_to_string(&map_path).expect("Failed to read map.json");
-    let mut root: FileTree = serde_json::from_str(&content).expect("Invalid map.json");
+#[derive(Deserialize)]
+struct MoveRequest {
+    from_path: String,
+    to_path: String,
+}
 
-    let from_segments: Vec<&str> = from_path.trim_matches('/').split('/').collect();
-    let node = extract_node(&mut root, &from_segments).expect("Invalid source path");
 
-    let to_segments: Vec<&str> = to_path.trim_matches('/').split('/').collect();
-    let success = insert_node(&mut root, &to_segments, node);
-    assert!(success, "Invalid destination path");
+pub async fn move_tree_vault(req: HttpRequest, info: web::Json<VaultInfo>, move_info: web::Json<MoveRequest>) -> impl Responder {
+    let token = match req.cookie("user_token") {
+        Some(c) => c.value().to_string(),
+        None => return HttpResponse::Unauthorized().body("Not authenticated"),
+    };
+    let secret = "test";
+    let jwt = match JWT::decode(&token, secret) {
+        Some(j) => j,
+        None => return HttpResponse::Unauthorized().body("Invalid token"),
+    };
+    let vault_info = info.into_inner();
 
-    let new_content = serde_json::to_string_pretty(&root).unwrap();
-    fs::write(&map_path, new_content).expect("Failed to write map.json");
+    let vault_name = format!("{}_{}", vault_info.user_id, vault_info.date);
+
+    let mut vault_path = format!("{}/{}{}/", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
+
+    let mut map_path = vault_path.clone();
+    map_path.push_str("map.json");
+
+    let encrypted = match fs::read(&map_path) {
+        Ok(data) => data,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read map"),
+    };
+
+    if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.session_id) {
+        let key = cache.user_key.clone();
+
+        let decrypted = match decrypt(&encrypted, key.as_slice()) {
+            Ok(data) => data,
+            Err(_) => return HttpResponse::InternalServerError().body("Failed to decrypt map"),
+        };
+
+        let mut tree: FileTree = match serde_json::from_slice(&decrypted) {
+            Ok(t) => t,
+            Err(_) => return HttpResponse::InternalServerError().body("Failed to parse map"),
+        };
+
+        let from_segments: Vec<&str> = move_info.from_path.trim_matches('/').split('/').collect();
+        let node = match extract_node(&mut tree, &from_segments) {
+            Some(n) => n,
+            None => return HttpResponse::BadRequest().body("Source not found"),
+        };
+
+        let to_segments: Vec<&str> = move_info.to_path.trim_matches('/').split('/').collect();
+        if !insert_node(&mut tree, &to_segments, node) {
+            return HttpResponse::BadRequest().body("Invalid destination path");
+        }
+
+        let new_content = serde_json::to_vec(&tree).unwrap();
+        let new_encrypted = encrypt(&new_content, key.as_slice());
+
+        if let Err(_) = fs::write(&map_path, new_encrypted) {
+            return HttpResponse::InternalServerError().body("Failed to write map");
+        }
+
+        HttpResponse::Ok().body("Node moved")
+    } else {
+        HttpResponse::InternalServerError().body("Failed to get vault")
+    }
 }

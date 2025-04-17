@@ -15,7 +15,7 @@ use askama::Template;
 use rusqlite::{Connection, Result};
 use rustls::Certificate;
 use rustls::PrivateKey;
-use s4_vaultify::backend::file_manager::mapping::get_tree_vault;
+use s4_vaultify::backend::file_manager::mapping::{get_tree_vault, move_tree_vault};
 use std::sync::Mutex;
 use tera::Tera;
 use tokio_rustls::rustls::ServerConfig;
@@ -189,7 +189,8 @@ async fn main() -> std::io::Result<()> {
             .route("/login", web::post().to(login_user_query))
             .route("/create-vault", web::post().to(create_vault_query))
             .route("/load-vault", web::post().to(load_vault_query))
-            .route("/vaults/{vault_id}/tree", web::post().to(get_tree_vault))
+            .route("/vaults/{vault_id}/tree", web::get().to(get_tree_vault))
+            .route("/vaults/{vault_id}/move", web::post().to(move_tree_vault))
             //.route("/vault/{vault_id}/add-file", web::post().to(add_file_to_vault))
             // Routes for static files (images, CSS, JS, etc.)
             .service(Files::new("/static", "../static").show_files_listing()) // Serve static content
