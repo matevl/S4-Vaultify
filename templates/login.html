@@ -1,71 +1,166 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Connexion</title>
-    <link rel="stylesheet" href="../static/style.css">
-    <link rel="icon" href="../static/vaultify-grad.ico" type="image/x-icon"> <!-- Icône du site -->
+    <link rel="icon" href="/static/vaultify-grad.png" />
+    <link rel="stylesheet" href="login.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-<div class="container">
-    <img src="../static/vault-text-svg.svg" alt="Bannière" class="banner-image svg"> <!-- Image en haut -->
-    <h2>Se connecter</h2>
-    <form id="loginForm">
-        <div class="column">
-            <label for="email">Email:</label>
-            <input type="email" id="email" name="email" required>
-        </div>
-        <div class="column">
-            <label for="password">Mot de passe:</label>
-            <input type="password" id="password" name="password" required>
-        </div>
-        <div class="column">
-            <button type="submit">Se connecter</button>
-        </div>
-        <p>Pas encore inscrit? <a href="/create-user">S'inscrire</a></p>
-    </form>
-</div>
+<body class="bg-gray-100">
+<div id="root"></div>
 
-<script>
-    document.getElementById('loginForm').addEventListener('submit', async function(event) {
-        event.preventDefault(); // Empêcher la soumission normale du formulaire
 
-        // Récupérer les valeurs du formulaire
-        const email = document.getElementById('email').value;
-        const password = document.getElementById('password').value;
+<!-- React via CDN -->
+<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-        // Créer l'objet de données à envoyer
-        const loginData = {
-            username: email,
-            password: password
+<!-- Ton composant React -->
+<script type="text/babel">
+    function Login() {
+        const [email, setEmail] = React.useState('');
+        const [password, setPassword] = React.useState('');
+
+        const handleSubmit = async (e) => {
+            e.preventDefault();
+
+            const loginData = { username: email, password };
+
+            try {
+                const res = await fetch('/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(loginData)
+                });
+
+                if (res.ok) {
+                    window.location.href = '/home';
+                } else {
+                    const err = await res.json();
+                    alert('Erreur : ' + err.message);
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Erreur serveur');
+            }
         };
 
-        // Envoyer les données au serveur via fetch
-        try {
-            const response = await fetch('/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json' // Spécifier que l'on envoie des données en JSON
-                },
-                body: JSON.stringify(loginData) // Convertir les données en JSON
-            });
+        return (
+            <div className="login-page" >
+                <div className="login-background-animated"></div>
+                <div className="login-box">
+                    <div className="login-logo">
+                        <img src="../static/vault-text-svg.svg" alt="Bannière" className="logo-img" />
+                    </div>
+                    <h2 className="login-title">Se connecter</h2>
+                    <form onSubmit={handleSubmit} className="login-form">
+                        <div className="input-icon-wrapper">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="input-icon" fill="none" viewBox="0 0 24 24" stroke="#ffffff">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                            </svg>
 
-            if (response.ok) {
-                // Si la connexion est réussie, rediriger vers /home
-                window.location.href = '/home';
-            } else {
-                // Afficher un message d'erreur si la connexion échoue
-                const errorData = await response.json();
-                alert('Erreur: ' + errorData.message);
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            alert('Une erreur est survenue lors de la connexion');
-        }
-    });
+                            <input
+                                type="email"
+                                id="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                required
+                                placeholder="Email"
+                                className="login-input"
+                            />
+                        </div>
+                        <div className="input-icon-wrapper">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="input-icon" fill="none" viewBox="0 0 24 24" stroke="#ffffff">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 10V7a4 4 0 00-8 0v3M5 10h14v10H5V10z" />
+                            </svg>
+
+                            <input
+                                type="password"
+                                id="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                                placeholder="Mot de passe"
+                                className="login-input"
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            className="login-button"
+                        >
+                            Se connecter
+                        </button>
+                        <p className="login-text">
+                            Pas encore inscrit ? <a href="/create-user" className="login-link">S'inscrire</a>
+                        </p>
+                    </form>
+                </div>
+            </div>
+        );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<Login />);
 </script>
-
-<script src="../static/app.js"></script>
+<style>
+@keyframes distortWaves {
+    0%, 100% {
+        transform: scale(1.05) skew(0deg, 0deg) translate(0px, 0px);
+    }
+    50% {
+        transform: scale(1.12) skew(-3deg, 3deg) translate(5px, -5px);
+    }
+}
+@keyframes lightBreath {
+    0%, 100% {
+        opacity: 0.8;
+        filter: blur(35px);
+    }
+    50% {
+        opacity: 1;
+        filter: blur(45px);
+    }
+}
+@keyframes colorDrift {
+    0% {
+        background-position:
+            -50% 50%,
+            150% 50%,
+            50% 150%,
+            50% -50%;
+    }
+    25% {
+        background-position:
+            25% 75%,
+            75% 25%,
+            75% 75%,
+            25% 25%;
+    }
+    50% {
+        background-position:
+            150% 50%,
+            -50% 50%,
+            50% -50%,
+            50% 150%;
+    }
+    75% {
+        background-position:
+            75% 25%,
+            25% 75%,
+            25% 25%,
+            75% 75%;
+    }
+    100% {
+        background-position:
+            -50% 50%,
+            150% 50%,
+            50% 150%,
+            50% -50%;
+    }
+}
+</style>
 </body>
 </html>
