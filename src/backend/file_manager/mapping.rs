@@ -233,7 +233,7 @@ fn insert_node(tree: &mut FileTree, path: &[&str], node: FileTree) -> bool {
 }
 
 #[derive(Deserialize)]
-struct MoveRequest {
+pub struct MoveRequest {
     from_path: String,
     to_path: String,
 }
