@@ -194,3 +194,56 @@ pub async fn get_tree_vault(req: HttpRequest, info: web::Json<VaultInfo>) -> imp
         HttpResponse::InternalServerError().body("Failed to get vault")
     }
 }
+
+
+fn extract_node(tree: &mut FileTree, path: &[&str]) -> Option<FileTree> { //&[&str] for reference to slice
+    if path.is_empty() {
+        return None;
+    }
+
+    if let FileType::Folder(children) = &mut tree.file_type {
+        if path.len() == 1 {
+            let name = path[0];
+            let index = children.iter().position(|c| c.name == name)?;
+            return Some(children.remove(index));
+        }
+
+        let next = path[0];
+        let child = children.iter_mut().find(|c| c.name == next)?;
+        return extract_node(child, &path[1..]);
+    }
+
+    None
+}
+
+fn insert_node(tree: &mut FileTree, path: &[&str], node: FileTree) -> bool {
+    if let FileType::Folder(children) = &mut tree.file_type {
+        if path.is_empty() {
+            children.push(node);
+            return true;
+        }
+
+        let next = path[0];
+        if let Some(child) = children.iter_mut().find(|c| c.name == next) {
+            return insert_node(child, &path[1..], node);
+        }
+    }
+
+    false
+}
+
+pub fn move_in_map(from_path: &str, to_path: &str) {
+    let map_path = Path::new("binary_files").join("map.json");
+    let content = fs::read_to_string(&map_path).expect("Failed to read map.json");
+    let mut root: FileTree = serde_json::from_str(&content).expect("Invalid map.json");
+
+    let from_segments: Vec<&str> = from_path.trim_matches('/').split('/').collect();
+    let node = extract_node(&mut root, &from_segments).expect("Invalid source path");
+
+    let to_segments: Vec<&str> = to_path.trim_matches('/').split('/').collect();
+    let success = insert_node(&mut root, &to_segments, node);
+    assert!(success, "Invalid destination path");
+
+    let new_content = serde_json::to_string_pretty(&root).unwrap();
+    fs::write(&map_path, new_content).expect("Failed to write map.json");
+}
