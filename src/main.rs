@@ -6,13 +6,13 @@ use s4_vaultify::backend::account_manager::account_server::{
     init_server_config, load_vault_query, login_user_query, CreateUserForm, VaultInfo, JWT,
 };
 use std::fs::File;
-use std::io::{BufReader, Cursor};
+use std::io::BufReader;
 use std::sync::Arc;
 use tera::Context;
 //use tokio_rustls::rustls::HandshakeType::Certificate;
 use actix_files::Files;
 use askama::Template;
-use rusqlite::{Connection, Result};
+use rusqlite::Result;
 use rustls::Certificate;
 use rustls::PrivateKey;
 use s4_vaultify::backend::file_manager::mapping::{get_tree_vault, move_tree_vault};

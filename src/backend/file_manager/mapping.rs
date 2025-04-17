@@ -1,7 +1,7 @@
 use crate::backend::account_manager::account_server::{VaultInfo, JWT, ROOT, SESSION_CACHE};
 use crate::backend::aes_keys::crypted_key::encrypt;
 use crate::backend::aes_keys::decrypted_key::decrypt;
-use crate::backend::{VAULTS_DATA, VAULT_USERS_DIR};
+use crate::backend::VAULTS_DATA;
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -160,7 +160,7 @@ pub async fn get_tree_vault(req: HttpRequest, info: web::Json<VaultInfo>) -> imp
 
         let vault_name = format!("{}_{}", vault_info.user_id, vault_info.date);
 
-        let mut vault_path = format!("{}/{}{}/", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
+        let vault_path = format!("{}/{}{}/", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
 
         let mut map_path = vault_path.clone();
         map_path.push_str("map.json");
@@ -247,7 +247,7 @@ pub async fn move_tree_vault(
 
         let vault_name = format!("{}_{}", vault_info.user_id, vault_info.date);
 
-        let mut vault_path = format!("{}/{}{}/", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
+        let vault_path = format!("{}/{}{}/", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
 
         let mut map_path = vault_path.clone();
         map_path.push_str("map.json");
