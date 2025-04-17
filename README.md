@@ -24,14 +24,8 @@ sudo apt-get update
             javascriptcoregtk-4.1-dev \
             libsoup-3.0-dev \
             webkit2gtk-4.1-dev \
-            libxdo3 \
             libx11-dev \
-            libxdo-dev \
-            ffmpeg \
-            libavutil-dev \
-            libavformat-dev \
-            libavfilter-dev \
-            libavdevice-dev
+            libxdo-dev
 ```
 
 # Run the server
