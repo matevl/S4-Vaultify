@@ -7,6 +7,11 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+fn get_user_from_cookie(req: &HttpRequest) -> Option<JWT> {
+    req.cookie("user_token")
+        .and_then(|cookie| serde_json::from_str(cookie.value()).ok())
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 struct FileMap {
     original_filename: String,
@@ -150,48 +155,42 @@ pub fn server_map_to_client_map(tree: &FileTree) -> FrontFileType {
 }
 
 pub async fn get_tree_vault(req: HttpRequest, info: web::Json<VaultInfo>) -> impl Responder {
-    // 1) extract and decode JWT from the HttpOnly cookie
-    let token = match req.cookie("user_token") {
-        Some(c) => c.value().to_string(),
-        None => return HttpResponse::Unauthorized().body("Not authenticated"),
-    };
-    let secret = "test"; // your secret
-    let jwt = match JWT::decode(&token, secret) {
-        Some(j) => j,
-        None => return HttpResponse::Unauthorized().body("Invalid token"),
-    };
-    let vault_info = info.into_inner();
+    if let Some(jwt) = get_user_from_cookie(&req) {
+        let vault_info = info.into_inner();
 
-    let vault_name = format!("{}_{}", vault_info.user_id, vault_info.date);
+        let vault_name = format!("{}_{}", vault_info.user_id, vault_info.date);
 
-    let mut vault_path = format!("{}/{}{}/", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
+        let mut vault_path = format!("{}/{}{}/", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
 
-    let mut map_path = vault_path.clone();
-    map_path.push_str("map.json");
+        let mut map_path = vault_path.clone();
+        map_path.push_str("map.json");
 
-    let encrypted = match fs::read(&map_path) {
-        Ok(data) => data,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to read map"),
-    };
-
-    if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.session_id) {
-        let key = cache.user_key.clone();
-
-        let decrypted = match decrypt(&encrypted, key.as_slice()) {
+        let encrypted = match fs::read(&map_path) {
             Ok(data) => data,
-            Err(_) => return HttpResponse::InternalServerError().body("Failed to decrypt map"),
+            Err(_) => return HttpResponse::InternalServerError().body("Failed to read map"),
         };
 
-        let tree: FileTree = match serde_json::from_slice(&decrypted) {
-            Ok(t) => t,
-            Err(_) => return HttpResponse::InternalServerError().body("Failed to parse map"),
-        };
+        if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.session_id) {
+            let key = cache.user_key.clone();
 
-        let client_tree = server_map_to_client_map(&tree);
+            let decrypted = match decrypt(&encrypted, key.as_slice()) {
+                Ok(data) => data,
+                Err(_) => return HttpResponse::InternalServerError().body("Failed to decrypt map"),
+            };
 
-        HttpResponse::Ok().json(client_tree)
+            let tree: FileTree = match serde_json::from_slice(&decrypted) {
+                Ok(t) => t,
+                Err(_) => return HttpResponse::InternalServerError().body("Failed to parse map"),
+            };
+
+            let client_tree = server_map_to_client_map(&tree);
+
+            HttpResponse::Ok().json(client_tree)
+        } else {
+            HttpResponse::InternalServerError().body("Failed to get vault")
+        }
     } else {
-        HttpResponse::InternalServerError().body("Failed to get vault")
+        HttpResponse::Unauthorized().body("Unauthorized")
     }
 }
 
@@ -238,64 +237,63 @@ pub struct MoveRequest {
     to_path: String,
 }
 
+pub async fn move_tree_vault(
+    req: HttpRequest,
+    info: web::Json<VaultInfo>,
+    move_info: web::Json<MoveRequest>,
+) -> impl Responder {
+    if let Some(jwt) = get_user_from_cookie(&req) {
+        let vault_info = info.into_inner();
 
-pub async fn move_tree_vault(req: HttpRequest, info: web::Json<VaultInfo>, move_info: web::Json<MoveRequest>) -> impl Responder {
-    let token = match req.cookie("user_token") {
-        Some(c) => c.value().to_string(),
-        None => return HttpResponse::Unauthorized().body("Not authenticated"),
-    };
-    let secret = "test";
-    let jwt = match JWT::decode(&token, secret) {
-        Some(j) => j,
-        None => return HttpResponse::Unauthorized().body("Invalid token"),
-    };
-    let vault_info = info.into_inner();
+        let vault_name = format!("{}_{}", vault_info.user_id, vault_info.date);
 
-    let vault_name = format!("{}_{}", vault_info.user_id, vault_info.date);
+        let mut vault_path = format!("{}/{}{}/", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
 
-    let mut vault_path = format!("{}/{}{}/", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
+        let mut map_path = vault_path.clone();
+        map_path.push_str("map.json");
 
-    let mut map_path = vault_path.clone();
-    map_path.push_str("map.json");
-
-    let encrypted = match fs::read(&map_path) {
-        Ok(data) => data,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to read map"),
-    };
-
-    if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.session_id) {
-        let key = cache.user_key.clone();
-
-        let decrypted = match decrypt(&encrypted, key.as_slice()) {
+        let encrypted = match fs::read(&map_path) {
             Ok(data) => data,
-            Err(_) => return HttpResponse::InternalServerError().body("Failed to decrypt map"),
+            Err(_) => return HttpResponse::InternalServerError().body("Failed to read map"),
         };
 
-        let mut tree: FileTree = match serde_json::from_slice(&decrypted) {
-            Ok(t) => t,
-            Err(_) => return HttpResponse::InternalServerError().body("Failed to parse map"),
-        };
+        if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.session_id) {
+            let key = cache.user_key.clone();
 
-        let from_segments: Vec<&str> = move_info.from_path.trim_matches('/').split('/').collect();
-        let node = match extract_node(&mut tree, &from_segments) {
-            Some(n) => n,
-            None => return HttpResponse::BadRequest().body("Source not found"),
-        };
+            let decrypted = match decrypt(&encrypted, key.as_slice()) {
+                Ok(data) => data,
+                Err(_) => return HttpResponse::InternalServerError().body("Failed to decrypt map"),
+            };
 
-        let to_segments: Vec<&str> = move_info.to_path.trim_matches('/').split('/').collect();
-        if !insert_node(&mut tree, &to_segments, node) {
-            return HttpResponse::BadRequest().body("Invalid destination path");
+            let mut tree: FileTree = match serde_json::from_slice(&decrypted) {
+                Ok(t) => t,
+                Err(_) => return HttpResponse::InternalServerError().body("Failed to parse map"),
+            };
+
+            let from_segments: Vec<&str> =
+                move_info.from_path.trim_matches('/').split('/').collect();
+            let node = match extract_node(&mut tree, &from_segments) {
+                Some(n) => n,
+                None => return HttpResponse::BadRequest().body("Source not found"),
+            };
+
+            let to_segments: Vec<&str> = move_info.to_path.trim_matches('/').split('/').collect();
+            if !insert_node(&mut tree, &to_segments, node) {
+                return HttpResponse::BadRequest().body("Invalid destination path");
+            }
+
+            let new_content = serde_json::to_vec(&tree).unwrap();
+            let new_encrypted = encrypt(&new_content, key.as_slice());
+
+            if let Err(_) = fs::write(&map_path, new_encrypted) {
+                return HttpResponse::InternalServerError().body("Failed to write map");
+            }
+
+            HttpResponse::Ok().body("Node moved")
+        } else {
+            HttpResponse::InternalServerError().body("Failed to get vault")
         }
-
-        let new_content = serde_json::to_vec(&tree).unwrap();
-        let new_encrypted = encrypt(&new_content, key.as_slice());
-
-        if let Err(_) = fs::write(&map_path, new_encrypted) {
-            return HttpResponse::InternalServerError().body("Failed to write map");
-        }
-
-        HttpResponse::Ok().body("Node moved")
     } else {
-        HttpResponse::InternalServerError().body("Failed to get vault")
+        HttpResponse::Unauthorized().body("Cannot access vault")
     }
 }

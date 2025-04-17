@@ -70,12 +70,9 @@ async fn login_page() -> actix_web::Result<NamedFile> {
 }
 
 // Retrieve user from cookie
-fn get_user_from_cookie(req: &HttpRequest) -> Option<String> {
-    if let Some(cookie) = req.cookie("user_token") {
-        Some(cookie.value().to_string()) // Directly return the token value
-    } else {
-        None
-    }
+fn get_user_from_cookie(req: &HttpRequest) -> Option<JWT> {
+    req.cookie("user_token")
+        .and_then(|cookie| serde_json::from_str(cookie.value()).ok())
 }
 
 // Create user
@@ -85,25 +82,18 @@ async fn create_user(form: web::Json<CreateUserForm>) -> HttpResponse {
 
 // Main route
 pub async fn home(req: HttpRequest) -> impl Responder {
-    if let Some(token) = get_user_from_cookie(&req) {
-        let secret = "test";
-
-        match JWT::decode(&token, secret) {
-            Some(decoded_jwt) => {
-                let html = HomeTemplate {
-                    username: decoded_jwt.email.clone(),
-                    email: decoded_jwt.email.clone(),
-                    vault_info: match &decoded_jwt.loaded_vault {
-                        Some(vault) => vault.name.clone(), // or vault.id, or any field you want
-                        None => "No data".to_string(),
-                    },
-                };
-                HttpResponse::Ok()
-                    .content_type("text/html")
-                    .body(html.render().unwrap())
-            }
-            None => HttpResponse::Unauthorized().body("Invalid or expired token."),
-        }
+    if let Some(decoded_jwt) = get_user_from_cookie(&req) {
+        let html = HomeTemplate {
+            username: decoded_jwt.email.clone(),
+            email: decoded_jwt.email.clone(),
+            vault_info: match &decoded_jwt.loaded_vault {
+                Some(vault) => vault.name.clone(), // or vault.id, or any field you want
+                None => "No data".to_string(),
+            },
+        };
+        HttpResponse::Ok()
+            .content_type("text/html")
+            .body(html.render().unwrap())
     } else {
         HttpResponse::Unauthorized().body("No token found.")
     }
@@ -116,35 +106,23 @@ pub async fn home(req: HttpRequest) -> impl Responder {
  * @return An HTTP response containing the user's vaults or an error message.
  */
 pub async fn get_user_vaults_query(req: HttpRequest) -> impl Responder {
-    if let Some(token) = get_user_from_cookie(&req) {
-        let secret = "test"; // Replace with your secret key for JWT
+    let vaults_response = get_vaults_list_query(req).await;
 
-        match JWT::decode(&token, secret) {
-            Some(decoded_jwt) => {
-                let vaults_response = get_vaults_list_query(web::Json(decoded_jwt)).await;
+    let body = vaults_response.into_body();
+    let body_bytes = actix_web::body::to_bytes(body).await.unwrap();
+    let vaults: Vec<VaultInfo> = serde_json::from_slice(&body_bytes).unwrap();
 
-                // Extract the body and deserialize into Vec<VaultInfo>
-                let body = vaults_response.into_body();
-                let body_bytes = actix_web::body::to_bytes(body).await.unwrap();
-                let vaults: Vec<VaultInfo> = serde_json::from_slice(&body_bytes).unwrap();
+    // Create the context for Tera
+    let mut context = Context::new();
+    context.insert("vaults", &vaults);
 
-                // Create the context for Tera
-                let mut context = Context::new();
-                context.insert("vaults", &vaults);
+    // Load and render the template
+    let tera = Tera::new("../templates/**/*").unwrap();
+    let rendered_html = tera.render("vaults.html", &context).unwrap();
 
-                // Load and render the template
-                let tera = Tera::new("../templates/**/*").unwrap();
-                let rendered_html = tera.render("vaults.html", &context).unwrap();
-
-                HttpResponse::Ok()
-                    .content_type("text/html")
-                    .body(rendered_html)
-            }
-            None => HttpResponse::Unauthorized().body("Invalid or expired token."),
-        }
-    } else {
-        HttpResponse::Unauthorized().body("Missing token.")
-    }
+    HttpResponse::Ok()
+        .content_type("text/html")
+        .body(rendered_html)
 }
 
 async fn vault_detail_page() -> actix_web::Result<NamedFile> {
@@ -178,7 +156,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(web::Data::new(tera.clone())) // Inject Tera into handlers
             .app_data(web::Data::new(Mutex::new(Vec::<String>::new()))) // Example of shared session, adapt as needed
-            // GET routes
+            // GET routesding file tree.
             .route("/create-user", web::get().to(create_user_page))
             .route("/login", web::get().to(login_page))
             .route("/home", web::get().to(home))

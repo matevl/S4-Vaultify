@@ -38,12 +38,9 @@ pub enum Perms {
     NoLoad,
 }
 
-fn get_user_from_cookie(req: &HttpRequest) -> Option<String> {
-    if let Some(cookie) = req.cookie("user_token") {
-        Some(cookie.value().to_string()) // Directly return the token value
-    } else {
-        None
-    }
+fn get_user_from_cookie(req: &HttpRequest) -> Option<JWT> {
+    req.cookie("user_token")
+        .and_then(|cookie| serde_json::from_str(cookie.value()).ok())
 }
 
 /**
@@ -124,29 +121,6 @@ impl JWT {
             email: email.to_string(),
             loaded_vault: None,
         }
-    }
-
-    pub fn encode(&self, secret: &str) -> String {
-        let header = Header::new(Algorithm::HS256); // Use the HMAC-SHA256 algorithm
-        let encoding_key = EncodingKey::from_secret(secret.as_ref());
-
-        encode(&header, &self, &encoding_key).unwrap()
-    }
-
-    // Decode a JWT token into JWT struct
-    pub fn decode(token: &str, secret: &str) -> Option<Self> {
-        let decoding_key = DecodingKey::from_secret(secret.as_ref());
-        let validation = Validation {
-            leeway: 0,
-            validate_exp: false, // Set to true if you want to validate expiration
-            algorithms: vec![Algorithm::HS256],
-            ..Validation::default()
-        };
-
-        // Call the `jsonwebtoken::decode` function, not `Self::decode`
-        jsonwebtoken::decode::<Self>(token, &decoding_key, &validation)
-            .ok()
-            .map(|data| data.claims)
     }
 }
 
@@ -368,14 +342,10 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
                 Session::new(user_id, &hash_pw, &user_key),
             );
 
-            let jwt_token = JWT::new(&session_id, user_id, &email); // ✅ user_id is accessible
-            let secret = "test"; // Use the secret from the environment
-
-            // Create the JWT token
-            let jwt_string = jwt_token.encode(&secret);
+            let jwt_token = JWT::new(&session_id, user_id, &email);
 
             // Create the cookie with the JWT
-            let cookie = Cookie::build("user_token", &jwt_string)
+            let cookie = Cookie::build("user_token", serde_json::to_string(&jwt_token).unwrap())
                 .http_only(true)
                 .secure(true) // Use secure(true) if you are in production (HTTPS)
                 .path("/")
@@ -401,10 +371,14 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
  * @param user - The JWT containing the user information.
  * @return An HTTP response containing the list of vaults.
  */
-pub async fn get_vaults_list_query(user: web::Json<JWT>) -> HttpResponse {
-    let conn = CONNECTION.lock().unwrap();
-    if let Ok(vaults) = get_user_vaults(&conn, user.id) {
-        HttpResponse::Ok().json(vaults)
+pub async fn get_vaults_list_query(req: HttpRequest) -> HttpResponse {
+    if let Some(jwt) = get_user_from_cookie(&req) {
+        let conn = CONNECTION.lock().unwrap();
+        if let Ok(vaults) = get_user_vaults(&conn, jwt.id) {
+            HttpResponse::Ok().json(vaults)
+        } else {
+            HttpResponse::Unauthorized().finish()
+        }
     } else {
         HttpResponse::Unauthorized().finish()
     }
@@ -449,75 +423,65 @@ pub async fn create_vault_query(
     req: HttpRequest,
     form: web::Form<VaultForm>, // The form contains only one field (name)
 ) -> impl Responder {
-    let connection = CONNECTION.lock().unwrap();
-    let sessions = SESSION_CACHE.lock().unwrap();
-    let name: &str = &form.name; // Get the name from the form
+    if let Some(decoded_jwt) = get_user_from_cookie(&req) {
+        let connection = CONNECTION.lock().unwrap();
+        let sessions = SESSION_CACHE.lock().unwrap();
+        let name: &str = &form.name;
+        if let Some(cache) = sessions.get(&decoded_jwt.session_id) {
+            let time = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
 
-    // Retrieve the JWT token from the cookies
-    if let Some(cookie) = get_user_from_cookie(&req) {
-        let secret = "test";
+            let vault_name = format!("{}_{}", decoded_jwt.id, time);
 
-        // Decode the JWT token
-        if let Some(decoded_jwt) = JWT::decode(&cookie, secret) {
-            if let Some(cache) = sessions.get(&decoded_jwt.session_id) {
-                let time = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs();
+            let vault_path = format!("{}/{}{}", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
 
-                let vault_name = format!("{}_{}", decoded_jwt.id, time);
+            let vault_config = format!("{}/{}", vault_path, VAULT_CONFIG_ROOT);
+            let users_vault = format!("{}/{}", vault_path, VAULT_USERS_DIR);
+            let user_json = format!("{users_vault}{}.json", decoded_jwt.id);
 
-                let vault_path =
-                    format!("{}/{}{}", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
+            fs::create_dir_all(&vault_path).unwrap();
+            fs::create_dir_all(&vault_config).unwrap();
+            fs::create_dir_all(&users_vault).unwrap();
+            fs::File::create(&user_json).unwrap();
 
-                let vault_config = format!("{}/{}", vault_path, VAULT_CONFIG_ROOT);
-                let users_vault = format!("{}/{}", vault_path, VAULT_USERS_DIR);
-                let user_json = format!("{users_vault}{}.json", decoded_jwt.id);
+            let info = VaultInfo::new(decoded_jwt.id, &name, time);
 
-                fs::create_dir_all(&vault_path).unwrap();
-                fs::create_dir_all(&vault_config).unwrap();
-                fs::create_dir_all(&users_vault).unwrap();
-                fs::File::create(&user_json).unwrap();
+            let vault_key = generate_random_key();
 
-                let info = VaultInfo::new(decoded_jwt.id, &name, time);
+            let vault_key = derive_key(
+                &String::from_utf8_lossy(vault_key.as_slice()),
+                generate_salt_from_login(&decoded_jwt.email).as_slice(),
+                10000,
+            );
 
-                let vault_key = generate_random_key();
+            let content = serde_json::to_string(&(vault_key, Perms::Admin)).unwrap();
+            let encrypted_content = encrypt(content.as_bytes(), cache.user_key.as_slice());
+            fs::write(&user_json, &encrypted_content).unwrap();
 
-                let vault_key = derive_key(
-                    &String::from_utf8_lossy(vault_key.as_slice()),
-                    generate_salt_from_login(&decoded_jwt.email).as_slice(),
-                    10000,
-                );
+            init_map(
+                &format!("{}/map.json", vault_path),
+                cache.user_key.as_slice(),
+            );
 
-                let content = serde_json::to_string(&(vault_key, Perms::Admin)).unwrap();
-                let encrypted_content = encrypt(content.as_bytes(), cache.user_key.as_slice());
-                fs::write(&user_json, &encrypted_content).unwrap();
-
-                init_map(
-                    &format!("{}/map.json", vault_path),
-                    cache.user_key.as_slice(),
-                );
-
-                match create_vault(&connection, &info) {
-                    Ok(res) => HttpResponse::Ok().json(json!({
-                        "message": format!("Coffre '{}' créé avec succès !", res.name),
-                        "vault_id": res.id,
-                        "date": res.date,
-                    })),
-                    Err(e) => {
-                        eprintln!("Erreur lors de la création du coffre : {:?}", e);
-                        HttpResponse::InternalServerError()
-                            .body("Erreur lors de la création du coffre.")
-                    }
+            match create_vault(&connection, &info) {
+                Ok(res) => HttpResponse::Ok().json(json!({
+                    "message": format!("Coffre '{}' créé avec succès !", res.name),
+                    "vault_id": res.id,
+                    "date": res.date,
+                })),
+                Err(e) => {
+                    eprintln!("Erreur lors de la création du coffre : {:?}", e);
+                    HttpResponse::InternalServerError()
+                        .body("Erreur lors de la création du coffre.")
                 }
-            } else {
-                HttpResponse::Unauthorized().body("incorrect email or password")
             }
         } else {
-            HttpResponse::Unauthorized().body("Token JWT invalide.")
+            HttpResponse::Unauthorized().body("incorrect email or password")
         }
     } else {
-        HttpResponse::BadRequest().body("Token JWT non trouvé dans les cookies.")
+        HttpResponse::Unauthorized().body("Token JWT invalide.")
     }
 }
 
@@ -533,55 +497,48 @@ pub async fn load_vault_query(
 ) -> impl Responder {
     let info = vault_info.into_inner();
 
-    if let Some(cookie) = get_user_from_cookie(&req) {
-        let secret = "test";
-        if let Some(mut jwt) = JWT::decode(&cookie, secret) {
-            if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.session_id) {
-                let vault_name = format!("{}_{}", info.user_id, info.date);
+    if let Some(mut jwt) = get_user_from_cookie(&req) {
+        if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.session_id) {
+            let vault_name = format!("{}_{}", info.user_id, info.date);
 
-                let key_path = format!(
-                    "{}/{}{}/{}{}.json",
-                    ROOT.to_str().unwrap(),
-                    VAULTS_DATA,
-                    vault_name,
-                    VAULT_USERS_DIR,
-                    jwt.id
-                );
+            let key_path = format!(
+                "{}/{}{}/{}{}.json",
+                ROOT.to_str().unwrap(),
+                VAULTS_DATA,
+                vault_name,
+                VAULT_USERS_DIR,
+                jwt.id
+            );
 
-                let encrypted_content = match fs::read(&key_path) {
+            let encrypted_content = match fs::read(&key_path) {
+                Ok(data) => data,
+                Err(_) => return HttpResponse::NotFound().body("Vault file not found"),
+            };
+
+            let decrypted_content =
+                match decrypt(encrypted_content.as_slice(), cache.user_key.as_slice()) {
                     Ok(data) => data,
-                    Err(_) => return HttpResponse::NotFound().body("Vault file not found"),
+                    Err(_) => return HttpResponse::InternalServerError().body("Failed to decrypt"),
                 };
 
-                let decrypted_content =
-                    match decrypt(encrypted_content.as_slice(), cache.user_key.as_slice()) {
-                        Ok(data) => data,
-                        Err(_) => {
-                            return HttpResponse::InternalServerError().body("Failed to decrypt")
-                        }
-                    };
+            let (vault_key, vault_perms): (Vec<u8>, Perms) =
+                match serde_json::from_str(&String::from_utf8(decrypted_content).unwrap()) {
+                    Ok(parsed) => parsed,
+                    Err(_) => {
+                        return HttpResponse::InternalServerError().body("Invalid vault data")
+                    }
+                };
 
-                let (vault_key, vault_perms): (Vec<u8>, Perms) =
-                    match serde_json::from_str(&String::from_utf8(decrypted_content).unwrap()) {
-                        Ok(parsed) => parsed,
-                        Err(_) => {
-                            return HttpResponse::InternalServerError().body("Invalid vault data")
-                        }
-                    };
-
-                if cache.vault_key.get(&vault_name).is_none() {
-                    cache.vault_key.insert(vault_name.clone(), vault_key);
-                    cache.vault_perms = vault_perms;
-                }
-
-                jwt.loaded_vault = Some(info.clone());
-
-                HttpResponse::Ok().json(jwt)
-            } else {
-                HttpResponse::Unauthorized().body("Invalid session")
+            if cache.vault_key.get(&vault_name).is_none() {
+                cache.vault_key.insert(vault_name.clone(), vault_key);
+                cache.vault_perms = vault_perms;
             }
+
+            jwt.loaded_vault = Some(info.clone());
+
+            HttpResponse::Ok().json(jwt)
         } else {
-            HttpResponse::InternalServerError().body("Failed to decrypt")
+            HttpResponse::Unauthorized().body("Invalid session")
         }
     } else {
         HttpResponse::InternalServerError().body("Failed to decrypt")
