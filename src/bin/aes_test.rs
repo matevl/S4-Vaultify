@@ -2,7 +2,6 @@ use s4_vaultify::backend::aes_keys::crypted_key::*;
 use s4_vaultify::backend::aes_keys::decrypted_key::*;
 use s4_vaultify::backend::aes_keys::keys_password::*;
 
-use std::env;
 use std::fs;
 use std::process;
 

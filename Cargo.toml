@@ -19,14 +19,7 @@ tokio = { version = "1.43.0", features = ["rt", "rt-multi-thread", "macros"] }
 actix-files = "0.6"
 webbrowser = "0.5"
 rand = "0.9"
-infer = "0.19"
-kamadak-exif = "0.6.1"
-ffmpeg-next = "7.1.0"
-tempfile = "3.16.0"
-zip = "2.2.2"
-lopdf = "=0.35.0"
 tokio-rustls = "0.23"
-anyhow = "1.0.97"
 rustls-pemfile = "2.2.0"
 uuid = { version = "1.16.0", features = ["v4"] }
 rusqlite = { version = "0.34.0", features = ["bundled"] }

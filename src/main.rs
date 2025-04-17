@@ -1,5 +1,5 @@
 use actix_files::NamedFile;
-use actix_web::{cookie::Cookie, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use rustls_pemfile::{certs, pkcs8_private_keys};
 use s4_vaultify::backend::account_manager::account_server::{
     clean_expired_sessions, create_user_query, create_vault_query, get_vaults_list_query,

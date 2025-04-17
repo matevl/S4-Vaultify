@@ -10,7 +10,6 @@ use crate::backend::{
 use actix_web::cookie::time::Duration as Dudu; // Replace std::time::Duration with actix_web::cookie::time::Duration
 use actix_web::cookie::{Cookie, SameSite};
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
-use base64;
 use bcrypt::{hash, verify, DEFAULT_COST};
 use dirs;
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
@@ -19,6 +18,7 @@ use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
+use std::fmt::Error;
 use std::fs;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -183,13 +183,6 @@ lazy_static! {
  */
 pub fn init_db_connection(database_path: &str) -> Result<Connection> {
     Connection::open(database_path)
-}
-
-#[derive(Serialize)]
-struct Vault {
-    id: u32,
-    name: String,
-    date: i64,
 }
 
 /**
@@ -397,20 +390,15 @@ pub struct VaultForm {
  * @return A Result containing the ID of the created vault.
  */
 
-pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> Result<Vault> {
-    conn.execute(
+pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> Result<VaultInfo> {
+    if let Ok(val) = conn.execute(
         "INSERT INTO vaults (user_id, name, date) VALUES (?, ?, ?)",
-        params![vault_info.user_id, vault_info.name, vault_info.date as i64],
-    )?;
-
-    let vault_id = conn.last_insert_rowid() as u32;
-
-    // Construct and return the Vault object
-    Ok(Vault {
-        id: vault_id,
-        name: vault_info.name.clone(),
-        date: vault_info.date as i64,
-    })
+        params![vault_info.user_id, vault_info.name, vault_info.date],
+    ) {
+        Ok(vault_info.clone())
+    } else {
+        Err(rusqlite::Error::InvalidQuery)
+    }
 }
 
 /**
@@ -468,7 +456,7 @@ pub async fn create_vault_query(
             match create_vault(&connection, &info) {
                 Ok(res) => HttpResponse::Ok().json(json!({
                     "message": format!("Coffre '{}' créé avec succès !", res.name),
-                    "vault_id": res.id,
+                    "vault_id": res.user_id.clone(),
                     "date": res.date,
                 })),
                 Err(e) => {
