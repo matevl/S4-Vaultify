@@ -167,7 +167,7 @@ async fn main() -> std::io::Result<()> {
             .route("/login", web::post().to(login_user_query))
             .route("/create-vault", web::post().to(create_vault_query))
             .route("/load-vault", web::post().to(load_vault_query))
-            .route("/vaults/{vault_id}/tree", web::get().to(get_tree_vault))
+            .route("/vaults/{vault_id}/tree", web::post().to(get_tree_vault))
             .route("/vaults/{vault_id}/move", web::post().to(move_tree_vault))
             //.route("/vault/{vault_id}/add-file", web::post().to(add_file_to_vault))
             // Routes for static files (images, CSS, JS, etc.)
