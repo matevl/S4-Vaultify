@@ -13,6 +13,7 @@ use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use dirs;
 use lazy_static::lazy_static;
+use moka::sync::Cache;
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -163,7 +164,11 @@ lazy_static! {
     /**
      * Global cache for user sessions.
      */
-    pub static ref SESSION_CACHE: Arc<Mutex<HashMap<String, Session>>> = Arc::new(Mutex::new(HashMap::new()));
+    pub static ref SESSION_CACHE: Cache<String, Session> = {
+        Cache::builder()
+            .time_to_live(Duration::from_secs(3600))
+            .build()
+    };
 
     /**
      * Global database connection.
@@ -251,18 +256,6 @@ fn generate_session_id() -> String {
 }
 
 /**
- * Cleans expired sessions from the cache.
- */
-pub async fn clean_expired_sessions() {
-    let mut cache = SESSION_CACHE.lock().unwrap();
-    let now = SystemTime::now();
-    cache.retain(|_, session| {
-        now.duration_since(session.last_activity).unwrap() < Duration::from_secs(3600)
-        // 1 hour
-    });
-}
-
-/**
  * Endpoint to create a new user.
  *
  * @param form - The form data containing the username and password.
@@ -326,7 +319,7 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
             let session_id = generate_session_id();
             let user_key = derive_key(&pw, &generate_salt_from_login(&email), 10000);
 
-            SESSION_CACHE.lock().unwrap().insert(
+            SESSION_CACHE.insert(
                 session_id.clone(),
                 Session::new(user_id, &hash_pw, &user_key),
             );
@@ -409,9 +402,8 @@ pub async fn create_vault_query(
 ) -> impl Responder {
     if let Some(decoded_jwt) = get_user_from_cookie(&req) {
         let connection = CONNECTION.lock().unwrap();
-        let sessions = SESSION_CACHE.lock().unwrap();
         let name: &str = &form.name;
-        if let Some(cache) = sessions.get(&decoded_jwt.session_id) {
+        if let Some(cache) = SESSION_CACHE.get(&decoded_jwt.session_id) {
             let time = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
@@ -482,7 +474,7 @@ pub async fn load_vault_query(
     let info = vault_info.into_inner();
 
     if let Some(mut jwt) = get_user_from_cookie(&req) {
-        if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.session_id) {
+        if let Some(mut cache) = SESSION_CACHE.get(&jwt.session_id) {
             let vault_name = format!("{}_{}", info.user_id, info.date);
 
             let key_path = format!(

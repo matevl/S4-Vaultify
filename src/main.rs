@@ -2,8 +2,8 @@ use actix_files::NamedFile;
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use rustls_pemfile::{certs, pkcs8_private_keys};
 use s4_vaultify::backend::account_manager::account_server::{
-    clean_expired_sessions, create_user_query, create_vault_query, get_vaults_list_query,
-    init_server_config, load_vault_query, login_user_query, CreateUserForm, VaultInfo, JWT,
+    create_user_query, create_vault_query, get_vaults_list_query, init_server_config,
+    load_vault_query, login_user_query, CreateUserForm, VaultInfo, JWT,
 };
 use std::fs::File;
 use std::io::BufReader;
@@ -146,10 +146,6 @@ async fn main() -> std::io::Result<()> {
 
     // Initialize Tera to handle templates
     let tera = Tera::new("../templates/**/*").unwrap(); // Load templates from the directory
-
-    tokio::spawn(async {
-        clean_expired_sessions().await;
-    });
 
     // Start Actix Web server
     HttpServer::new(move || {
