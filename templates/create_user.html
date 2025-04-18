@@ -1,65 +1,15 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Créer un utilisateur</title>
-    <!-- Lien vers le fichier CSS -->
-    <link rel="stylesheet" href="../static/style.css"> <!-- Assurez-vous que le chemin est correct -->
+    <link rel="icon" href="/static/vaultify-grad.png" />
+    <link rel="stylesheet" href="/static/create.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-<div class="container">
-    <h1>Créer un compte</h1>
-    <form id="createUserForm">
-        <label for="username">Nom d'utilisateur :</label>
-        <input type="text" id="username" required>
-
-        <label for="password">Mot de passe :</label>
-        <input type="password" id="password" required>
-
-        <button type="submit">Créer un compte</button>
-    </form>
-</div>
-
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        document.getElementById('createUserForm').addEventListener('submit', async function(event) {
-            event.preventDefault(); // Empêcher la soumission normale du formulaire
-
-            // Récupérer les valeurs du formulaire
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-
-            // Créer l'objet de données à envoyer
-            const userData = {
-                username: username,
-                password: password
-            };
-
-            // Envoyer les données au serveur via fetch
-            try {
-                const response = await fetch('/create-user', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json' // Spécifier que l'on envoie des données en JSON
-                    },
-                    body: JSON.stringify(userData) // Convertir les données en JSON
-                });
-
-                if (response.ok) {
-                    const responseData = await response.json();
-                    alert('User created successfully: ' + responseData.message); // Afficher le message de succès
-                    window.location.href = '/login'; // Rediriger vers la page d'accueil après l'inscription
-                } else {
-                    const errorData = await response.json();
-                    alert('Error: ' + errorData.message); // Afficher l'erreur
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                alert('There was an error while creating the user');
-            }
-        });
-    });
-</script>
+<body class="bg-gray-100">
+    <div id="root" data-page="create"></div>
+    <script type="module" src="/static/app.bundle.js"></script>
 </body>
 </html>

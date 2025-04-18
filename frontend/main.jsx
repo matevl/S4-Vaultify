@@ -1,0 +1,18 @@
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import Login from './Login.jsx';
+import CreateUser from './CreateUser.jsx';
+
+const root = document.getElementById('root');
+const page = root?.dataset.page;
+
+const components = {
+    login: <Login />,
+    create: <CreateUser />
+};
+
+if (root && page && components[page]) {
+    ReactDOM.createRoot(root).render(components[page]);
+} else {
+    console.error("Composant introuvable pour la page :", page);
+}
