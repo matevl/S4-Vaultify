@@ -4,10 +4,10 @@ use crate::backend::aes_keys::keys_password::{
     derive_key, generate_random_key, generate_salt_from_login,
 };
 use crate::backend::file_manager::mapping::init_map;
-use crate::backend::server_manager::account_manager::{
-    Perms, VaultForm, VaultInfo, CONNECTION, ROOT, SESSION_CACHE,
+use crate::backend::server_manager::account_manager::{Perms, VaultForm, VaultInfo};
+use crate::backend::server_manager::global_manager::{
+    get_user_from_cookie, CONNECTION, ROOT, SESSION_CACHE,
 };
-use crate::backend::server_manager::global_manager::get_user_from_cookie;
 use crate::backend::{VAULTS_DATA, VAULT_CONFIG_ROOT, VAULT_USERS_DIR};
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use rusqlite::{params, Connection};

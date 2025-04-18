@@ -1,26 +1,17 @@
-use crate::backend::aes_keys::keys_password::{
-    derive_key, generate_random_key, generate_salt_from_login,
+use crate::backend::aes_keys::keys_password::{derive_key, generate_salt_from_login};
+use crate::backend::server_manager::global_manager::{
+    get_user_from_cookie, CONNECTION, SESSION_CACHE,
 };
-use crate::backend::file_manager::mapping::init_map;
-use crate::backend::server_manager::global_manager::get_user_from_cookie;
-use crate::backend::{
-    VAULTIFY_CONFIG, VAULTIFY_DATABASE, VAULTS_DATA, VAULT_CONFIG_ROOT, VAULT_USERS_DIR,
-};
-use actix_web::cookie::time::Duration as Dudu; // Replace std::time::Duration with actix_web::cookie::time::Duration
+use actix_web::cookie::time::Duration as Dudu;
 use actix_web::cookie::Cookie;
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use dirs;
-use lazy_static::lazy_static;
-use moka::sync::Cache;
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
-use std::fs;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 use uuid::Uuid;
 
 /**
@@ -147,27 +138,6 @@ impl Session {
             last_activity: SystemTime::now(),
         }
     }
-}
-
-lazy_static! {
-    /**
-     * Root directory path for the application.
-     */
-    pub static ref ROOT: std::path::PathBuf = dirs::home_dir().expect("Could not find home dir");
-
-    /**
-     * Global cache for user sessions.
-     */
-    pub static ref SESSION_CACHE: Cache<String, Session> = {
-        Cache::builder()
-            .time_to_live(Duration::from_secs(3600))
-            .build()
-    };
-
-    /**
-     * Global database connection.
-     */
-    pub static ref CONNECTION: Arc<Mutex<Connection>> = Arc::new(Mutex::new(init_db_connection(&format!("{}/{}", ROOT.to_str().unwrap(), VAULTIFY_DATABASE)).unwrap()));
 }
 
 /**

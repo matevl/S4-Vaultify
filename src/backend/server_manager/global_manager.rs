@@ -1,7 +1,33 @@
-use crate::backend::server_manager::account_manager::{init_db_connection, JWT, ROOT};
+use crate::backend::server_manager::account_manager::{init_db_connection, Session, JWT};
 use crate::backend::{VAULTIFY_CONFIG, VAULTIFY_DATABASE};
 use actix_web::HttpRequest;
+use lazy_static::lazy_static;
+use moka::sync::Cache;
+use rusqlite::Connection;
 use std::fs;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+lazy_static! {
+    /**
+     * Root directory path for the application.
+     */
+    pub static ref ROOT: std::path::PathBuf = dirs::home_dir().expect("Could not find home dir");
+
+    /**
+     * Global cache for user sessions.
+     */
+    pub static ref SESSION_CACHE: Cache<String, Session> = {
+        Cache::builder()
+            .time_to_live(Duration::from_secs(3600))
+            .build()
+    };
+
+    /**
+     * Global database connection.
+     */
+    pub static ref CONNECTION: Arc<Mutex<Connection>> = Arc::new(Mutex::new(init_db_connection(&format!("{}/{}", ROOT.to_str().unwrap(), VAULTIFY_DATABASE)).unwrap()));
+}
 
 pub fn get_user_from_cookie(req: &HttpRequest) -> Option<JWT> {
     req.cookie("user_token")
