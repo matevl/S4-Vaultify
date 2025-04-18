@@ -64,8 +64,14 @@ pub async fn create_vault_query(
             fs::create_dir_all(&vault_path).unwrap();
             fs::create_dir_all(&vault_config).unwrap();
             fs::create_dir_all(&users_vault).unwrap();
-            fs::File::create(&user_json).unwrap();
-
+            match fs::File::create(&user_json) {
+                Ok(_) => (),
+                Err(e) => {
+                    eprintln!("Failed to create user JSON file: {:?}", e);
+                    return HttpResponse::InternalServerError()
+                        .body("Failed to create user JSON file.");
+                }
+            }
             let info = VaultInfo::new(decoded_jwt.id, &name, time);
 
             let vault_key = generate_random_key();
