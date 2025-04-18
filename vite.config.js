@@ -2,9 +2,26 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import path from 'path';
+import glob from 'fast-glob'; // npm i fast-glob
+import fs from 'fs';
+
+function cleanOldCSS() {
+  return {
+    name: 'clean-old-css',
+    apply: 'build',
+    buildStart() {
+      const files = glob.sync('static/assets/*.css');
+      for (const file of files) {
+        const absolutePath = path.resolve(__dirname, file);
+        fs.unlinkSync(absolutePath);
+      }
+      console.log('[vite] Cleaned old CSS files from /static ✅');
+    }
+  };
+}
 
 export default defineConfig({
-  plugins: [
+  plugins: [cleanOldCSS(),
     react(),
     viteStaticCopy({
       targets: [
