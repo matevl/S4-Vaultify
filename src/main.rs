@@ -2,8 +2,7 @@ use actix_files::NamedFile;
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use rustls_pemfile::{certs, pkcs8_private_keys};
 use s4_vaultify::backend::server_manager::account_manager::{
-    create_user_query, create_vault_query, get_vaults_list_query, init_server_config,
-    load_vault_query, login_user_query, CreateUserForm, VaultInfo, JWT,
+    create_user_query, get_vaults_list_query, login_user_query, CreateUserForm, VaultInfo, JWT,
 };
 use std::fs::File;
 use std::io::BufReader;
@@ -16,6 +15,8 @@ use rusqlite::Result;
 use rustls::Certificate;
 use rustls::PrivateKey;
 use s4_vaultify::backend::file_manager::mapping::{get_tree_vault, move_tree_vault};
+use s4_vaultify::backend::server_manager::global_manager::init_server_config;
+use s4_vaultify::backend::server_manager::vault_manager::{create_vault_query, load_vault_query};
 use std::sync::Mutex;
 use tera::Tera;
 use tokio_rustls::rustls::ServerConfig;
