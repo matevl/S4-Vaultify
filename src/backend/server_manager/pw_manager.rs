@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-use crate::backend::account_manager::account_server::{JWT, ROOT, SESSION_CACHE};
+use crate::backend::server_manager::account_manager::{JWT, ROOT, SESSION_CACHE};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct PasswordEntry {
