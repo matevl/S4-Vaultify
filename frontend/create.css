@@ -1,4 +1,4 @@
-. :root {
+.root {
     --color-1: rgba(99, 102, 241, 0.35);
     --color-2: rgba(236, 72, 153, 0.3);
     --color-3: rgba(0, 200, 255, 0.25);
@@ -24,17 +24,17 @@
     top: 0;
     left: 0;
     background:
-        radial-gradient(circle, var(--color-1) 0%, transparent 60%) 0% 0% / 100% 100% no-repeat,
-        radial-gradient(circle, var(--color-2) 0%, transparent 65%) 100% 100% / 100% 100% no-repeat,
-        radial-gradient(circle, var(--color-3) 0%, transparent 60%) 50% 100% / 100% 100% no-repeat,
-        radial-gradient(circle, var(--color-4) 0%, transparent 50%) 50% 50% / 100% 100% no-repeat;
+            radial-gradient(circle, var(--color-1) 0%, transparent 60%) 0% 0% / 100% 100% no-repeat,
+            radial-gradient(circle, var(--color-2) 0%, transparent 65%) 100% 100% / 100% 100% no-repeat,
+            radial-gradient(circle, var(--color-3) 0%, transparent 60%) 50% 100% / 100% 100% no-repeat,
+            radial-gradient(circle, var(--color-4) 0%, transparent 50%) 50% 50% / 100% 100% no-repeat;
     background-repeat: no-repeat;
     animation:
-        rotateWaves 30s linear infinite,
-        distortWaves 10s ease-in-out infinite,
-        lightBreath 4s ease-in-out infinite,
-        colorDrift 15s ease-in-out infinite,
-        colorShift 20s ease-in-out infinite;
+            rotateWaves 30s linear infinite,
+            distortWaves 10s ease-in-out infinite,
+            lightBreath 4s ease-in-out infinite,
+            colorDrift 15s ease-in-out infinite,
+            colorShift 20s ease-in-out infinite;
     z-index: 0;
     filter: blur(40px);
     pointer-events: none;
@@ -204,38 +204,38 @@
 @keyframes colorDrift {
     0% {
         background-position:
-            -50% 50%,
-            150% 50%,
-            50% 150%,
-            50% -50%;
+                -50% 50%,
+                150% 50%,
+                50% 150%,
+                50% -50%;
     }
     25% {
         background-position:
-            25% 75%,
-            75% 25%,
-            75% 75%,
-            25% 25%;
+                25% 75%,
+                75% 25%,
+                75% 75%,
+                25% 25%;
     }
     50% {
         background-position:
-            150% 50%,
-            -50% 50%,
-            50% -50%,
-            50% 150%;
+                150% 50%,
+                -50% 50%,
+                50% -50%,
+                50% 150%;
     }
     75% {
         background-position:
-            75% 25%,
-            25% 75%,
-            25% 25%,
-            75% 75%;
+                75% 25%,
+                25% 75%,
+                25% 25%,
+                75% 75%;
     }
     100% {
         background-position:
-            -50% 50%,
-            150% 50%,
-            50% 150%,
-            50% -50%;
+                -50% 50%,
+                150% 50%,
+                50% 150%,
+                50% -50%;
     }
 }
 
