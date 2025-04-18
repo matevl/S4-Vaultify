@@ -2,11 +2,13 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import Login from './Login.jsx';
 import CreateUser from './CreateUser.jsx';
+import Index from "./Index.jsx";
 
 const root = document.getElementById('root');
 const page = root?.dataset.page;
 
 const components = {
+    index: <Index />,
     login: <Login />,
     create: <CreateUser />
 };

@@ -8,6 +8,7 @@ export default defineConfig({
     react(),
     viteStaticCopy({
       targets: [
+        { src: 'frontend/index.css', dest: '.' },
         { src: 'frontend/login.css', dest: '.' },
         { src: 'frontend/create.css', dest: '.' }
       ]
