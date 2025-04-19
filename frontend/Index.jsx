@@ -17,6 +17,7 @@ export default function Index() {
                 </div>
                 <div className="about-container">
                     <a href="/about" className="about-link">À propos</a>
+                    <a href="https://github.com/matevl/S4-Vaultify" className="about-link">Github</a>
                 </div>
             </div>
         </div>
