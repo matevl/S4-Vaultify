@@ -1,26 +1,18 @@
-use crate::backend::aes_keys::crypted_key::encrypt;
-use crate::backend::aes_keys::decrypted_key::decrypt;
-use crate::backend::aes_keys::keys_password::{
-    derive_key, generate_random_key, generate_salt_from_login,
+use crate::backend::aes_keys::keys_password::{derive_key, generate_salt_from_login};
+use crate::backend::server_manager::global_manager::{
+    get_user_from_cookie, CONNECTION, SESSION_CACHE,
 };
-use crate::backend::file_manager::mapping::init_map;
-use crate::backend::{
-    VAULTIFY_CONFIG, VAULTIFY_DATABASE, VAULTS_DATA, VAULT_CONFIG_ROOT, VAULT_USERS_DIR,
-};
-use actix_web::cookie::time::Duration as Dudu; // Replace std::time::Duration with actix_web::cookie::time::Duration
+use actix_web::cookie::time::Duration as Dudu;
 use actix_web::cookie::Cookie;
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use dirs;
-use lazy_static::lazy_static;
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
-use std::fs;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 use uuid::Uuid;
 
 /**
@@ -32,11 +24,6 @@ pub enum Perms {
     Write,
     Read,
     NoLoad,
-}
-
-fn get_user_from_cookie(req: &HttpRequest) -> Option<JWT> {
-    req.cookie("user_token")
-        .and_then(|cookie| serde_json::from_str(cookie.value()).ok())
 }
 
 /**
@@ -154,23 +141,6 @@ impl Session {
     }
 }
 
-lazy_static! {
-    /**
-     * Root directory path for the application.
-     */
-    pub static ref ROOT: std::path::PathBuf = dirs::home_dir().expect("Could not find home dir");
-
-    /**
-     * Global cache for user sessions.
-     */
-    pub static ref SESSION_CACHE: Arc<Mutex<HashMap<String, Session>>> = Arc::new(Mutex::new(HashMap::new()));
-
-    /**
-     * Global database connection.
-     */
-    pub static ref CONNECTION: Arc<Mutex<Connection>> = Arc::new(Mutex::new(init_db_connection(&format!("{}/{}", ROOT.to_str().unwrap(), VAULTIFY_DATABASE)).unwrap()));
-}
-
 /**
  * Initializes the connection to the database.
  *
@@ -251,18 +221,6 @@ fn generate_session_id() -> String {
 }
 
 /**
- * Cleans expired sessions from the cache.
- */
-pub async fn clean_expired_sessions() {
-    let mut cache = SESSION_CACHE.lock().unwrap();
-    let now = SystemTime::now();
-    cache.retain(|_, session| {
-        now.duration_since(session.last_activity).unwrap() < Duration::from_secs(3600)
-        // 1 hour
-    });
-}
-
-/**
  * Endpoint to create a new user.
  *
  * @param form - The form data containing the username and password.
@@ -293,7 +251,7 @@ pub async fn create_user_query(form: web::Json<CreateUserForm>) -> HttpResponse 
     };
 
     // Create the user in the database
-    let id = match create_user(&conn, &email, &hash_pw) {
+    let _ = match create_user(&conn, &email, &hash_pw) {
         Ok(id) => id,
         Err(_) => {
             return HttpResponse::InternalServerError().json(json!({
@@ -326,9 +284,9 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
             let session_id = generate_session_id();
             let user_key = derive_key(&pw, &generate_salt_from_login(&email), 10000);
 
-            SESSION_CACHE.lock().unwrap().insert(
+            SESSION_CACHE.insert(
                 session_id.clone(),
-                Session::new(user_id, &hash_pw, &user_key),
+                Arc::new(Mutex::new(Session::new(user_id, &hash_pw, &user_key))),
             );
 
             let jwt_token = JWT::new(&session_id, user_id, &email);
@@ -375,198 +333,5 @@ pub async fn get_vaults_list_query(req: HttpRequest) -> HttpResponse {
 
 #[derive(Deserialize)]
 pub struct VaultForm {
-    name: String, // The name must match the `name` attribute of the HTML form
-}
-
-/**
- * Creates a new vault for a user.
- *
- * @param conn - The database connection.
- * @param vault_info - The information about the vault.
- * @return A Result containing the ID of the created vault.
- */
-
-pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> Result<VaultInfo> {
-    if let Ok(val) = conn.execute(
-        "INSERT INTO vaults (user_id, name, date) VALUES (?, ?, ?)",
-        params![vault_info.user_id, vault_info.name, vault_info.date],
-    ) {
-        Ok(vault_info.clone())
-    } else {
-        Err(rusqlite::Error::InvalidQuery)
-    }
-}
-
-/**
- * Endpoint to create a new vault for a user.
- *
- * @param data - A tuple containing the JWT and the name of the vault.
- * @return An HTTP response indicating the result of the operation.
- */
-pub async fn create_vault_query(
-    req: HttpRequest,
-    form: web::Form<VaultForm>, // The form contains only one field (name)
-) -> impl Responder {
-    if let Some(decoded_jwt) = get_user_from_cookie(&req) {
-        let connection = CONNECTION.lock().unwrap();
-        let sessions = SESSION_CACHE.lock().unwrap();
-        let name: &str = &form.name;
-        if let Some(cache) = sessions.get(&decoded_jwt.session_id) {
-            let time = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
-
-            let vault_name = format!("{}_{}", decoded_jwt.id, time);
-
-            let vault_path = format!("{}/{}{}", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
-
-            let vault_config = format!("{}/{}", vault_path, VAULT_CONFIG_ROOT);
-            let users_vault = format!("{}/{}", vault_path, VAULT_USERS_DIR);
-            let user_json = format!("{users_vault}{}.json", decoded_jwt.id);
-
-            fs::create_dir_all(&vault_path).unwrap();
-            fs::create_dir_all(&vault_config).unwrap();
-            fs::create_dir_all(&users_vault).unwrap();
-            fs::File::create(&user_json).unwrap();
-
-            let info = VaultInfo::new(decoded_jwt.id, &name, time);
-
-            let vault_key = generate_random_key();
-
-            let vault_key = derive_key(
-                &String::from_utf8_lossy(vault_key.as_slice()),
-                generate_salt_from_login(&decoded_jwt.email).as_slice(),
-                10000,
-            );
-
-            let content = serde_json::to_string(&(vault_key, Perms::Admin)).unwrap();
-            let encrypted_content = encrypt(content.as_bytes(), cache.user_key.as_slice());
-            fs::write(&user_json, &encrypted_content).unwrap();
-
-            init_map(
-                &format!("{}/map.json", vault_path),
-                cache.user_key.as_slice(),
-            );
-
-            match create_vault(&connection, &info) {
-                Ok(res) => HttpResponse::Ok().json(json!({
-                    "message": format!("Coffre '{}' créé avec succès !", res.name),
-                    "vault_id": res.user_id.clone(),
-                    "date": res.date,
-                })),
-                Err(e) => {
-                    eprintln!("Erreur lors de la création du coffre : {:?}", e);
-                    HttpResponse::InternalServerError()
-                        .body("Erreur lors de la création du coffre.")
-                }
-            }
-        } else {
-            HttpResponse::Unauthorized().body("incorrect email or password")
-        }
-    } else {
-        HttpResponse::Unauthorized().body("Token JWT invalide.")
-    }
-}
-
-/**
- * Endpoint to load a vault for a user.
- *
- * @param data - A tuple containing the JWT and the VaultInfo.
- * @return An HTTP response containing the updated JWT with the loaded vault.
- */
-pub async fn load_vault_query(
-    req: HttpRequest,
-    vault_info: web::Json<VaultInfo>,
-) -> impl Responder {
-    let info = vault_info.into_inner();
-
-    if let Some(mut jwt) = get_user_from_cookie(&req) {
-        if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.session_id) {
-            let vault_name = format!("{}_{}", info.user_id, info.date);
-
-            let key_path = format!(
-                "{}/{}{}/{}{}.json",
-                ROOT.to_str().unwrap(),
-                VAULTS_DATA,
-                vault_name,
-                VAULT_USERS_DIR,
-                jwt.id
-            );
-
-            let encrypted_content = match fs::read(&key_path) {
-                Ok(data) => data,
-                Err(_) => return HttpResponse::NotFound().body("Vault file not found"),
-            };
-
-            let decrypted_content =
-                match decrypt(encrypted_content.as_slice(), cache.user_key.as_slice()) {
-                    Ok(data) => data,
-                    Err(_) => return HttpResponse::InternalServerError().body("Failed to decrypt"),
-                };
-
-            let (vault_key, vault_perms): (Vec<u8>, Perms) =
-                match serde_json::from_str(&String::from_utf8(decrypted_content).unwrap()) {
-                    Ok(parsed) => parsed,
-                    Err(_) => {
-                        return HttpResponse::InternalServerError().body("Invalid vault data")
-                    }
-                };
-
-            if cache.vault_key.get(&vault_name).is_none() {
-                cache.vault_key.insert(vault_name.clone(), vault_key);
-                cache.vault_perms = vault_perms;
-            }
-
-            jwt.loaded_vault = Some(info.clone());
-
-            HttpResponse::Ok().json(jwt)
-        } else {
-            HttpResponse::Unauthorized().body("Invalid session")
-        }
-    } else {
-        HttpResponse::InternalServerError().body("Failed to decrypt")
-    }
-}
-
-/**
- * Initializes the server configuration.
- */
-pub fn init_server_config() {
-    let config_path = ROOT.join(VAULTIFY_CONFIG);
-    fs::create_dir_all(&config_path).unwrap_or_else(|why| {
-        eprintln!("Error creating the configuration directory: {:?}", why);
-    });
-
-    let database_path = ROOT.join(VAULTIFY_DATABASE);
-    if let Some(parent_dir) = database_path.parent() {
-        fs::create_dir_all(parent_dir).unwrap_or_else(|why| {
-            eprintln!("Error creating the directory for the database: {:?}", why);
-        });
-    }
-
-    let conn = init_db_connection(database_path.to_str().unwrap()).unwrap();
-
-    // Create the users table
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT NOT NULL UNIQUE,
-            hash_password TEXT NOT NULL
-        )",
-        [],
-    )
-    .unwrap();
-
-    // Create the vaults table with a foreign key to users
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS vaults (
-            user_id INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            date INTEGER NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        )",
-        [],
-    )
-    .unwrap();
+    pub(crate) name: String, // The name must match the `name` attribute of the HTML form
 }

@@ -30,6 +30,7 @@ rustls = "0.20"
 askama = "0.12"
 tera = "1.19.0"
 actix-multipart = "0.5"
+moka = "0.10"
 
 [profile.wasm-dev]
 inherits = "dev"

@@ -1,6 +1,7 @@
-use crate::backend::account_manager::account_server::{VaultInfo, JWT, ROOT, SESSION_CACHE};
 use crate::backend::aes_keys::crypted_key::encrypt;
 use crate::backend::aes_keys::decrypted_key::decrypt;
+use crate::backend::server_manager::account_manager::{VaultInfo, JWT};
+use crate::backend::server_manager::global_manager::{ROOT, SESSION_CACHE};
 use crate::backend::VAULTS_DATA;
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
@@ -170,8 +171,9 @@ pub async fn get_tree_vault(req: HttpRequest, info: web::Json<VaultInfo>) -> imp
             Err(_) => return HttpResponse::InternalServerError().body("Failed to read map"),
         };
 
-        if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.session_id) {
-            let key = cache.user_key.clone();
+        if let Some(session) = SESSION_CACHE.get(&jwt.session_id) {
+            let session = session.lock().unwrap();
+            let key = session.user_key.clone();
 
             let decrypted = match decrypt(&encrypted, key.as_slice()) {
                 Ok(data) => data,
@@ -257,7 +259,8 @@ pub async fn move_tree_vault(
             Err(_) => return HttpResponse::InternalServerError().body("Failed to read map"),
         };
 
-        if let Some(cache) = SESSION_CACHE.lock().unwrap().get_mut(&jwt.session_id) {
+        if let Some(cache) = SESSION_CACHE.get(&jwt.session_id) {
+            let cache = cache.lock().unwrap();
             let key = cache.user_key.clone();
 
             let decrypted = match decrypt(&encrypted, key.as_slice()) {

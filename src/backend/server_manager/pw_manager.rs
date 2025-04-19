@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-use crate::backend::account_manager::account_server::{JWT, ROOT, SESSION_CACHE};
+use crate::backend::server_manager::account_manager::JWT;
+use crate::backend::server_manager::global_manager::{ROOT, SESSION_CACHE};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct PasswordEntry {
@@ -24,9 +25,9 @@ fn get_passwords_path(user_id: u32) -> PathBuf {
 
 pub async fn get_user_passwords(user: web::Json<JWT>) -> impl Responder {
     let path = get_passwords_path(user.id);
-    let session_cache = SESSION_CACHE.lock().unwrap();
 
-    if let Some(session) = session_cache.get(&user.session_id) {
+    if let Some(session) = SESSION_CACHE.get(&user.session_id) {
+        let session = session.lock().unwrap();
         if let Ok(encrypted_data) = fs::read(&path) {
             if let Ok(decrypted_data) = decrypt(&encrypted_data, session.user_key.as_slice()) {
                 if let Ok(passwords) = serde_json::from_slice::<Vec<PasswordEntry>>(&decrypted_data)
@@ -44,9 +45,9 @@ pub async fn get_user_passwords(user: web::Json<JWT>) -> impl Responder {
 pub async fn add_user_password(data: web::Json<(JWT, PasswordEntry)>) -> impl Responder {
     let (jwt, new_entry) = data.into_inner();
     let path = get_passwords_path(jwt.id);
-    let mut session_cache = SESSION_CACHE.lock().unwrap();
 
-    if let Some(session) = session_cache.get_mut(&jwt.session_id) {
+    if let Some(session) = SESSION_CACHE.get(&jwt.session_id) {
+        let session = session.lock().unwrap();
         let mut passwords: Vec<PasswordEntry> = if let Ok(encrypted_data) = fs::read(&path) {
             if let Ok(decrypted_data) = decrypt(&encrypted_data, session.user_key.as_slice()) {
                 serde_json::from_slice(&decrypted_data).unwrap_or_default()
@@ -71,9 +72,9 @@ pub async fn add_user_password(data: web::Json<(JWT, PasswordEntry)>) -> impl Re
 pub async fn remove_user_password(data: web::Json<(JWT, PasswordEntry)>) -> impl Responder {
     let (jwt, password_to_remove) = data.into_inner();
     let path = get_passwords_path(jwt.id);
-    let mut session_cache = SESSION_CACHE.lock().unwrap();
 
-    if let Some(session) = session_cache.get_mut(&jwt.session_id) {
+    if let Some(session) = SESSION_CACHE.get(&jwt.session_id) {
+        let session = session.lock().unwrap();
         let mut passwords: Vec<PasswordEntry> = if let Ok(encrypted_data) = fs::read(&path) {
             if let Ok(decrypted_data) = decrypt(&encrypted_data, session.user_key.as_slice()) {
                 serde_json::from_slice(&decrypted_data).unwrap_or_default()
