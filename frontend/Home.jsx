@@ -1,10 +1,18 @@
-// src/components/Home.jsx
 import React, { useState } from 'react';
 import './home.css';
 
 export default function Home() {
+    const [showModal, setShowModal] = useState(false);
     const [newVaultName, setNewVaultName] = useState('');
     const [creating, setCreating] = useState(false);
+
+    const openModal = () => setShowModal(true);
+    const closeModal = () => {
+        if (!creating) {
+            setShowModal(false);
+            setNewVaultName('');
+        }
+    };
 
     const handleCreateVault = async e => {
         e.preventDefault();
@@ -15,21 +23,20 @@ export default function Home() {
             const res = await fetch('/create-vault', {
                 method: 'POST',
                 credentials: 'include',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: new URLSearchParams({ name: newVaultName }),
             });
             if (!res.ok) {
                 const text = await res.text();
                 throw new Error(text || `Erreur ${res.status}`);
             }
-            // après création, on peut recharger l'iframe des vaults
-            document.getElementById('vaults-iframe').contentWindow.location.reload();
-            setNewVaultName('');
+            // reload vault list
+            const iframe = document.getElementById('vaults-iframe');
+            if (iframe) iframe.contentWindow.location.reload();
+            closeModal();
         } catch (err) {
             console.error('Erreur création vault:', err);
-            alert('Impossible de créer le vault : ' + err.message);
+            alert('Impossible de créer le vault : ' + err.message);
         } finally {
             setCreating(false);
         }
@@ -48,14 +55,16 @@ export default function Home() {
                 </ul>
             </div>
 
-            {/* Contenu principal */}
+            {/* Main */}
             <div className="main-content">
-                {/* Header */}
                 <div className="dashboard-header">
                     <h1>Bienvenue</h1>
+                    <button className="btn btn-primary" onClick={openModal}>
+                        + Créer un Vault
+                    </button>
                 </div>
 
-                {/* SECTION: Mes Vaults (embed) */}
+                {/* Vault list embed */}
                 <div className="dashboard-section">
                     <h2>Mes Vaults</h2>
                     <div className="vaults-embed">
@@ -68,29 +77,46 @@ export default function Home() {
                         />
                     </div>
                 </div>
-
-                {/* SECTION: Création de Vault */}
-                <div className="dashboard-section">
-                    <h2>Créer un nouveau Vault</h2>
-                    <form className="vault-create-form" onSubmit={handleCreateVault}>
-                        <input
-                            type="text"
-                            placeholder="Nom du Vault"
-                            value={newVaultName}
-                            onChange={e => setNewVaultName(e.target.value)}
-                            disabled={creating}
-                            required
-                        />
-                        <button
-                            type="submit"
-                            className="btn btn-primary"
-                            disabled={creating}
-                        >
-                            {creating ? 'Création…' : 'Créer Vault'}
-                        </button>
-                    </form>
-                </div>
             </div>
+
+            {/* Modal */}
+            {showModal && (
+                <div className="modal-overlay" onClick={closeModal}>
+                    <div
+                        className="modal-content"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <h3>Créer un nouveau Vault</h3>
+                        <form onSubmit={handleCreateVault}>
+                            <input
+                                type="text"
+                                placeholder="Nom du Vault"
+                                value={newVaultName}
+                                onChange={e => setNewVaultName(e.target.value)}
+                                disabled={creating}
+                                required
+                            />
+                            <div className="modal-actions">
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={closeModal}
+                                    disabled={creating}
+                                >
+                                    Annuler
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary"
+                                    disabled={creating}
+                                >
+                                    {creating ? 'Création…' : 'Créer'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

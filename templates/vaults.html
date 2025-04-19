@@ -50,13 +50,25 @@
         }
 
         .vault-box {
-            flex: 0 0 300px;
+            flex: 0 1 auto;
+            min-width: 195px;
+            display: inline-block;
             background-color: var(--card-bg);
             border: 1px solid var(--card-border);
             border-radius: 12px;
             padding: 15px;
             transition: background-color 0.2s, box-shadow 0.2s;
         }
+
+        .vault-box p:last-child {
+            white-space: nowrap;
+        }
+
+        .vault-box p:first-child,
+        .vault-box p:last-child {
+            white-space: nowrap;
+        }
+
         .vault-box:hover {
             background-color: rgba(255,255,255,0.15);
             box-shadow: 0 4px 12px rgba(0,0,0,0.2);
@@ -69,6 +81,7 @@
     </style>
 </head>
 <body>
+
 <div class="vault-container">
     {% for vault in vaults %}
     <a href="#"
@@ -78,8 +91,11 @@
        onclick="event.preventDefault(); handleVaultClick(this)">
         <div class="vault-box">
             <p><strong>Name:</strong> {{ vault.name }}</p>
-            <p><strong>User ID:</strong> {{ vault.user_id }}</p>
-            <p><strong>Created:</strong> {{ vault.date }}</p>
+            <p><strong>Owner ID:</strong> {{ vault.user_id }}</p>
+            <p>
+                <strong>Created:</strong>
+                <span class="raw-date">{{ vault.date }}</span>
+            </p>
         </div>
     </a>
     {% else %}
@@ -92,38 +108,45 @@
         try {
             const response = await fetch("/load-vault", {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                credentials: "include", // send cookies with the request
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
                 body: JSON.stringify(vaultInfo)
             });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Erreur (${response.status}): ${errorText}`);
-            }
-
+            if (!response.ok) throw new Error(await response.text());
             const updatedJwt = await response.json();
-            console.log("✅ Vault chargé :", updatedJwt);
-
-            const vaultPath = `/vaults/${vaultInfo.user_id}_${vaultInfo.date}`;
-            window.location.href = vaultPath;
+            window.location.href = `/vaults/${vaultInfo.user_id}_${vaultInfo.date}`;
         } catch (err) {
-            console.error("❌ Erreur loadVault :", err.message);
-            alert("Erreur lors du chargement du vault !");
+            console.error("❌ Erreur loadVault :", err);
+            alert("Erreur lors du chargement du vault !");
         }
     }
 
     function handleVaultClick(element) {
         const vaultInfo = {
             user_id: Number(element.dataset.user),
-            name: element.dataset.name,
-            date: Number(element.dataset.date)
+            name:    element.dataset.name,
+            date:    Number(element.dataset.date)
         };
         localStorage.setItem('vault_info', JSON.stringify(vaultInfo));
         loadVault(vaultInfo);
     }
+
+    // → Formatage des dates Unix en date lisible FR
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.raw-date').forEach(span => {
+            const ts = parseInt(span.textContent, 10);
+            if (!isNaN(ts)) {
+                const d = new Date(ts * 1000);
+                span.textContent = d.toLocaleString('fr-FR', {
+                    day:   '2-digit',
+                    month: '2-digit',
+                    year:  'numeric',
+                    hour:   '2-digit',
+                    minute: '2-digit'
+                });
+            }
+        });
+    });
 </script>
 </body>
 </html>
