@@ -5,7 +5,7 @@
     --color-4: rgba(255, 255, 255, 0.08);
 }
 
-.index-page {
+.home-page {
     background-color: #021433;
     min-height: 100vh;
     display: flex;
@@ -94,135 +94,7 @@
     color: white;
 }
 
-.about-container {
-    position: absolute;
-    bottom: 1rem;
-    left: 50%;
-    transform: translateX(-50%);
-    text-align: center;
-    gap:1.5rem;
-    align-items: center;
-    justify-content: center;
-    display: flex;
-}
 
-.about-link {
-    display: inline-block;
-    text-align: center;
-    margin-top: 2rem;
-    color: #94a3b8;
-    font-weight: 500;
-    text-decoration: none;
-    background: none;
-    border: none;
-    padding: 0;
-    font-size: 1rem;
-    transition: color 0.3s ease;
-}
-
-.about-link:hover {
-    color: #c084fc;
-}
-
-@keyframes rotateWaves {
-    0% {
-        transform: rotate(0deg) scale(1);
-    }
-    100% {
-        transform: rotate(360deg) scale(1);
-    }
-}
-
-@keyframes distortWaves {
-    0%, 100% {
-        transform: scale(1.05) skew(0deg, 0deg) translate(0px, 0px);
-    }
-    50% {
-        transform: scale(1.12) skew(-3deg, 3deg) translate(5px, -5px);
-    }
-}
-
-@keyframes lightBreath {
-    0%, 100% {
-        opacity: 0.8;
-        filter: blur(35px);
-    }
-    50% {
-        opacity: 1;
-        filter: blur(45px);
-    }
-}
-
-@keyframes colorDrift {
-    0% {
-        background-position:
-                -50% 50%,
-                150% 50%,
-                50% 150%,
-                50% -50%;
-    }
-    25% {
-        background-position:
-                25% 75%,
-                75% 25%,
-                75% 75%,
-                25% 25%;
-    }
-    50% {
-        background-position:
-                150% 50%,
-                -50% 50%,
-                50% -50%,
-                50% 150%;
-    }
-    75% {
-        background-position:
-                75% 25%,
-                25% 75%,
-                25% 25%,
-                75% 75%;
-    }
-    100% {
-        background-position:
-                -50% 50%,
-                150% 50%,
-                50% 150%,
-                50% -50%;
-    }
-}
-
-@keyframes colorShift {
-    0% {
-        --color-1: rgba(99, 102, 241, 0.35);
-        --color-2: rgba(236, 72, 153, 0.3);
-        --color-3: rgba(0, 200, 255, 0.25);
-        --color-4: rgba(255, 255, 255, 0.08);
-    }
-    25% {
-        --color-1: rgba(255, 100, 200, 0.35);
-        --color-2: rgba(99, 102, 241, 0.3);
-        --color-3: rgba(255, 255, 255, 0.25);
-        --color-4: rgba(236, 72, 153, 0.08);
-    }
-    50% {
-        --color-1: rgba(0, 200, 255, 0.35);
-        --color-2: rgba(255, 100, 200, 0.3);
-        --color-3: rgba(99, 102, 241, 0.25);
-        --color-4: rgba(0, 200, 255, 0.08);
-    }
-    75% {
-        --color-1: rgba(236, 72, 153, 0.35);
-        --color-2: rgba(0, 200, 255, 0.3);
-        --color-3: rgba(255, 100, 200, 0.25);
-        --color-4: rgba(99, 102, 241, 0.08);
-    }
-    100% {
-        --color-1: rgba(99, 102, 241, 0.35);
-        --color-2: rgba(236, 72, 153, 0.3);
-        --color-3: rgba(0, 200, 255, 0.25);
-        --color-4: rgba(255, 255, 255, 0.08);
-    }
-}
 
 .animated-bg {
     position: absolute;
@@ -285,4 +157,77 @@
     100% {
         background-position: 0% 50%;
     }
+}
+
+.dashboard {
+    display: flex;
+    height: 100vh;
+    background-color: #021433;
+    color: white;
+}
+
+.sidebar {
+    width: 240px;
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(10px);
+    padding: 2rem 1rem;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-title {
+    font-size: 1.5rem;
+    margin-bottom: 2rem;
+    text-align: center;
+    font-weight: bold;
+    color: #cbd5e1;
+}
+
+.sidebar-menu {
+    list-style: none;
+    padding: 0;
+}
+
+.sidebar-menu li {
+    margin: 1rem 0;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    transition: background 0.2s;
+    cursor: pointer;
+}
+
+.sidebar-menu li:hover {
+    background-color: rgba(99, 102, 241, 0.3);
+}
+
+.main-content {
+    flex: 1;
+    padding: 2rem;
+    overflow-y: auto;
+}
+
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.dashboard-section {
+    margin-bottom: 3rem;
+}
+
+/* Conteneur de l'iframe */
+.vaults-embed {
+    width: 100%;
+    height: 200px;         /* Ajuste la hauteur selon tes besoins */
+    overflow: hidden;
+    margin-top: 1rem;
+}
+
+/* L'iframe elle-même */
+.vaults-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
 }
