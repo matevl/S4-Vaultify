@@ -39,8 +39,7 @@
     margin-right: auto;
     max-width: 300px;
     height: auto;
-    transform: translateY(-4em); /* ← visuellement plus bas */
-}
+    transform: translateY(-4em);
 
 .hero-title {
     font-size: 2.5rem;
@@ -285,4 +284,4 @@
     100% {
         background-position: 0% 50%;
     }
-}
+}}

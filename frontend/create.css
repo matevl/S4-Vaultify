@@ -16,7 +16,7 @@
     padding: 1rem;
 }
 
-/* Arrière-plan animé avec effets lumineux */
+
 .login-background-animated {
     position: absolute;
     width: 100%;
@@ -52,7 +52,7 @@
     }
 }
 
-/* Boîte de connexion (glass effect) */
+
 .login-box {
     background-color: rgba(255, 255, 255, 0.08);
     backdrop-filter: blur(10px);
@@ -77,7 +77,7 @@
     height: 48px;
 }
 
-/* Titre */
+
 .login-title {
     font-size: 1.75rem;
     font-weight: 600;
@@ -86,14 +86,14 @@
     margin-bottom: 1rem;
 }
 
-/* Formulaire */
+
 .login-form {
     display: flex;
     flex-direction: column;
     gap: 1rem;
 }
 
-/* Zone contenant l'icône + input */
+
 .input-icon-wrapper {
     position: relative;
 }

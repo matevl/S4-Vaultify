@@ -64,7 +64,6 @@ export default function Home() {
 
     return (
         <div className="dashboard">
-            {/* Sidebar */}
             <div className="sidebar">
                 <h2 className="sidebar-title">Vaultify</h2>
                 <ul className="sidebar-menu">
@@ -75,7 +74,6 @@ export default function Home() {
                 </ul>
             </div>
 
-            {/* Main */}
             <div className="main-content">
                 <div className="dashboard-header">
                     <h1>Bienvenue</h1>
@@ -84,7 +82,6 @@ export default function Home() {
                     </button>
                 </div>
 
-                {/* Vault list embed */}
                 <div className="dashboard-section">
                     <h2>Mes Vaults</h2>
                     <div className="vaults-embed">
@@ -99,7 +96,6 @@ export default function Home() {
                 </div>
             </div>
 
-            {/* Modal */}
             {showModal && (
                 <div className="modal-overlay" onClick={closeModal}>
                     <div
