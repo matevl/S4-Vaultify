@@ -1,7 +1,18 @@
-import React, { useState } from 'react';
+import React, {useEffect, useState } from 'react';
 import './home.css';
 
 export default function Home() {
+    const [vaultCreated, setVaultCreated] = useState(false);
+    const [showToast, setShowToast] = useState(false);
+
+    useEffect(() => {
+        if (localStorage.getItem('loginSuccess') === 'true') {
+            setShowToast(true);
+            localStorage.removeItem('loginSuccess');
+            setTimeout(() => setShowToast(false), 3000);
+        }
+    }, []);
+
     const [showModal, setShowModal] = useState(false);
     const [newVaultName, setNewVaultName] = useState('');
     const [creating, setCreating] = useState(false);
@@ -30,10 +41,19 @@ export default function Home() {
                 const text = await res.text();
                 throw new Error(text || `Erreur ${res.status}`);
             }
-            // reload vault list
+
             const iframe = document.getElementById('vaults-iframe');
             if (iframe) iframe.contentWindow.location.reload();
-            closeModal();
+            setTimeout(() => {
+                setVaultCreated(true);
+            }, 10);
+            setTimeout(() => {
+                setVaultCreated(false);
+            }, 3000);
+
+            setTimeout(() => {
+                closeModal();
+            }, 50);
         } catch (err) {
             console.error('Erreur création vault:', err);
             alert('Impossible de créer le vault : ' + err.message);
@@ -117,6 +137,31 @@ export default function Home() {
                     </div>
                 </div>
             )}
+            {showToast && (
+                <div className="toast-notification">
+                <span className="toast-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none"
+                         viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"
+                         className="icon-size">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                    </svg>
+                </span>
+                <span>Successful login</span>
+                </div>
+            )}
+            {vaultCreated && (
+                <div className="toast-notification">
+                <span className="toast-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none"
+                viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"
+                className="icon-size">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+                </span>
+                    <span>Successful vault creation</span>
+                </div>
+            )}
         </div>
+
     );
 }

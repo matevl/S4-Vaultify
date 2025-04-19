@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-
+import './login.css';
 export default function Login() {
-    const [email, setEmail]     = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [loginError, setLoginError] = useState(false);
 
     const handleSubmit = async e => {
         e.preventDefault();
@@ -16,14 +17,23 @@ export default function Login() {
                 body: JSON.stringify(loginData)
             });
 
-            if (res.ok) {
-                window.location.href = '/home';
-            } else {
-                const err = await res.json();
-                alert('Erreur : ' + err.message);
+            if (!res.ok) {
+                if (res.status === 401) {
+                    setLoginError(true);
+                    setTimeout(() => setLoginError(false), 3000);
+                } else {
+                    const text = await res.text();
+                    alert('Erreur : ' + text);
+                }
+                return;
             }
+
+            localStorage.setItem('loginSuccess', 'true');
+            setTimeout(() => {
+                window.location.href = '/home';
+            }, 50);
         } catch (err) {
-            console.error(err);
+            console.error('Erreur réseau :', err);
             alert('Erreur serveur');
         }
     };
@@ -71,6 +81,20 @@ export default function Login() {
                     </p>
                 </form>
             </div>
+
+            {loginError && (
+                <div className="toast-notification error">
+          <span className="toast-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none"
+                 viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"
+                 className="icon-size">
+              <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </span>
+                    <span>Credentials not found</span>
+                </div>
+            )}
         </div>
     );
 }
