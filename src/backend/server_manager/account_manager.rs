@@ -11,6 +11,7 @@ use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use uuid::Uuid;
 
@@ -250,7 +251,7 @@ pub async fn create_user_query(form: web::Json<CreateUserForm>) -> HttpResponse 
     };
 
     // Create the user in the database
-    let id = match create_user(&conn, &email, &hash_pw) {
+    let _ = match create_user(&conn, &email, &hash_pw) {
         Ok(id) => id,
         Err(_) => {
             return HttpResponse::InternalServerError().json(json!({
@@ -285,7 +286,7 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
 
             SESSION_CACHE.insert(
                 session_id.clone(),
-                Session::new(user_id, &hash_pw, &user_key),
+                Arc::new(Mutex::new(Session::new(user_id, &hash_pw, &user_key))),
             );
 
             let jwt_token = JWT::new(&session_id, user_id, &email);

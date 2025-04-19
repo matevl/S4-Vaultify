@@ -24,7 +24,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
  */
 
 pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> rusqlite::Result<VaultInfo> {
-    if let Ok(val) = conn.execute(
+    if let Ok(_) = conn.execute(
         "INSERT INTO vaults (user_id, name, date) VALUES (?, ?, ?)",
         params![vault_info.user_id, vault_info.name, vault_info.date],
     ) {
@@ -47,7 +47,8 @@ pub async fn create_vault_query(
     if let Some(decoded_jwt) = get_user_from_cookie(&req) {
         let connection = CONNECTION.lock().unwrap();
         let name: &str = &form.name;
-        if let Some(cache) = SESSION_CACHE.get(&decoded_jwt.session_id) {
+        if let Some(session) = SESSION_CACHE.get(&decoded_jwt.session_id) {
+            let session = session.lock().unwrap();
             let time = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
@@ -83,12 +84,12 @@ pub async fn create_vault_query(
             );
 
             let content = serde_json::to_string(&(vault_key, Perms::Admin)).unwrap();
-            let encrypted_content = encrypt(content.as_bytes(), cache.user_key.as_slice());
+            let encrypted_content = encrypt(content.as_bytes(), session.user_key.as_slice());
             fs::write(&user_json, &encrypted_content).unwrap();
 
             init_map(
                 &format!("{}/map.json", vault_path),
-                cache.user_key.as_slice(),
+                session.user_key.as_slice(),
             );
 
             match create_vault(&connection, &info) {
@@ -124,7 +125,8 @@ pub async fn load_vault_query(
     let info = vault_info.into_inner();
 
     if let Some(mut jwt) = get_user_from_cookie(&req) {
-        if let Some(mut cache) = SESSION_CACHE.get(&jwt.session_id) {
+        if let Some(session) = SESSION_CACHE.get(&jwt.session_id) {
+            let mut session = session.lock().unwrap();
             let vault_name = format!("{}_{}", info.user_id, info.date);
 
             let key_path = format!(
@@ -142,7 +144,7 @@ pub async fn load_vault_query(
             };
 
             let decrypted_content =
-                match decrypt(encrypted_content.as_slice(), cache.user_key.as_slice()) {
+                match decrypt(encrypted_content.as_slice(), session.user_key.as_slice()) {
                     Ok(data) => data,
                     Err(_) => return HttpResponse::InternalServerError().body("Failed to decrypt"),
                 };
@@ -155,9 +157,9 @@ pub async fn load_vault_query(
                     }
                 };
 
-            if cache.vault_key.get(&vault_name).is_none() {
-                cache.vault_key.insert(vault_name.clone(), vault_key);
-                cache.vault_perms = vault_perms;
+            if session.vault_key.get(&vault_name).is_none() {
+                session.vault_key.insert(vault_name.clone(), vault_key);
+                session.vault_perms = vault_perms;
             }
 
             jwt.loaded_vault = Some(info.clone());

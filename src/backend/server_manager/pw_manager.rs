@@ -27,6 +27,7 @@ pub async fn get_user_passwords(user: web::Json<JWT>) -> impl Responder {
     let path = get_passwords_path(user.id);
 
     if let Some(session) = SESSION_CACHE.get(&user.session_id) {
+        let session = session.lock().unwrap();
         if let Ok(encrypted_data) = fs::read(&path) {
             if let Ok(decrypted_data) = decrypt(&encrypted_data, session.user_key.as_slice()) {
                 if let Ok(passwords) = serde_json::from_slice::<Vec<PasswordEntry>>(&decrypted_data)
@@ -46,6 +47,7 @@ pub async fn add_user_password(data: web::Json<(JWT, PasswordEntry)>) -> impl Re
     let path = get_passwords_path(jwt.id);
 
     if let Some(session) = SESSION_CACHE.get(&jwt.session_id) {
+        let session = session.lock().unwrap();
         let mut passwords: Vec<PasswordEntry> = if let Ok(encrypted_data) = fs::read(&path) {
             if let Ok(decrypted_data) = decrypt(&encrypted_data, session.user_key.as_slice()) {
                 serde_json::from_slice(&decrypted_data).unwrap_or_default()
@@ -72,6 +74,7 @@ pub async fn remove_user_password(data: web::Json<(JWT, PasswordEntry)>) -> impl
     let path = get_passwords_path(jwt.id);
 
     if let Some(session) = SESSION_CACHE.get(&jwt.session_id) {
+        let session = session.lock().unwrap();
         let mut passwords: Vec<PasswordEntry> = if let Ok(encrypted_data) = fs::read(&path) {
             if let Ok(decrypted_data) = decrypt(&encrypted_data, session.user_key.as_slice()) {
                 serde_json::from_slice(&decrypted_data).unwrap_or_default()

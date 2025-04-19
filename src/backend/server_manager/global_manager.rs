@@ -17,7 +17,7 @@ lazy_static! {
     /**
      * Global cache for user sessions.
      */
-    pub static ref SESSION_CACHE: Cache<String, Session> = {
+    pub static ref SESSION_CACHE: Cache<String, Arc<Mutex<Session>>> = {
         Cache::builder()
             .time_to_live(Duration::from_secs(3600))
             .build()

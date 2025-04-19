@@ -171,8 +171,9 @@ pub async fn get_tree_vault(req: HttpRequest, info: web::Json<VaultInfo>) -> imp
             Err(_) => return HttpResponse::InternalServerError().body("Failed to read map"),
         };
 
-        if let Some(cache) = SESSION_CACHE.get(&jwt.session_id) {
-            let key = cache.user_key.clone();
+        if let Some(session) = SESSION_CACHE.get(&jwt.session_id) {
+            let session = session.lock().unwrap();
+            let key = session.user_key.clone();
 
             let decrypted = match decrypt(&encrypted, key.as_slice()) {
                 Ok(data) => data,
@@ -259,6 +260,7 @@ pub async fn move_tree_vault(
         };
 
         if let Some(cache) = SESSION_CACHE.get(&jwt.session_id) {
+            let cache = cache.lock().unwrap();
             let key = cache.user_key.clone();
 
             let decrypted = match decrypt(&encrypted, key.as_slice()) {
