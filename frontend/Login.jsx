@@ -45,7 +45,7 @@ export default function Login() {
                 <div className="login-logo">
                     <img src="../static/vault-text-svg.svg" alt="Bannière" className="logo-img" />
                 </div>
-                <h2 className="login-title">Se connecter</h2>
+                <h2 className="login-title">Sign in</h2>
                 <form onSubmit={handleSubmit} className="login-form">
                     <div className="input-icon-wrapper">
                         <svg xmlns="http://www.w3.org/2000/svg" className="input-icon" fill="none" viewBox="0 0 24 24" stroke="#ffffff">
@@ -71,13 +71,13 @@ export default function Login() {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
-                            placeholder="Mot de passe"
+                            placeholder="Password"
                             className="login-input"
                         />
                     </div>
-                    <button type="submit" className="login-button">Se connecter</button>
+                    <button type="submit" className="login-button">Login</button>
                     <p className="login-text">
-                        Pas encore inscrit ? <a href="/create-user" className="login-link">S'inscrire</a>
+                        Not registered yet ? <a href="/create-user" className="login-link">Sign up</a>
                     </p>
                 </form>
             </div>
