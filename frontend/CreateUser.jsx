@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 export default function CreateUser() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [accountCreated, setAccountCreated] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -19,10 +20,10 @@ export default function CreateUser() {
             });
 
             if (res.ok) {
-                const responseData = await res.json();
-                alert('Utilisateur créé : ' + responseData.message);
-                window.location.href = '/login';
-            } else {
+                localStorage.setItem('accountCreated', 'true'); // ← on enregistre
+                window.location.href = '/login'; // redirection immédiate
+            }
+             else {
                 const errorData = await res.json();
                 alert('Erreur : ' + errorData.message);
             }

@@ -1,9 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './login.css';
 export default function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loginError, setLoginError] = useState(false);
+    const [accountCreated, setAccountCreated] = useState(false);
+
+    useEffect(() => {
+        if (localStorage.getItem('accountCreated') === 'true') {
+            setAccountCreated(true);
+            localStorage.removeItem('accountCreated');
+            setTimeout(() => setAccountCreated(false), 3000);
+        }
+    }, []);
 
     const handleSubmit = async e => {
         e.preventDefault();
@@ -93,6 +102,20 @@ export default function Login() {
             </svg>
           </span>
                     <span>Credentials not found</span>
+                </div>
+            )}
+
+            {accountCreated && (
+                <div className="toast-notification success">
+                <span className="toast-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none"
+                viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"
+                className="icon-size">
+                <path strokeLinecap="round" strokeLinejoin="round"
+              d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+                </span>
+                    <span>Account created</span>
                 </div>
             )}
         </div>
