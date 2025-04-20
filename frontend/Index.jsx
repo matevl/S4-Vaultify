@@ -8,15 +8,15 @@ export default function Index() {
             <div className="hero-container">
                 <div className="hero-content">
                     <img src="/static/vault-text-svg.svg" alt="Vaultify logo" className="hero-logo" />
-                    <h1 className="vaultify-title">Bienvenue sur Vaultify</h1>
-                    <p className="hero-subtitle">Un espace sécurisé pour vos fichiers confidentiels.</p>
+                    <h1 className="vaultify-title">Welcome to Vaultify</h1>
+                    <p className="hero-subtitle">A secure space for your confidential files.</p>
                     <div className="hero-buttons">
-                        <a href="/login" className="btn btn-primary">Se connecter</a>
-                        <a href="/create-user" className="btn btn-secondary">Créer un compte</a>
+                        <a href="/login" className="btn btn-primary">Sign in</a>
+                        <a href="/create-user" className="btn btn-secondary">Sign up</a>
                     </div>
                 </div>
                 <div className="about-container">
-                    <a href="/about" className="about-link">À propos</a>
+                    <a href="/about" className="about-link">About us</a>
                     <a href="https://github.com/matevl/S4-Vaultify" className="about-link">Github</a>
                 </div>
             </div>

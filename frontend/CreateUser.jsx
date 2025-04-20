@@ -39,19 +39,19 @@ export default function CreateUser() {
                 <div className="login-logo">
                     <img src="../static/vault-text-svg.svg" alt="Bannière" className="logo-img" />
                 </div>
-                <h2 className="login-title">Créer un compte</h2>
+                <h2 className="login-title">Create an account</h2>
                 <form onSubmit={handleSubmit} className="login-form">
                     <div className="input-icon-wrapper">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="input-icon" fill="none" viewBox="0 0 24 24" stroke="#ffffff">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5.121 17.804A13.937 13.937 0 0112 15c2.485 0 4.797.755 6.879 2.047M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" className="input-icon" fill="none" viewBox="0 0 24 24" stroke="#ffffff">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                            </svg>
                         <input
                             type="text"
                             id="username"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             required
-                            placeholder="Nom d'utilisateur"
+                            placeholder="Email"
                             className="login-input"
                         />
                     </div>
@@ -65,13 +65,13 @@ export default function CreateUser() {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
-                            placeholder="Mot de passe"
+                            placeholder="Password"
                             className="login-input"
                         />
                     </div>
-                    <button type="submit" className="login-button">Créer un compte</button>
+                    <button type="submit" className="login-button">Create an account</button>
                     <p className="login-text">
-                        Déjà inscrit ? <a href="/login" className="login-link">Se connecter</a>
+                        Already registered ?<a href="/login" className="login-link"> Sign in</a>
                     </p>
                 </form>
             </div>
