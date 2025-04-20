@@ -1,71 +1,15 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Connexion</title>
-    <link rel="stylesheet" href="../static/style.css">
-    <link rel="icon" href="../static/vaultify-grad.ico" type="image/x-icon"> <!-- Icône du site -->
+    <link rel="icon" href="/static/vaultify-grad.png" />
+    <link rel="stylesheet" href="/static/login.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-<div class="container">
-    <img src="../static/vault-text-svg.svg" alt="Bannière" class="banner-image svg"> <!-- Image en haut -->
-    <h2>Se connecter</h2>
-    <form id="loginForm">
-        <div class="column">
-            <label for="email">Email:</label>
-            <input type="email" id="email" name="email" required>
-        </div>
-        <div class="column">
-            <label for="password">Mot de passe:</label>
-            <input type="password" id="password" name="password" required>
-        </div>
-        <div class="column">
-            <button type="submit">Se connecter</button>
-        </div>
-        <p>Pas encore inscrit? <a href="/create-user">S'inscrire</a></p>
-    </form>
-</div>
-
-<script>
-    document.getElementById('loginForm').addEventListener('submit', async function(event) {
-        event.preventDefault(); // Empêcher la soumission normale du formulaire
-
-        // Récupérer les valeurs du formulaire
-        const email = document.getElementById('email').value;
-        const password = document.getElementById('password').value;
-
-        // Créer l'objet de données à envoyer
-        const loginData = {
-            username: email,
-            password: password
-        };
-
-        // Envoyer les données au serveur via fetch
-        try {
-            const response = await fetch('/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json' // Spécifier que l'on envoie des données en JSON
-                },
-                body: JSON.stringify(loginData) // Convertir les données en JSON
-            });
-
-            if (response.ok) {
-                // Si la connexion est réussie, rediriger vers /home
-                window.location.href = '/home';
-            } else {
-                // Afficher un message d'erreur si la connexion échoue
-                const errorData = await response.json();
-                alert('Erreur: ' + errorData.message);
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            alert('Une erreur est survenue lors de la connexion');
-        }
-    });
-</script>
-
-<script src="../static/app.js"></script>
+<body class="bg-gray-100">
+<div id="root" data-page="login"></div>
+<script type="module" src="/static/app.bundle.js"></script>
 </body>
 </html>
