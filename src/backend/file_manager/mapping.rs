@@ -1,17 +1,13 @@
 use crate::backend::aes_keys::crypted_key::encrypt;
 use crate::backend::aes_keys::decrypted_key::decrypt;
-use crate::backend::server_manager::account_manager::{VaultInfo, JWT};
-use crate::backend::server_manager::global_manager::{ROOT, SESSION_CACHE};
+use crate::backend::server_manager::account_manager::JWT;
+use crate::backend::server_manager::global_manager::{get_user_from_cookie, ROOT, SESSION_CACHE};
+use crate::backend::server_manager::vault_manager::VaultInfo;
 use crate::backend::VAULTS_DATA;
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-
-fn get_user_from_cookie(req: &HttpRequest) -> Option<JWT> {
-    req.cookie("user_token")
-        .and_then(|cookie| serde_json::from_str(cookie.value()).ok())
-}
 
 #[derive(Serialize, Deserialize, Debug)]
 struct FileMap {

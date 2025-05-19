@@ -1,7 +1,9 @@
 use crate::backend::aes_keys::keys_password::{derive_key, generate_salt_from_login};
 use crate::backend::server_manager::global_manager::{
-    get_user_from_cookie, CONNECTION, SESSION_CACHE,
+    get_user_from_cookie, CONNECTION, ROOT, SESSION_CACHE,
 };
+use crate::backend::server_manager::vault_manager::VaultInfo;
+use crate::backend::{VAULTS_DATA, VAULT_USERS_DIR};
 use actix_web::cookie::time::Duration as Dudu;
 use actix_web::cookie::Cookie;
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
@@ -20,6 +22,7 @@ use uuid::Uuid;
  */
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Perms {
+    Creator,
     Admin,
     Write,
     Read,
@@ -48,34 +51,6 @@ pub struct LoginForm {
 pub struct CreateUserResponse {
     pub success: bool,
     pub message: String,
-}
-
-/**
- * Struct representing information about a vault.
- */
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct VaultInfo {
-    pub user_id: u32,
-    pub name: String,
-    pub date: u64,
-}
-
-impl VaultInfo {
-    /**
-     * Creates a new VaultInfo instance.
-     *
-     * @param user_id - The ID of the user.
-     * @param name - The name of the vault.
-     * @param date - The creation date of the vault.
-     * @return A new VaultInfo instance.
-     */
-    pub fn new(user_id: u32, name: &str, date: u64) -> Self {
-        Self {
-            user_id,
-            name: name.to_string(),
-            date,
-        }
-    }
 }
 
 /**
@@ -115,8 +90,6 @@ pub struct Session {
     pub user_id: u32,
     pub hash_pw: String,
     pub user_key: Vec<u8>,
-    pub vault_key: HashMap<String, Vec<u8>>,
-    pub vault_perms: Perms,
     pub last_activity: SystemTime,
 }
 
@@ -134,8 +107,6 @@ impl Session {
             user_id,
             hash_pw: hash_pw.to_string(),
             user_key: user_key.to_vec(),
-            vault_key: HashMap::new(),
-            vault_perms: Perms::NoLoad,
             last_activity: SystemTime::now(),
         }
     }

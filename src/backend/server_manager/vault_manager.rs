@@ -4,16 +4,99 @@ use crate::backend::aes_keys::keys_password::{
     derive_key, generate_random_key, generate_salt_from_login,
 };
 use crate::backend::file_manager::mapping::init_map;
-use crate::backend::server_manager::account_manager::{Perms, VaultForm, VaultInfo};
+use crate::backend::server_manager::account_manager::{get_user_by_email, Perms, VaultForm};
 use crate::backend::server_manager::global_manager::{
-    get_user_from_cookie, CONNECTION, ROOT, SESSION_CACHE,
+    get_user_from_cookie, is_vault_in_cache, CONNECTION, ROOT, SESSION_CACHE, VAULTS_CACHE,
 };
 use crate::backend::{VAULTS_DATA, VAULT_CONFIG_ROOT, VAULT_USERS_DIR};
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use rusqlite::{params, Connection};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::HashMap;
 use std::fs;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+const PERMS_PATH: &str = ".vault/perms.json";
+
+type PermsMap = HashMap<u64, Perms>;
+
+/**
+ * Struct representing information about a vault.
+ */
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct VaultInfo {
+    pub user_id: u32,
+    pub name: String,
+    pub date: u64,
+}
+
+impl VaultInfo {
+    /**
+     * Creates a new VaultInfo instance.
+     *
+     * @param user_id - The ID of the user.
+     * @param name - The name of the vault.
+     * @param date - The creation date of the vault.
+     * @return A new VaultInfo instance.
+     */
+    pub fn new(user_id: u32, name: &str, date: u64) -> Self {
+        Self {
+            user_id,
+            name: name.to_string(),
+            date,
+        }
+    }
+
+    pub fn get_name(&self) -> String {
+        format!("{}_{}", self.user_id, self.date)
+    }
+
+    pub fn get_path(&self) -> String {
+        format!(
+            "{}/{}{}/.json",
+            ROOT.to_str().unwrap(),
+            VAULTS_DATA,
+            self.get_name(),
+        )
+    }
+
+    pub async fn get_perms(&self, vault_key: &[u8]) -> Result<PermsMap, &str> {
+        let path = format!("{}{}", self.get_path(), PERMS_PATH);
+        if let Ok(data) = fs::read(path) {
+            if let Ok(decrypted) = decrypt(&data, &vault_key) {
+                if let Ok(perms) =
+                    serde_json::from_str(&String::from_utf8_lossy(decrypted.as_slice()))
+                {
+                    perms
+                } else {
+                    Err("Failed to decrypt data")
+                }
+            } else {
+                Err("Failed to decrypt data")
+            }
+        } else {
+            Err("Failed to decrypt data")
+        }
+    }
+}
+
+pub struct VaultsCache {
+    info: VaultInfo,
+    perms: PermsMap,
+    vault_key: Vec<u8>,
+}
+
+impl VaultsCache {
+    pub fn new(info: &VaultInfo, perms: &PermsMap, vault_key: &Vec<u8>) -> Self {
+        VaultsCache {
+            info: info.clone(),
+            perms: perms.clone(),
+            vault_key: vault_key.clone(),
+        }
+    }
+}
 
 /**
  * Creates a new vault for a user.
@@ -83,7 +166,7 @@ pub async fn create_vault_query(
                 10000,
             );
 
-            let content = serde_json::to_string(&(vault_key, Perms::Admin)).unwrap();
+            let content = serde_json::to_string(&(vault_key, Perms::Creator)).unwrap();
             let encrypted_content = encrypt(content.as_bytes(), session.user_key.as_slice());
             fs::write(&user_json, &encrypted_content).unwrap();
 
@@ -125,18 +208,13 @@ pub async fn load_vault_query(
     let info = vault_info.into_inner();
 
     if let Some(mut jwt) = get_user_from_cookie(&req) {
-        if let Some(session) = SESSION_CACHE.get(&jwt.session_id) {
+        if is_vault_in_cache(&info.get_name()).await {
+            HttpResponse::Ok().json(info.clone())
+        } else if let Some(session) = SESSION_CACHE.get(&jwt.session_id) {
             let mut session = session.lock().unwrap();
-            let vault_name = format!("{}_{}", info.user_id, info.date);
 
-            let key_path = format!(
-                "{}/{}{}/{}{}.json",
-                ROOT.to_str().unwrap(),
-                VAULTS_DATA,
-                vault_name,
-                VAULT_USERS_DIR,
-                jwt.id
-            );
+            let vault_name = info.get_name();
+            let key_path = format!("{}{}{}.json", info.get_path(), VAULT_USERS_DIR, jwt.id);
 
             let encrypted_content = match fs::read(&key_path) {
                 Ok(data) => data,
@@ -149,7 +227,7 @@ pub async fn load_vault_query(
                     Err(_) => return HttpResponse::InternalServerError().body("Failed to decrypt"),
                 };
 
-            let (vault_key, vault_perms): (Vec<u8>, Perms) =
+            let vault_key: Vec<u8> =
                 match serde_json::from_str(&String::from_utf8(decrypted_content).unwrap()) {
                     Ok(parsed) => parsed,
                     Err(_) => {
@@ -157,12 +235,21 @@ pub async fn load_vault_query(
                     }
                 };
 
-            if session.vault_key.get(&vault_name).is_none() {
-                session.vault_key.insert(vault_name.clone(), vault_key);
-                session.vault_perms = vault_perms;
-            }
+            let vault_perms: PermsMap = match info.get_perms(&vault_key).await {
+                Ok(perms) => perms,
+                Err(_) => {
+                    return HttpResponse::InternalServerError().body("Invalid vault permissions")
+                }
+            };
 
-            jwt.loaded_vault = Some(info.clone());
+            VAULTS_CACHE.insert(
+                vault_name,
+                Arc::new(Mutex::new(VaultsCache::new(
+                    &info,
+                    &vault_perms,
+                    &vault_key,
+                ))),
+            );
 
             HttpResponse::Ok().json(jwt)
         } else {
@@ -171,4 +258,36 @@ pub async fn load_vault_query(
     } else {
         HttpResponse::InternalServerError().body("Failed to decrypt")
     }
+}
+
+pub async fn get_perms_query(req: HttpRequest, vault_info: web::Json<VaultInfo>) -> impl Responder {
+    HttpResponse::Ok().json("")
+}
+
+pub async fn share_vault_query(
+    req: HttpRequest,
+    data: web::Json<(VaultInfo, String)>,
+) -> impl Responder {
+    HttpResponse::Ok().json("")
+}
+
+pub async fn remove_user_from_vault_query(
+    req: HttpRequest,
+    data: web::Json<(VaultInfo, String)>,
+) -> impl Responder {
+    HttpResponse::Ok().json("")
+}
+
+pub async fn delete_vault_query(
+    req: HttpRequest,
+    vault_info: web::Json<VaultInfo>,
+) -> impl Responder {
+    HttpResponse::Ok().json("")
+}
+
+pub async fn leave_vault_query(
+    req: HttpRequest,
+    vault_info: web::Json<VaultInfo>,
+) -> impl Responder {
+    HttpResponse::Ok().json("")
 }

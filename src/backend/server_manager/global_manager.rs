@@ -1,4 +1,5 @@
 use crate::backend::server_manager::account_manager::{init_db_connection, Session, JWT};
+use crate::backend::server_manager::vault_manager::VaultsCache;
 use crate::backend::{VAULTIFY_CONFIG, VAULTIFY_DATABASE};
 use actix_web::HttpRequest;
 use lazy_static::lazy_static;
@@ -24,6 +25,16 @@ lazy_static! {
     };
 
     /**
+     * Global cache for vault
+     */
+
+    pub static ref VAULTS_CACHE: Cache<String, Arc<Mutex<VaultsCache>>> = {
+        Cache::builder()
+        .time_to_live(Duration::from_secs(3600))
+        .build()
+    };
+
+    /**
      * Global database connection.
      */
     pub static ref CONNECTION: Arc<Mutex<Connection>> = Arc::new(Mutex::new(init_db_connection(&format!("{}/{}", ROOT.to_str().unwrap(), VAULTIFY_DATABASE)).unwrap()));
@@ -32,6 +43,10 @@ lazy_static! {
 pub fn get_user_from_cookie(req: &HttpRequest) -> Option<JWT> {
     req.cookie("user_token")
         .and_then(|cookie| serde_json::from_str(cookie.value()).ok())
+}
+
+pub async fn is_vault_in_cache(name: &str) -> bool {
+    VAULTS_CACHE.contains_key(name)
 }
 
 /**
