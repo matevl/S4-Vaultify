@@ -62,6 +62,31 @@ impl VaultInfo {
         )
     }
 
+    pub fn create_path(&self) -> Result<bool, std::io::Error> {
+        let vault_path = self.get_path();
+        if let Err(e) = fs::create_dir_all(&vault_path) {
+            return Err(e);
+        }
+        let vault_config = format!("{}{}", vault_path, VAULT_CONFIG_ROOT);
+        if let Err(e) = fs::create_dir_all(&vault_config) {
+            return Err(e);
+        }
+        let vault_config_users = format!("{}{}", vault_path, VAULT_USERS_DIR);
+        if let Err(e) = fs::create_dir_all(&vault_config_users) {
+            return Err(e);
+        }
+        let user_key = format!("{}{}.json", vault_config_users, self.user_id);
+        if let Err(e) = fs::File::create(&user_key) {
+            return Err(e);
+        }
+
+        let vault_perms = format!("{}{}", vault_path, PERMS_PATH);
+        if let Err(e) = fs::File::create(&vault_perms) {
+            return Err(e);
+        }
+        Ok(true)
+    }
+
     pub async fn get_perms(&self, vault_key: &[u8]) -> Result<PermsMap, &str> {
         let path = format!("{}{}", self.get_path(), PERMS_PATH);
         if let Ok(data) = fs::read(path) {
@@ -69,7 +94,7 @@ impl VaultInfo {
                 if let Ok(perms) =
                     serde_json::from_str(&String::from_utf8_lossy(decrypted.as_slice()))
                 {
-                    perms
+                    Ok(perms)
                 } else {
                     Err("Failed to decrypt data")
                 }
@@ -129,26 +154,17 @@ pub async fn create_vault_query(
 ) -> impl Responder {
     if let Some(decoded_jwt) = get_user_from_cookie(&req) {
         let connection = CONNECTION.lock().unwrap();
-        let name: &str = &form.name;
         if let Some(session) = SESSION_CACHE.get(&decoded_jwt.session_id) {
             let session = session.lock().unwrap();
+
             let time = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_secs();
 
-            let vault_name = format!("{}_{}", decoded_jwt.id, time);
+            let info = VaultInfo::new(decoded_jwt.id, &form.name, time);
 
-            let vault_path = format!("{}/{}{}", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
-
-            let vault_config = format!("{}/{}", vault_path, VAULT_CONFIG_ROOT);
-            let users_vault = format!("{}/{}", vault_path, VAULT_USERS_DIR);
-            let user_json = format!("{users_vault}{}.json", decoded_jwt.id);
-
-            fs::create_dir_all(&vault_path).unwrap();
-            fs::create_dir_all(&vault_config).unwrap();
-            fs::create_dir_all(&users_vault).unwrap();
-            match fs::File::create(&user_json) {
+            match info.create_path() {
                 Ok(_) => (),
                 Err(e) => {
                     eprintln!("Failed to create user JSON file: {:?}", e);
@@ -156,7 +172,6 @@ pub async fn create_vault_query(
                         .body("Failed to create user JSON file.");
                 }
             }
-            let info = VaultInfo::new(decoded_jwt.id, &name, time);
 
             let vault_key = generate_random_key();
 
