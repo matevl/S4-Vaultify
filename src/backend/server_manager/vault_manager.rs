@@ -1,3 +1,4 @@
+// Import necessary modules from the backend
 use crate::backend::aes_keys::crypted_key::encrypt;
 use crate::backend::aes_keys::decrypted_key::decrypt;
 use crate::backend::aes_keys::keys_password::{
@@ -9,6 +10,7 @@ use crate::backend::server_manager::global_manager::{
     get_user_from_cookie, is_vault_in_cache, CONNECTION, ROOT, SESSION_CACHE, VAULTS_CACHE,
 };
 use crate::backend::{VAULTS_DATA, VAULT_CONFIG_ROOT, VAULT_USERS_DIR};
+
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -18,13 +20,13 @@ use std::fs;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+// Relative path to the vault permissions file
 const PERMS_PATH: &str = ".vault/perms.json";
 
+// Type alias for the permissions mapping: user ID → permissions
 type PermsMap = HashMap<u32, Perms>;
 
-/**
- * Struct representing information about a vault.
- */
+/// Represents metadata for a vault.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VaultInfo {
     pub user_id: u32,
@@ -33,14 +35,7 @@ pub struct VaultInfo {
 }
 
 impl VaultInfo {
-    /**
-     * Creates a new VaultInfo instance.
-     *
-     * @param user_id - The ID of the user.
-     * @param name - The name of the vault.
-     * @param date - The creation date of the vault.
-     * @return A new VaultInfo instance.
-     */
+    /// Creates a new `VaultInfo` instance.
     pub fn new(user_id: u32, name: &str, date: u64) -> Self {
         Self {
             user_id,
@@ -49,10 +44,12 @@ impl VaultInfo {
         }
     }
 
+    /// Returns the internal vault name, e.g., "123_1700000000".
     pub fn get_name(&self) -> String {
         format!("{}_{}", self.user_id, self.date)
     }
 
+    /// Constructs the full path to the vault's root directory.
     pub fn get_path(&self) -> String {
         format!(
             "{}/{}{}/.json",
@@ -62,72 +59,94 @@ impl VaultInfo {
         )
     }
 
+    /// Creates the vault directory structure.
     pub async fn create_path(&self) -> Result<(), &str> {
         let vault_path = self.get_path();
-        if let Err(e) = fs::create_dir_all(&vault_path) {
-            return Err("cannot create vault");
-        }
-        let vault_config = format!("{}{}", vault_path, VAULT_CONFIG_ROOT);
-        if let Err(e) = fs::create_dir_all(&vault_config) {
-            return Err("cannot create vault");
-        }
-        let vault_config_users = format!("{}{}", vault_path, VAULT_USERS_DIR);
-        if let Err(e) = fs::create_dir_all(&vault_config_users) {
+
+        // Create main vault directory
+        if let Err(_) = fs::create_dir_all(&vault_path) {
             return Err("cannot create vault");
         }
 
-        let vault_perms = format!("{}{}", vault_path, PERMS_PATH);
-        if let Err(e) = fs::File::create(&vault_perms) {
+        // Create vault config directory
+        let vault_config = format!("{}{}", vault_path, VAULT_CONFIG_ROOT);
+        if let Err(_) = fs::create_dir_all(&vault_config) {
             return Err("cannot create vault");
         }
+
+        // Create user-specific directory inside the vault
+        let vault_config_users = format!("{}{}", vault_path, VAULT_USERS_DIR);
+        if let Err(_) = fs::create_dir_all(&vault_config_users) {
+            return Err("cannot create vault");
+        }
+
+        // Create empty permissions file
+        let vault_perms = format!("{}{}", vault_path, PERMS_PATH);
+        if let Err(_) = fs::File::create(&vault_perms) {
+            return Err("cannot create vault");
+        }
+
         Ok(())
     }
 
+    /// Saves the encrypted vault key for a specific user.
     pub async fn save_key(&self, vault_key: &[u8], user_key: &[u8], id: u32) -> Result<(), &str> {
         let key_path = format!("{}{}{}.json", self.get_path(), VAULT_USERS_DIR, id);
+
+        // Create key file if it doesn't exist
         if !fs::exists(&key_path).is_ok() {
-            match fs::File::create(&key_path) {
-                Err(_) => return Err("failed to create file"),
-                _ => {}
+            if fs::File::create(&key_path).is_err() {
+                return Err("failed to create file");
             }
         }
 
+        // Serialize the vault key
         let content = match serde_json::to_string(&vault_key.to_vec()) {
             Err(_) => return Err("failed to serialize key"),
             Ok(c) => c,
         };
 
-        let encryped_content = encrypt(content.as_bytes(), user_key);
+        // Encrypt the key content with the user key
+        let encrypted_content = encrypt(content.as_bytes(), user_key);
 
-        match fs::write(&key_path, &encryped_content) {
+        // Write the encrypted content to disk
+        match fs::write(&key_path, &encrypted_content) {
             Err(_) => Err("failed to write file"),
             _ => Ok(()),
         }
     }
 
+    /// Sets the encrypted permissions file for the vault.
     pub async fn set_perms(&self, vault_key: &[u8], perms: &PermsMap) -> Result<(), &str> {
         let path = format!("{}{}", self.get_path(), PERMS_PATH);
+
+        // Create file if it doesn't exist
         if !fs::exists(&path).is_ok() {
-            match fs::File::create(&path) {
-                Err(_) => return Err("failed to create file"),
-                _ => {}
+            if fs::File::create(&path).is_err() {
+                return Err("failed to create file");
             }
         }
+
+        // Serialize and encrypt the permissions
         let content = match serde_json::to_string_pretty(perms) {
             Ok(content) => content,
             Err(_) => return Err("failed to serialize permissions"),
         };
 
-        let encrypt_content = encrypt(content.as_bytes(), vault_key);
-        match fs::write(&path, encrypt_content) {
-            Err(_) => return Err("failed to write file"),
-            Ok(_) => {}
-        };
-        Ok(())
+        let encrypted_content = encrypt(content.as_bytes(), vault_key);
+
+        // Write to file
+        match fs::write(&path, encrypted_content) {
+            Err(_) => Err("failed to write file"),
+            Ok(_) => Ok(()),
+        }
     }
 
+    /// Retrieves and decrypts the vault's permissions.
     pub async fn get_perms(&self, vault_key: &[u8]) -> Result<PermsMap, &str> {
         let path = format!("{}{}", self.get_path(), PERMS_PATH);
+
+        // Read and decrypt permissions file
         if let Ok(data) = fs::read(path) {
             if let Ok(decrypted) = decrypt(&data, &vault_key) {
                 if let Ok(perms) =
@@ -146,6 +165,7 @@ impl VaultInfo {
     }
 }
 
+/// Struct representing cached vault data.
 pub struct VaultsCache {
     info: VaultInfo,
     perms: PermsMap,
@@ -153,6 +173,7 @@ pub struct VaultsCache {
 }
 
 impl VaultsCache {
+    /// Creates a new `VaultsCache` instance.
     pub fn new(info: &VaultInfo, perms: &PermsMap, vault_key: &Vec<u8>) -> Self {
         VaultsCache {
             info: info.clone(),
@@ -162,14 +183,7 @@ impl VaultsCache {
     }
 }
 
-/**
- * Creates a new vault for a user.
- *
- * @param conn - The database connection.
- * @param vault_info - The information about the vault.
- * @return A Result containing the ID of the created vault.
- */
-
+/// Inserts a new vault into the database.
 pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> rusqlite::Result<VaultInfo> {
     if let Ok(_) = conn.execute(
         "INSERT INTO vaults (user_id, name, date) VALUES (?, ?, ?)",
@@ -181,57 +195,52 @@ pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> rusqlite::Resu
     }
 }
 
-/**
- * Endpoint to create a new vault for a user.
- *
- * @param data - A tuple containing the JWT and the name of the vault.
- * @return An HTTP response indicating the result of the operation.
- */
-pub async fn create_vault_query(
-    req: HttpRequest,
-    form: web::Form<VaultForm>, // The form contains only one field (name)
-) -> impl Responder {
+/// HTTP endpoint: creates a new vault for a user.
+pub async fn create_vault_query(req: HttpRequest, form: web::Form<VaultForm>) -> impl Responder {
+    // Authenticate the user via cookie
     if let Some(decoded_jwt) = get_user_from_cookie(&req) {
         let connection = CONNECTION.lock().unwrap();
+
+        // Check if session exists
         if let Some(session) = SESSION_CACHE.get(&decoded_jwt.session_id) {
             let session = session.lock().unwrap();
 
+            // Get current timestamp
             let time = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_secs();
 
+            // Create vault metadata
             let info = VaultInfo::new(decoded_jwt.id, &form.name, time);
 
-            match info.create_path().await {
-                Ok(_) => {}
-                Err(e) => {
-                    eprintln!("Failed to create user JSON file: {:?}", e);
-                    return HttpResponse::InternalServerError()
-                        .body("Failed to create user JSON file.");
-                }
+            // Create vault directories
+            if let Err(e) = info.create_path().await {
+                eprintln!("Failed to create user JSON file: {:?}", e);
+                return HttpResponse::InternalServerError()
+                    .body("Failed to create user JSON file.");
             }
 
+            // Generate a random vault key and derive it
             let vault_key = generate_random_key();
-
             let vault_key = derive_key(
                 &String::from_utf8_lossy(vault_key.as_slice()),
                 generate_salt_from_login(&decoded_jwt.email).as_slice(),
                 10000,
             );
 
+            // Assign creator permissions
             let mut perms = PermsMap::new();
             perms.insert(decoded_jwt.id, Perms::Creator);
 
-            match info.set_perms(vault_key.as_slice(), &perms).await {
-                Ok(_) => {}
-                Err(_) => {
-                    return HttpResponse::InternalServerError()
-                        .body("failed to create user JSON file.")
-                }
+            // Save permissions file
+            if let Err(_) = info.set_perms(vault_key.as_slice(), &perms).await {
+                return HttpResponse::InternalServerError()
+                    .body("failed to create user JSON file.");
             }
 
-            match info
+            // Save encrypted vault key for the user
+            if let Err(_) = info
                 .save_key(
                     vault_key.as_slice(),
                     session.user_key.as_slice(),
@@ -239,49 +248,45 @@ pub async fn create_vault_query(
                 )
                 .await
             {
-                Ok(_) => {}
-                Err(_) => return HttpResponse::InternalServerError().body("failed to save key"),
-            };
+                return HttpResponse::InternalServerError().body("failed to save key");
+            }
 
+            // Initialize vault mapping file
             init_map(
                 &format!("{}/map.json", info.get_path()),
                 vault_key.as_slice(),
             );
 
+            // Persist the vault in the database
             match create_vault(&connection, &info) {
                 Ok(res) => HttpResponse::Ok().json(json!({
-                    "message": format!("Coffre '{}' créé avec succès !", res.name),
+                    "message": format!("Vault '{}' created successfully!", res.name),
                     "vault_id": res.user_id.clone(),
                     "date": res.date,
                 })),
                 Err(e) => {
-                    eprintln!("Erreur lors de la création du coffre : {:?}", e);
-                    HttpResponse::InternalServerError()
-                        .body("Erreur lors de la création du coffre.")
+                    eprintln!("Error creating vault: {:?}", e);
+                    HttpResponse::InternalServerError().body("Error creating vault.")
                 }
             }
         } else {
-            HttpResponse::Unauthorized().body("incorrect email or password")
+            HttpResponse::Unauthorized().body("Invalid email or password")
         }
     } else {
-        HttpResponse::Unauthorized().body("Token JWT invalide.")
+        HttpResponse::Unauthorized().body("Invalid JWT token.")
     }
 }
 
-/**
- * Endpoint to load a vault for a user.
- *
- * @param data - A tuple containing the JWT and the VaultInfo.
- * @return An HTTP response containing the updated JWT with the loaded vault.
- */
+/// HTTP endpoint: loads an existing vault into memory.
 pub async fn load_vault_query(
     req: HttpRequest,
     vault_info: web::Json<VaultInfo>,
 ) -> impl Responder {
-    print!("dsqfsdsd");
     let info = vault_info.into_inner();
 
+    // Authenticate user
     if let Some(mut jwt) = get_user_from_cookie(&req) {
+        // Check if the vault is already cached
         if is_vault_in_cache(&info.get_name()).await {
             HttpResponse::Ok().json(info.clone())
         } else if let Some(session) = SESSION_CACHE.get(&jwt.session_id) {
@@ -290,17 +295,20 @@ pub async fn load_vault_query(
             let vault_name = info.get_name();
             let key_path = format!("{}{}{}.json", info.get_path(), VAULT_USERS_DIR, jwt.id);
 
+            // Read user's encrypted key file
             let encrypted_content = match fs::read(&key_path) {
                 Ok(data) => data,
                 Err(_) => return HttpResponse::NotFound().body("Vault file not found"),
             };
 
+            // Decrypt the vault key
             let decrypted_content =
                 match decrypt(encrypted_content.as_slice(), session.user_key.as_slice()) {
                     Ok(data) => data,
                     Err(_) => return HttpResponse::InternalServerError().body("Failed to decrypt"),
                 };
 
+            // Parse the key from JSON
             let vault_key: Vec<u8> =
                 match serde_json::from_str(&String::from_utf8(decrypted_content).unwrap()) {
                     Ok(parsed) => parsed,
@@ -309,6 +317,7 @@ pub async fn load_vault_query(
                     }
                 };
 
+            // Load and decrypt permissions
             let vault_perms: PermsMap = match info.get_perms(&vault_key).await {
                 Ok(perms) => perms,
                 Err(_) => {
@@ -316,6 +325,7 @@ pub async fn load_vault_query(
                 }
             };
 
+            // Cache the vault in memory
             VAULTS_CACHE.insert(
                 vault_name,
                 Arc::new(Mutex::new(VaultsCache::new(
@@ -334,6 +344,7 @@ pub async fn load_vault_query(
     }
 }
 
+// Stubbed endpoints for future implementation
 pub async fn get_perms_query(req: HttpRequest, vault_info: web::Json<VaultInfo>) -> impl Responder {
     HttpResponse::Ok().json("")
 }
