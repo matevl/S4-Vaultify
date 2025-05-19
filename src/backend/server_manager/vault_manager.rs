@@ -20,7 +20,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const PERMS_PATH: &str = ".vault/perms.json";
 
-type PermsMap = HashMap<u64, Perms>;
+type PermsMap = HashMap<u32, Perms>;
 
 /**
  * Struct representing information about a vault.
@@ -62,40 +62,62 @@ impl VaultInfo {
         )
     }
 
-    pub async fn create_path(&self) -> Result<(), std::io::Error> {
+    pub async fn create_path(&self) -> Result<(), &str> {
         let vault_path = self.get_path();
         if let Err(e) = fs::create_dir_all(&vault_path) {
-            return Err(e);
+            return Err("cannot create vault");
         }
         let vault_config = format!("{}{}", vault_path, VAULT_CONFIG_ROOT);
         if let Err(e) = fs::create_dir_all(&vault_config) {
-            return Err(e);
+            return Err("cannot create vault");
         }
         let vault_config_users = format!("{}{}", vault_path, VAULT_USERS_DIR);
         if let Err(e) = fs::create_dir_all(&vault_config_users) {
-            return Err(e);
+            return Err("cannot create vault");
         }
 
         let vault_perms = format!("{}{}", vault_path, PERMS_PATH);
         if let Err(e) = fs::File::create(&vault_perms) {
-            return Err(e);
+            return Err("cannot create vault");
         }
         Ok(())
     }
 
-    pub async fn save_key(&self, user_key: &[u8], id: u32) -> Result<(), std::io::Error> {
+    pub async fn save_key(&self, vault_key: &[u8], user_key: &[u8], id: u32) -> Result<(), &str> {
         let key_path = format!("{}{}{}.json", self.get_path(), VAULT_USERS_DIR, id);
+        if !fs::exists(&key_path).is_ok() {
+            match fs::File::create(&key_path) {
+                Err(_) => return Err("failed to create file"),
+                _ => {}
+            }
+        }
 
-        Ok(())
+        let content = encrypt(vault_key, user_key);
+
+        match fs::write(&key_path, &content) {
+            Err(_) => Err("failed to write file"),
+            _ => Ok(()),
+        }
     }
 
-    pub async fn change_key(&self, user_key: &[u8], id: u32) -> Result<(), std::io::Error> {
-        Ok(())
-    }
-    pub async fn set_perms(&self, vault_key: &[u8], perms: &PermsMap) -> Result<(), std::io::Error> {
+    pub async fn set_perms(&self, vault_key: &[u8], perms: &PermsMap) -> Result<(), &str> {
+        let path = format!("{}{}", self.get_path(), PERMS_PATH);
+        if !fs::exists(&path).is_ok() {
+            match fs::File::create(&path) {
+                Err(e) => return Err("failed to create file"),
+                _ => {}
+            }
+        }
+        let content = match serde_json::to_string_pretty(perms) {
+            Ok(content) => content,
+            Err(_) => return Err("failed to serialize permissions"),
+        };
 
-        if fs::exists()
-
+        let encrypt_content = encrypt(content.as_bytes(), vault_key);
+        match fs::write(&path, encrypt_content) {
+            Err(_) => return Err("failed to write file"),
+            Ok(_) => {}
+        };
         Ok(())
     }
 
@@ -177,7 +199,7 @@ pub async fn create_vault_query(
             let info = VaultInfo::new(decoded_jwt.id, &form.name, time);
 
             match info.create_path().await {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(e) => {
                     eprintln!("Failed to create user JSON file: {:?}", e);
                     return HttpResponse::InternalServerError()
@@ -193,13 +215,20 @@ pub async fn create_vault_query(
                 10000,
             );
 
-            let content = serde_json::to_string(&(vault_key, Perms::Creator)).unwrap();
-            let encrypted_content = encrypt(content.as_bytes(), session.user_key.as_slice());
-            fs::write(&user_json, &encrypted_content).unwrap();
+            let mut perms = PermsMap::new();
+            perms.insert(decoded_jwt.id, Perms::Creator);
+
+            match info.set_perms(vault_key.as_slice(), &perms).await {
+                Ok(_) => {}
+                Err(_) => {
+                    return HttpResponse::InternalServerError()
+                        .body("failed to create user JSON file.")
+                }
+            }
 
             init_map(
-                &format!("{}/map.json", vault_path),
-                session.user_key.as_slice(),
+                &format!("{}/map.json", info.get_path()), 
+                vault_key.as_slice(),
             );
 
             match create_vault(&connection, &info) {
@@ -232,6 +261,7 @@ pub async fn load_vault_query(
     req: HttpRequest,
     vault_info: web::Json<VaultInfo>,
 ) -> impl Responder {
+    print!("dsqfsdsd");
     let info = vault_info.into_inner();
 
     if let Some(mut jwt) = get_user_from_cookie(&req) {
