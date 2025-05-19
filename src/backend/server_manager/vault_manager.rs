@@ -62,7 +62,7 @@ impl VaultInfo {
         )
     }
 
-    pub fn create_path(&self) -> Result<bool, std::io::Error> {
+    pub async fn create_path(&self) -> Result<(), std::io::Error> {
         let vault_path = self.get_path();
         if let Err(e) = fs::create_dir_all(&vault_path) {
             return Err(e);
@@ -75,16 +75,28 @@ impl VaultInfo {
         if let Err(e) = fs::create_dir_all(&vault_config_users) {
             return Err(e);
         }
-        let user_key = format!("{}{}.json", vault_config_users, self.user_id);
-        if let Err(e) = fs::File::create(&user_key) {
-            return Err(e);
-        }
 
         let vault_perms = format!("{}{}", vault_path, PERMS_PATH);
         if let Err(e) = fs::File::create(&vault_perms) {
             return Err(e);
         }
-        Ok(true)
+        Ok(())
+    }
+
+    pub async fn save_key(&self, user_key: &[u8], id: u32) -> Result<(), std::io::Error> {
+        let key_path = format!("{}{}{}.json", self.get_path(), VAULT_USERS_DIR, id);
+
+        Ok(())
+    }
+
+    pub async fn change_key(&self, user_key: &[u8], id: u32) -> Result<(), std::io::Error> {
+        Ok(())
+    }
+    pub async fn set_perms(&self, vault_key: &[u8], perms: &PermsMap) -> Result<(), std::io::Error> {
+
+        if fs::exists()
+
+        Ok(())
     }
 
     pub async fn get_perms(&self, vault_key: &[u8]) -> Result<PermsMap, &str> {
@@ -164,8 +176,8 @@ pub async fn create_vault_query(
 
             let info = VaultInfo::new(decoded_jwt.id, &form.name, time);
 
-            match info.create_path() {
-                Ok(_) => (),
+            match info.create_path().await {
+                Ok(_) => {},
                 Err(e) => {
                     eprintln!("Failed to create user JSON file: {:?}", e);
                     return HttpResponse::InternalServerError()
