@@ -92,9 +92,14 @@ impl VaultInfo {
             }
         }
 
-        let content = encrypt(vault_key, user_key);
+        let content = match serde_json::to_string(&vault_key.to_vec()) {
+            Err(_) => return Err("failed to serialize key"),
+            Ok(c) => c,
+        };
 
-        match fs::write(&key_path, &content) {
+        let encryped_content = encrypt(content.as_bytes(), user_key);
+
+        match fs::write(&key_path, &encryped_content) {
             Err(_) => Err("failed to write file"),
             _ => Ok(()),
         }
@@ -104,7 +109,7 @@ impl VaultInfo {
         let path = format!("{}{}", self.get_path(), PERMS_PATH);
         if !fs::exists(&path).is_ok() {
             match fs::File::create(&path) {
-                Err(e) => return Err("failed to create file"),
+                Err(_) => return Err("failed to create file"),
                 _ => {}
             }
         }
@@ -226,8 +231,20 @@ pub async fn create_vault_query(
                 }
             }
 
+            match info
+                .save_key(
+                    vault_key.as_slice(),
+                    session.user_key.as_slice(),
+                    session.user_id,
+                )
+                .await
+            {
+                Ok(_) => {}
+                Err(_) => return HttpResponse::InternalServerError().body("failed to save key"),
+            };
+
             init_map(
-                &format!("{}/map.json", info.get_path()), 
+                &format!("{}/map.json", info.get_path()),
                 vault_key.as_slice(),
             );
 
