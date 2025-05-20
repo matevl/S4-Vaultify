@@ -345,7 +345,19 @@ pub async fn load_vault_query(
 
 // Stubbed endpoints for future implementation
 pub async fn get_perms_query(req: HttpRequest, vault_info: web::Json<VaultInfo>) -> impl Responder {
-    HttpResponse::Ok().json("")
+    load_vault_query(req, web::Json(vault_info.clone())).await;
+
+    let cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
+        Some(cache) => cache,
+        None => return HttpResponse::InternalServerError().body("Failed to get vault"),
+    };
+
+    let vault = cache.lock().unwrap();
+
+    match vault.perms.get(&vault_info.user_id) {
+        Some(perm) => HttpResponse::Ok().json(perm),
+        None => HttpResponse::InternalServerError().body("Failed to get vault"),
+    }
 }
 
 /// Shares a vault with another user by email and sets permissions.
