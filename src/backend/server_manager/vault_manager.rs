@@ -94,7 +94,7 @@ impl VaultInfo {
         let key_path = format!("{}{}{}.json", self.get_path(), VAULT_USERS_DIR, id);
 
         // Create key file if it doesn't exist
-        if !fs::exists(&key_path).is_ok() {
+        if !std::path::Path::new(&key_path).exists() {
             if fs::File::create(&key_path).is_err() {
                 return Err("failed to create file");
             }
