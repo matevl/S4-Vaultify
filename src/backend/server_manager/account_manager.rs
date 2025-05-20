@@ -260,66 +260,49 @@ pub async fn create_user_query(form: web::Json<CreateUserForm>) -> HttpResponse 
 
 pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
     let conn = CONNECTION.lock().unwrap();
+
     let email = form.username.clone();
     let pw = form.password.clone();
 
-    if let Some((user_id, hash_pw)) = get_user_by_email(&conn, &email).unwrap() {
-        if verify(&pw, &hash_pw).unwrap() {
-            let session_id = generate_session_id();
+    let (user_id, hash_pw) = match get_user_by_email(&conn, &email).unwrap() {
+        Some((user_id, hash_pw)) => (user_id, hash_pw),
+        None => return HttpResponse::Unauthorized().json("invalid email or password"),
+    };
 
-            if let Some(session_key) = EMAIL_TO_SESSION_KEY.get(&email) {
-                let jwt_token = JWT::new(&session_key, user_id, &email);
-
-                // Create the cookie with the JWT
-                let cookie =
-                    Cookie::build("user_token", serde_json::to_string(&jwt_token).unwrap())
-                        .http_only(true)
-                        .secure(true) // Use secure(true) if you are in production (HTTPS)
-                        .path("/")
-                        .max_age(Dudu::days(7)) // The cookie expires after 7 days
-                        .finish();
-                // Display the JWT to see if it is generated correctly
-                HttpResponse::Ok().cookie(cookie).json(json!({
-                    "success": true,
-                    "message": "Successful connection"
-                }))
-            } else {
-                let user_key = derive_key(&pw, &generate_salt_from_login(&email), 10000);
-
-                SESSION_CACHE.insert(
-                    session_id.clone(),
-                    Arc::new(Mutex::new(Session::new(user_id, &hash_pw, &user_key))),
-                );
-
-                EMAIL_TO_SESSION_KEY.insert(email.clone(), session_id.clone());
-
-                let jwt_token = JWT::new(&session_id, user_id, &email);
-                // Create the cookie with the JWT
-                let cookie =
-                    Cookie::build("user_token", serde_json::to_string(&jwt_token).unwrap())
-                        .http_only(true)
-                        .secure(true) // Use secure(true) if you are in production (HTTPS)
-                        .path("/")
-                        .max_age(Dudu::days(7)) // The cookie expires after 7 days
-                        .finish();
-
-                HttpResponse::Ok().cookie(cookie).json(json!({
-                    "success": true,
-                    "message": "Successful connection"
-                }))
-            }
-        } else {
-            HttpResponse::Unauthorized().json(json!({
-                "success": false,
-                "message": "incorrect Email or Password"
-            }))
-        }
-    } else {
-        HttpResponse::Unauthorized().json(json!({
-            "success": false,
-            "message": "incorrect Email or Password"
-        }))
+    if !verify(&pw, &hash_pw).unwrap() {
+        return HttpResponse::Unauthorized().json("invalid email or password");
     }
+
+    let session_key = match EMAIL_TO_SESSION_KEY.get(&email) {
+        Some(session_key) => session_key,
+        None => {
+            let session_id = generate_session_id();
+            let user_key = derive_key(&pw, &generate_salt_from_login(&email), 10000);
+
+            SESSION_CACHE.insert(
+                session_id.clone(),
+                Arc::new(Mutex::new(Session::new(user_id, &hash_pw, &user_key))),
+            );
+
+            EMAIL_TO_SESSION_KEY.insert(email.clone(), session_id.clone());
+            session_id
+        }
+    };
+
+    let jwt = JWT::new(&session_key, user_id, &email);
+
+    let cookie = Cookie::build("user_token", serde_json::to_string(&jwt).unwrap())
+        .http_only(true)
+        .secure(true) // Use secure(true) if you are in production (HTTPS)
+        .path("/")
+        .max_age(Dudu::days(7)) // The cookie expires after 7 days
+        .finish();
+
+    // Display the JWT to see if it is generated correctly
+    HttpResponse::Ok().cookie(cookie).json(json!({
+        "success": true,
+        "message": "Successful connection"
+    }))
 }
 
 /**
