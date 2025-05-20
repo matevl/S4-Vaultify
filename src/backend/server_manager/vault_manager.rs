@@ -288,7 +288,8 @@ pub async fn load_vault_query(
     if let Some(mut jwt) = get_user_from_cookie(&req) {
         // Check if the vault is already cached
         if is_vault_in_cache(&info.get_name()).await {
-            HttpResponse::Ok().json(info.clone())
+            jwt.loaded_vault = Some(info.clone());
+            HttpResponse::Ok().json(jwt)
         } else if let Some(session) = SESSION_CACHE.get(&jwt.session_id) {
             let mut session = session.lock().unwrap();
 
