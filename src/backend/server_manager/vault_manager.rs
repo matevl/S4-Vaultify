@@ -348,6 +348,7 @@ pub async fn get_perms_query(req: HttpRequest, vault_info: web::Json<VaultInfo>)
     HttpResponse::Ok().json("")
 }
 
+/// Shares a vault with another user by email and sets permissions.
 pub async fn share_vault_query(
     req: HttpRequest,
     data: web::Json<(VaultInfo, String, String)>,
