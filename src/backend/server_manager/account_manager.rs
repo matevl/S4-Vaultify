@@ -1,6 +1,6 @@
 use crate::backend::aes_keys::keys_password::{derive_key, generate_salt_from_login};
 use crate::backend::server_manager::global_manager::{
-    get_user_from_cookie, CONNECTION, ROOT, SESSION_CACHE,
+    get_user_from_cookie, CONNECTION, EMAIL_TO_SESSION_KEY, ROOT, SESSION_CACHE,
 };
 use crate::backend::server_manager::vault_manager::VaultInfo;
 use crate::backend::{VAULTS_DATA, VAULT_USERS_DIR};
@@ -266,34 +266,60 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
     if let Some((user_id, hash_pw)) = get_user_by_email(&conn, &email).unwrap() {
         if verify(&pw, &hash_pw).unwrap() {
             let session_id = generate_session_id();
-            let user_key = derive_key(&pw, &generate_salt_from_login(&email), 10000);
 
-            SESSION_CACHE.insert(
-                session_id.clone(),
-                Arc::new(Mutex::new(Session::new(user_id, &hash_pw, &user_key))),
-            );
+            if let Some(session_key) = EMAIL_TO_SESSION_KEY.get(&email) {
+                let jwt_token = JWT::new(&session_key, user_id, &email);
 
-            let jwt_token = JWT::new(&session_id, user_id, &email);
+                // Create the cookie with the JWT
+                let cookie =
+                    Cookie::build("user_token", serde_json::to_string(&jwt_token).unwrap())
+                        .http_only(true)
+                        .secure(true) // Use secure(true) if you are in production (HTTPS)
+                        .path("/")
+                        .max_age(Dudu::days(7)) // The cookie expires after 7 days
+                        .finish();
+                // Display the JWT to see if it is generated correctly
+                HttpResponse::Ok().cookie(cookie).json(json!({
+                    "success": true,
+                    "message": "Successful connection"
+                }))
+            } else {
+                let user_key = derive_key(&pw, &generate_salt_from_login(&email), 10000);
 
-            // Create the cookie with the JWT
-            let cookie = Cookie::build("user_token", serde_json::to_string(&jwt_token).unwrap())
-                .http_only(true)
-                .secure(true) // Use secure(true) if you are in production (HTTPS)
-                .path("/")
-                .max_age(Dudu::days(7)) // The cookie expires after 7 days
-                .finish();
-            // Display the JWT to see if it is generated correctly
-            return HttpResponse::Ok().cookie(cookie).json(json!({
-                "success": true,
-                "message": "Successful connection"
-            }));
+                SESSION_CACHE.insert(
+                    session_id.clone(),
+                    Arc::new(Mutex::new(Session::new(user_id, &hash_pw, &user_key))),
+                );
+
+                EMAIL_TO_SESSION_KEY.insert(email.clone(), session_id.clone());
+
+                let jwt_token = JWT::new(&session_id, user_id, &email);
+                // Create the cookie with the JWT
+                let cookie =
+                    Cookie::build("user_token", serde_json::to_string(&jwt_token).unwrap())
+                        .http_only(true)
+                        .secure(true) // Use secure(true) if you are in production (HTTPS)
+                        .path("/")
+                        .max_age(Dudu::days(7)) // The cookie expires after 7 days
+                        .finish();
+
+                HttpResponse::Ok().cookie(cookie).json(json!({
+                    "success": true,
+                    "message": "Successful connection"
+                }))
+            }
+        } else {
+            HttpResponse::Unauthorized().json(json!({
+                "success": false,
+                "message": "incorrect Email or Password"
+            }))
         }
+    } else {
+        HttpResponse::Unauthorized().json(json!({
+            "success": false,
+            "message": "incorrect Email or Password"
+        }))
     }
-
-    HttpResponse::Unauthorized().json(json!({
-        "success": false,
-        "message": "incorrect Email or Password"
-    }))
 }
 
 /**
