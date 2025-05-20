@@ -20,7 +20,7 @@ lazy_static! {
      */
     pub static ref SESSION_CACHE: Cache<String, Arc<Mutex<Session>>> = {
         Cache::builder()
-            .time_to_live(Duration::from_secs(3600))
+            .time_to_idle(Duration::from_secs(1800))
             .build()
     };
 
@@ -30,7 +30,7 @@ lazy_static! {
 
     pub static ref VAULTS_CACHE: Cache<String, Arc<Mutex<VaultsCache>>> = {
         Cache::builder()
-        .time_to_live(Duration::from_secs(3600))
+        .time_to_idle(Duration::from_secs(1800))
         .build()
     };
 
