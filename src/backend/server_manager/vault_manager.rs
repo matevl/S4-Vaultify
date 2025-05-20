@@ -7,11 +7,13 @@ use crate::backend::aes_keys::keys_password::{
 use crate::backend::file_manager::mapping::init_map;
 use crate::backend::server_manager::account_manager::{get_user_by_email, Perms, VaultForm};
 use crate::backend::server_manager::global_manager::{
-    get_user_from_cookie, is_vault_in_cache, CONNECTION, ROOT, SESSION_CACHE, VAULTS_CACHE,
+    get_user_from_cookie, is_vault_in_cache, CONNECTION, EMAIL_TO_SESSION_KEY, ROOT, SESSION_CACHE,
+    VAULTS_CACHE,
 };
 use crate::backend::{VAULTS_DATA, VAULT_CONFIG_ROOT, VAULT_USERS_DIR};
 
-use actix_web::{web, HttpRequest, HttpResponse, Responder};
+use actix_web::{test, web, HttpRequest, HttpResponse, Responder};
+use rusqlite::ffi::sqlite3_mutex_notheld;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -348,9 +350,64 @@ pub async fn get_perms_query(req: HttpRequest, vault_info: web::Json<VaultInfo>)
 
 pub async fn share_vault_query(
     req: HttpRequest,
-    data: web::Json<(VaultInfo, String)>,
+    data: web::Json<(VaultInfo, String, String)>,
 ) -> impl Responder {
-    HttpResponse::Ok().json("")
+    if let Some(jwt) = get_user_from_cookie(&req) {
+        let (vault_info, email, perm) = data.into_inner();
+        let con = CONNECTION.lock().unwrap();
+        if let Ok(Some((id, _))) = get_user_by_email(&con, &email) {
+            if !load_vault_query(req, web::Json(vault_info.clone()))
+                .await
+                .respond_to(&test::TestRequest::default().to_http_request())
+                .status()
+                .is_success()
+            {
+                return HttpResponse::InternalServerError().body("Failed to get vault");
+            }
+
+            if let Some(key) = EMAIL_TO_SESSION_KEY.get(&email) {
+                let user_key = {
+                    SESSION_CACHE
+                        .get(&key)
+                        .unwrap()
+                        .lock()
+                        .unwrap()
+                        .user_key
+                        .clone()
+                };
+
+                if let Some(vault_cache) = VAULTS_CACHE.get(&vault_info.get_name()) {
+                    let mut vault = vault_cache.lock().unwrap();
+                    vault.perms.insert(id, Perms::from_str(&perm));
+                    if vault_info
+                        .set_perms(vault.vault_key.as_slice(), &vault.perms)
+                        .await
+                        .is_err()
+                    {
+                        return HttpResponse::InternalServerError().body("Failed to set vault");
+                    }
+                    if vault_info
+                        .save_key(vault.vault_key.as_slice(), user_key.as_slice(), id)
+                        .await
+                        .is_err()
+                    {
+                        return HttpResponse::InternalServerError().body("Failed to save vault");
+                    }
+
+                    HttpResponse::Ok().json("")
+                } else {
+                    HttpResponse::InternalServerError().body("Failed to get vault")
+                }
+            } else {
+                // manager later case of offline user
+                HttpResponse::Unauthorized().body("Invalid email or password")
+            }
+        } else {
+            HttpResponse::Unauthorized().body("Invalid email or password")
+        }
+    } else {
+        HttpResponse::Unauthorized().body("Invalid email or password")
+    }
 }
 
 pub async fn remove_user_from_vault_query(

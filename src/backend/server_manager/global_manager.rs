@@ -5,11 +5,16 @@ use actix_web::HttpRequest;
 use lazy_static::lazy_static;
 use moka::sync::Cache;
 use rusqlite::Connection;
+use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 lazy_static! {
+    pub static ref EMAIL_TO_SESSION_KEY: Cache<String, String> = {
+        Cache::builder().build()
+    };
+
     /**
      * Root directory path for the application.
      */
@@ -27,7 +32,6 @@ lazy_static! {
     /**
      * Global cache for vault
      */
-
     pub static ref VAULTS_CACHE: Cache<String, Arc<Mutex<VaultsCache>>> = {
         Cache::builder()
         .time_to_idle(Duration::from_secs(1800))

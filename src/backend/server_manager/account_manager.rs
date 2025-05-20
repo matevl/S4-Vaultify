@@ -29,6 +29,19 @@ pub enum Perms {
     NoLoad,
 }
 
+impl Perms {
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "Creator" => Self::Creator,
+            "Admin" => Self::Admin,
+            "Write" => Self::Write,
+            "Read" => Self::Read,
+            "NoLoad" => Self::NoLoad,
+            _ => Self::NoLoad,
+        }
+    }
+}
+
 /**
  * Struct representing the form data for creating a new user.
  */
