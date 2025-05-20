@@ -55,8 +55,8 @@ export default function Home() {
                 closeModal();
             }, 50);
         } catch (err) {
-            console.error('Erreur création vault:', err);
-            alert('Impossible de créer le vault : ' + err.message);
+            console.error('Error during creation:', err);
+            alert('Impossible to create vault : ' + err.message);
         } finally {
             setCreating(false);
         }
@@ -106,7 +106,7 @@ export default function Home() {
                         <form onSubmit={handleCreateVault}>
                             <input
                                 type="text"
-                                placeholder="Nom du Vault"
+                                placeholder="Vault name"
                                 value={newVaultName}
                                 onChange={e => setNewVaultName(e.target.value)}
                                 disabled={creating}
@@ -126,7 +126,7 @@ export default function Home() {
                                     className="btn btn-primary"
                                     disabled={creating}
                                 >
-                                    {creating ? 'Création…' : 'Créer'}
+                                    {creating ? 'Creation…' : 'Create'}
                                 </button>
                             </div>
                         </form>
