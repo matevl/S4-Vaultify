@@ -353,61 +353,72 @@ pub async fn share_vault_query(
     req: HttpRequest,
     data: web::Json<(VaultInfo, String, String)>,
 ) -> impl Responder {
-    if let Some(jwt) = get_user_from_cookie(&req) {
-        let (vault_info, email, perm) = data.into_inner();
-        let con = CONNECTION.lock().unwrap();
-        if let Ok(Some((id, _))) = get_user_by_email(&con, &email) {
-            if !load_vault_query(req, web::Json(vault_info.clone()))
-                .await
-                .respond_to(&test::TestRequest::default().to_http_request())
-                .status()
-                .is_success()
-            {
-                return HttpResponse::InternalServerError().body("Failed to get vault");
-            }
+    let _ = match get_user_from_cookie(&req) {
+        Some(jwt) => jwt,
+        None => return HttpResponse::Unauthorized().body("Invalid email or password"),
+    };
 
-            if let Some(key) = EMAIL_TO_SESSION_KEY.get(&email) {
-                let user_key = {
-                    SESSION_CACHE
-                        .get(&key)
-                        .unwrap()
-                        .lock()
-                        .unwrap()
-                        .user_key
-                        .clone()
-                };
+    let con = CONNECTION.lock().unwrap();
+    let (vault_info, email, perm) = data.into_inner();
 
-                if let Some(vault_cache) = VAULTS_CACHE.get(&vault_info.get_name()) {
-                    let mut vault = vault_cache.lock().unwrap();
-                    vault.perms.insert(id, Perms::from_str(&perm));
-                    if vault_info
-                        .set_perms(vault.vault_key.as_slice(), &vault.perms)
-                        .await
-                        .is_err()
-                    {
-                        return HttpResponse::InternalServerError().body("Failed to set vault");
-                    }
-                    if vault_info
-                        .save_key(vault.vault_key.as_slice(), user_key.as_slice(), id)
-                        .await
-                        .is_err()
-                    {
-                        return HttpResponse::InternalServerError().body("Failed to save vault");
-                    }
+    // test if other user exist
+    let id = match get_user_by_email(&con, &email) {
+        Ok(Some((id, _))) => id,
+        _ => return HttpResponse::InternalServerError().body("user do not exist"),
+    };
 
-                    HttpResponse::Ok().json("")
-                } else {
-                    HttpResponse::InternalServerError().body("Failed to get vault")
-                }
-            } else {
-                // manager later case of offline user
-                HttpResponse::Unauthorized().body("Invalid email or password")
-            }
-        } else {
-            HttpResponse::Unauthorized().body("Invalid email or password")
+    // check if vault could be load or is already_loaded
+    if !load_vault_query(req, web::Json(vault_info.clone()))
+        .await
+        .respond_to(&test::TestRequest::default().to_http_request())
+        .status()
+        .is_success()
+    {
+        return HttpResponse::InternalServerError().body("Failed to get vault");
+    }
+
+    // case if the other user is connected
+    if let Some(key) = EMAIL_TO_SESSION_KEY.get(&email) {
+        let user_key = {
+            SESSION_CACHE
+                .get(&key)
+                .unwrap()
+                .lock()
+                .unwrap()
+                .user_key
+                .clone()
+        };
+
+        // get vault cache
+        let vault_cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
+            Some(vault_cache) => vault_cache,
+            None => return HttpResponse::InternalServerError().body("Failed to get vault"),
+        };
+
+        let mut vault = vault_cache.lock().unwrap();
+        vault.perms.insert(id, Perms::from_str(&perm));
+
+        let keys = vault.vault_key.clone();
+        let perms = vault.perms.clone();
+
+        // save perms of the other user
+        if vault_info.set_perms(keys.as_slice(), &perms).await.is_err() {
+            return HttpResponse::InternalServerError().body("Failed to set vault");
         }
+
+        // save access of vault_key using the private key of the other user
+        if vault_info
+            .save_key(keys.as_slice(), user_key.as_slice(), id)
+            .await
+            .is_err()
+        {
+            return HttpResponse::InternalServerError().body("Failed to save vault");
+        }
+
+        HttpResponse::Ok().json("")
     } else {
-        HttpResponse::Unauthorized().body("Invalid email or password")
+        // To handle later
+        HttpResponse::InternalServerError().body("Failed to share vault")
     }
 }
 
