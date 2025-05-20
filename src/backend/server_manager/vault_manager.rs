@@ -94,10 +94,8 @@ impl VaultInfo {
         let key_path = format!("{}{}{}.json", self.get_path(), VAULT_USERS_DIR, id);
 
         // Create key file if it doesn't exist
-        if !std::path::Path::new(&key_path).exists() {
-            if fs::File::create(&key_path).is_err() {
-                return Err("failed to create file");
-            }
+        if !std::path::Path::new(&key_path).exists() && fs::File::create(&key_path).is_err() {
+            return Err("failed to create file");
         }
 
         // Serialize the vault key
@@ -121,10 +119,8 @@ impl VaultInfo {
         let path = format!("{}{}", self.get_path(), PERMS_PATH);
 
         // Create file if it doesn't exist
-        if !fs::exists(&path).is_ok() {
-            if fs::File::create(&path).is_err() {
-                return Err("failed to create file");
-            }
+        if !std::path::Path::new(&path).exists() && fs::File::create(&path).is_err() {
+            return Err("failed to create file");
         }
 
         // Serialize and encrypt the permissions
