@@ -85,10 +85,12 @@ pub fn init_server_config() {
     // Create the vaults table with a foreign key to users
     conn.execute(
         "CREATE TABLE IF NOT EXISTS vaults (
+            id INTEGER NOT NULL,
             user_id INTEGER NOT NULL,
             name TEXT NOT NULL,
             date INTEGER NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users(id)
+            FOREIGN KEY (id) REFERENCES users(id)
+            PRIMARY KEY (id, user_id)
         )",
         [],
     )

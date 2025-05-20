@@ -177,18 +177,18 @@ pub fn get_user_by_email(conn: &Connection, email: &str) -> Result<Option<(u32, 
  */
 pub fn get_user_vaults(conn: &Connection, user_id: u32) -> Result<Vec<VaultInfo>> {
     let mut stmt = conn.prepare(
-        "SELECT user_id, name, date
+        "SELECT id, user_id, name, date
          FROM vaults
-         WHERE user_id = ?",
+         WHERE id = ?",
     )?;
     let mut rows = stmt.query(params![user_id])?;
     let mut vaults = Vec::new();
 
     while let Some(row) = rows.next()? {
         vaults.push(VaultInfo {
-            user_id: row.get(0)?,
-            name: row.get(1)?,
-            date: row.get(2)?,
+            user_id: row.get(1)?,
+            name: row.get(2)?,
+            date: row.get(3)?,
         });
     }
 

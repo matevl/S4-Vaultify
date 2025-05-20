@@ -182,10 +182,14 @@ impl VaultsCache {
 }
 
 /// Inserts a new vault into the database.
-pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> rusqlite::Result<VaultInfo> {
+pub fn create_vault(
+    conn: &Connection,
+    vault_info: &VaultInfo,
+    id: u32,
+) -> rusqlite::Result<VaultInfo> {
     if let Ok(_) = conn.execute(
-        "INSERT INTO vaults (user_id, name, date) VALUES (?, ?, ?)",
-        params![vault_info.user_id, vault_info.name, vault_info.date],
+        "INSERT INTO vaults (id, user_id, name, date) VALUES (?, ?, ?, ?)",
+        params![id, vault_info.user_id, vault_info.name, vault_info.date],
     ) {
         Ok(vault_info.clone())
     } else {
@@ -256,7 +260,7 @@ pub async fn create_vault_query(req: HttpRequest, form: web::Form<VaultForm>) ->
             );
 
             // Persist the vault in the database
-            match create_vault(&connection, &info) {
+            match create_vault(&connection, &info, session.user_id) {
                 Ok(res) => HttpResponse::Ok().json(json!({
                     "message": format!("Vault '{}' created successfully!", res.name),
                     "vault_id": res.user_id.clone(),
@@ -426,6 +430,16 @@ pub async fn share_vault_query(
         {
             return HttpResponse::InternalServerError().body("Failed to save vault");
         }
+
+        // Persist the vault in the database
+        match create_vault(&con, &vault_info, id) {
+            Ok(res) => HttpResponse::Ok().json(json!({
+                "message": format!("Vault '{}' created successfully!", res.name),
+                "vault_id": res.user_id.clone(),
+                "date": res.date,
+            })),
+            Err(e) => return HttpResponse::InternalServerError().body("Error creating vault."),
+        };
 
         HttpResponse::Ok().json("")
     } else {
