@@ -6,110 +6,176 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vault Detail</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
+        /* --- Global --- */
+        body { font-family: Arial, sans-serif; margin: 20px; background: #021433; color: #e5e7eb; }
         .button-group { margin-bottom: 20px; }
         button { padding: 10px 20px; margin-right: 10px; cursor: pointer; }
+        .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; background-color: #ccc; color: #000; font-size: 1rem; margin-right: 10px; }
+        .btn-primary { background-color: #6366f1; color: white; }
+        .btn-primary:hover { background-color: #4f46e5; }
+        .btn-secondary { background-color: transparent; border: 2px solid #6366f1; color: #6366f1; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; text-decoration: none; transition: background-color 0.3s ease; }
+        .btn-secondary:hover { background-color: #6366f1; color: white; }
+
+        /* --- Tree --- */
         .tree-view ul { list-style: none; padding-left: 20px; }
         .tree-view li { cursor: pointer; padding: 5px; }
         .drop-target { border: 2px dashed #aaa; background-color: #f0f0f0; }
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
-        .modal-content { background: white; padding: 20px; border-radius: 10px; width: 300px; }
-        .modal-content input, .modal-content select { width: 100%; margin-bottom: 10px; padding: 5px; }
-        .modal-buttons { display: flex; justify-content: space-between; }
+
+        /* --- Modal Base --- */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: rgba(255,255,255,0.08); backdrop-filter: blur(10px); padding: 2rem; border-radius: 12px; width: 90%; max-width: 400px; color: #fff;
+            box-sizing: border-box;}
+        .modal-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
+
+        /* --- Switches --- */
+        .switch-group { display: flex; align-items: center; margin-bottom: 1rem; gap: 1rem; }
+        .switch { position: relative; display: inline-block; width: 40px; height: 22px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; background-color: #ccc; transition: .4s; border-radius: 34px; top: 0; left: 0; right: 0; bottom: 0; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        .switch input:checked + .slider { background-color: #6366f1; }
+        .switch input:checked + .slider:before { transform: translateX(18px); }
+
+        /* --- Email Input --- */
+        .input-icon-wrapper {
+            position: relative;
+            width: 100%;
+            margin-bottom: 1rem;
+            box-sizing: border-box; /* ✅ important pour éviter de dépasser */
+        }
+
+        .input-icon {
+            stroke: #ffffff;
+            position: absolute;
+            top: 50%;
+            left: 0.75rem; /* espace depuis le bord */
+            transform: translateY(-50%);
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+        }
+        .input-icon-wrapper:focus-within .input-icon { stroke: #818cf8; filter: drop-shadow(0 0 6px #818cf8); transition: all 0.3s ease; }
+
+        .login-input {
+            width: 100%;
+            padding: 0.5rem 0.75rem 0.5rem 2.75rem; /* ✅ left padding ajusté pour l’icône */
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background-color: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s ease, background-color 0.2s ease;
+            box-sizing: border-box; /* ✅ garantit que le padding est inclus dans la largeur */
+        }
+        .login-input::placeholder { color: #bbb; }
+        .login-input:focus { border-color: #818cf8; background-color: rgba(255,255,255,0.08); }
     </style>
 </head>
 <body>
+<!-- Share Button -->
+<button class="btn btn-primary" onclick="openSharePopup()" style="display: flex; align-items: center; gap: 0.5rem;">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="20" height="20">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
+    </svg>
+    Share
+</button>
+
+<!-- Action Buttons -->
 <div class="button-group">
     <button onclick="window.location.href='/vaults'">Go Back to Vaults</button>
-    <button onclick="openShareModal()">Share Vault</button>
     <button onclick="triggerUpload()">Upload to DST</button>
     <button onclick="triggerDownload()">Download from DST</button>
 </div>
 
+<!-- File Tree -->
 <input type="file" id="uploadInput" style="display: none;" onchange="handleUpload(event)">
 <div id="tree" class="tree-view"></div>
 
-<!-- Share Vault Modal -->
-<div id="shareModal" class="modal">
+<!-- Move Confirmation Modal -->
+<div id="moveConfirm" class="modal">
     <div class="modal-content">
-        <h3>Share this Vault</h3>
-        <input type="email" id="shareEmail" placeholder="User email">
-        <select id="sharePerms">
-            <option value="read">Read</option>
-            <option value="write">Write</option>
-        </select>
-        <div class="modal-buttons">
-            <button onclick="submitShare()">Share</button>
-            <button onclick="closeShareModal()">Cancel</button>
+        <p id="moveMsg"></p>
+        <div class="modal-actions">
+            <button onclick="confirmMove()" class="btn btn-primary">Confirm</button>
+            <button onclick="cancelMove()" class="btn btn-secondary">Cancel</button>
         </div>
     </div>
 </div>
 
-<!-- Move confirmation -->
-<div id="moveConfirm" class="modal">
+<!-- Share Modal -->
+<div id="sharePopup" class="modal">
     <div class="modal-content">
-        <p id="moveMsg"></p>
-        <div class="modal-buttons">
-            <button onclick="confirmMove()">Confirm</button>
-            <button onclick="cancelMove()">Cancel</button>
+        <h3>Share Vault</h3>
+
+        <!-- Email Field -->
+        <div class="input-icon-wrapper">
+            <svg xmlns="http://www.w3.org/2000/svg" class="input-icon" fill="none" viewBox="0 0 24 24" stroke="#ffffff">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                      d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/>
+            </svg>
+            <input type="email" id="shareEmailInput" placeholder="Adresse e-mail" required class="login-input" />
+        </div>
+
+        <!-- Permission Toggles -->
+        <label>Permissions :</label>
+        <div>
+            <div class="switch-group">
+                <label class="switch">
+                    <input type="checkbox" id="permRead" onchange="updatePermissionToggles('permRead')" />
+                    <span class="slider"></span>
+                </label>
+                <span>Read</span>
+            </div>
+            <div class="switch-group">
+                <label class="switch">
+                    <input type="checkbox" id="permWrite" onchange="updatePermissionToggles('permWrite')" />
+                    <span class="slider"></span>
+                </label>
+                <span>Write</span>
+            </div>
+            <div class="switch-group">
+                <label class="switch">
+                    <input type="checkbox" id="permAdmin" onchange="updatePermissionToggles('permAdmin')" />
+                    <span class="slider"></span>
+                </label>
+                <span>Admin</span>
+            </div>
+        </div>
+
+        <!-- Modal Actions -->
+        <div class="modal-actions">
+            <button class="btn btn-primary" onclick="submitShare()">Send</button>
+            <button class="btn btn-secondary" onclick="closeSharePopup()">Cancel</button>
         </div>
     </div>
 </div>
 
 <script>
-    const vaultId = window.location.pathname.split("/").pop();
-    let draggedItemPath = null;
-    let dropTargetPath = null;
-
-    function fetchTree() {
-        const vaultInfo = JSON.parse(localStorage.getItem("vault_info"));
-        if (!vaultInfo) {
-            document.getElementById("tree").innerHTML = "Missing vault info.";
-            return;
-        }
-
-        fetch(`/vaults/${vaultId}/tree`, {
-            method: "POST",
-            credentials: "include",                    // send HttpOnly cookie
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(vaultInfo)             // just your VaultInfo struct
-        })
-            .then(res => {
-                if (!res.ok) throw new Error("Failed to load tree");
-                return res.json();
-            })
-            .then(data => {
-                console.log("Arbre reçu :", data);  // Ajout du log pour vérification
-                document.getElementById('tree').innerHTML = renderTree(data);
-            })
-            .catch(err => {
-                document.getElementById('tree').innerHTML = "Error loading file tree.";
-                console.error(err);
-            });
+    // Fetch and render the file tree...
+    function openSharePopup() {
+        document.getElementById('sharePopup').style.display = 'flex';
     }
-
-    function renderTree(node, path = "") {
-        if (!node || !Array.isArray(node.children)) return ""; // Sécurisation
-
-        let html = '<ul>';
-        for (const item of node.children) {
-            const itemPath = path + '/' + item.name;
-            html += `<li draggable="true"
-                        ondragstart="onDragStart('${itemPath}')"
-                        ondragover="event.preventDefault()"
-                        ondrop="onDrop('${itemPath}')">
-                    ${item.type === 'folder' ? '📁' : '📄'} ${item.name}
-                    ${item.type === 'folder' ? renderTree(item, itemPath) : ''}
-                 </li>`;
-        }
-        html += '</ul>';
-        return html;
+    function closeSharePopup() {
+        document.getElementById('sharePopup').style.display = 'none';
     }
-
-    /* … the rest of your drag/drop, share, upload/download functions stay the same … */
-
-    window.onload = fetchTree;
+    function updatePermissionToggles(changedId) {
+        const admin = document.getElementById('permAdmin');
+        const read  = document.getElementById('permRead');
+        const write = document.getElementById('permWrite');
+        if (changedId==='permAdmin' && admin.checked) {
+            read.checked = write.checked = false;
+            read.disabled = write.disabled = true;
+        }
+        if ((changedId==='permRead'||changedId==='permWrite') && (read.checked||write.checked)) {
+            admin.checked = false;
+            read.disabled = write.disabled = false;
+        }
+        if (!admin.checked && !read.checked && !write.checked) {
+            read.disabled = write.disabled = false;
+        }
+    }
+    // submitShare, fetchTree, renderTree, etc...
 </script>
 </body>
 </html>
