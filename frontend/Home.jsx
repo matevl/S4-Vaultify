@@ -99,6 +99,7 @@ export default function Home() {
             console.error("Erreur de logout", err);
         } finally {
             localStorage.clear();
+            localStorage.setItem('logoutSuccess', 'true');
             window.location.href = '/';
         }
     };
