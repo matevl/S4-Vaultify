@@ -202,7 +202,7 @@
 
 .main-content {
     flex: 1;
-    padding: 2rem;
+    padding: 1rem;
     overflow-y: auto;
 }
 
@@ -388,6 +388,18 @@
 
 .logout-btn:hover {
   background: rgba(255,255,255,0.1);
+}
+
+.dashboard-logo {
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dashboard-logo img {
+    height: 100%;
+    display: block;
 }
 
 
