@@ -1,6 +1,6 @@
 use crate::backend::aes_keys::keys_password::{derive_key, generate_salt_from_login};
 use crate::backend::server_manager::global_manager::{
-    get_user_from_cookie, CONNECTION, ROOT, SESSION_CACHE,
+    get_user_from_cookie, CONNECTION, EMAIL_TO_SESSION_KEY, ROOT, SESSION_CACHE,
 };
 use crate::backend::server_manager::vault_manager::VaultInfo;
 use crate::backend::{VAULTS_DATA, VAULT_USERS_DIR};
@@ -8,11 +8,10 @@ use actix_web::cookie::time::Duration as Dudu;
 use actix_web::cookie::Cookie;
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
-use dirs;
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashMap;
+use std::cmp::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use uuid::Uuid;
@@ -20,13 +19,26 @@ use uuid::Uuid;
 /**
  * Enum representing user permissions.
  */
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub enum Perms {
-    Creator,
-    Admin,
-    Write,
-    Read,
     NoLoad,
+    Read,
+    Write,
+    Admin,
+    Creator,
+}
+
+impl Perms {
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "Creator" => Self::Creator,
+            "Admin" => Self::Admin,
+            "Write" => Self::Write,
+            "Read" => Self::Read,
+            "NoLoad" => Self::NoLoad,
+            _ => Self::NoLoad,
+        }
+    }
 }
 
 /**
@@ -164,18 +176,18 @@ pub fn get_user_by_email(conn: &Connection, email: &str) -> Result<Option<(u32, 
  */
 pub fn get_user_vaults(conn: &Connection, user_id: u32) -> Result<Vec<VaultInfo>> {
     let mut stmt = conn.prepare(
-        "SELECT user_id, name, date
+        "SELECT id, creator_id, name, date
          FROM vaults
-         WHERE user_id = ?",
+         WHERE id = ?",
     )?;
     let mut rows = stmt.query(params![user_id])?;
     let mut vaults = Vec::new();
 
     while let Some(row) = rows.next()? {
         vaults.push(VaultInfo {
-            user_id: row.get(0)?,
-            name: row.get(1)?,
-            date: row.get(2)?,
+            creator_id: row.get(1)?,
+            name: row.get(2)?,
+            date: row.get(3)?,
         });
     }
 
@@ -247,11 +259,22 @@ pub async fn create_user_query(form: web::Json<CreateUserForm>) -> HttpResponse 
 
 pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
     let conn = CONNECTION.lock().unwrap();
+
     let email = form.username.clone();
     let pw = form.password.clone();
 
-    if let Some((user_id, hash_pw)) = get_user_by_email(&conn, &email).unwrap() {
-        if verify(&pw, &hash_pw).unwrap() {
+    let (user_id, hash_pw) = match get_user_by_email(&conn, &email).unwrap() {
+        Some((user_id, hash_pw)) => (user_id, hash_pw),
+        None => return HttpResponse::Unauthorized().json("invalid email or password"),
+    };
+
+    if !verify(&pw, &hash_pw).unwrap() {
+        return HttpResponse::Unauthorized().json("invalid email or password");
+    }
+
+    let session_key = match EMAIL_TO_SESSION_KEY.get(&email) {
+        Some(session_key) => session_key,
+        None => {
             let session_id = generate_session_id();
             let user_key = derive_key(&pw, &generate_salt_from_login(&email), 10000);
 
@@ -260,26 +283,24 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
                 Arc::new(Mutex::new(Session::new(user_id, &hash_pw, &user_key))),
             );
 
-            let jwt_token = JWT::new(&session_id, user_id, &email);
-
-            // Create the cookie with the JWT
-            let cookie = Cookie::build("user_token", serde_json::to_string(&jwt_token).unwrap())
-                .http_only(true)
-                .secure(true) // Use secure(true) if you are in production (HTTPS)
-                .path("/")
-                .max_age(Dudu::days(7)) // The cookie expires after 7 days
-                .finish();
-            // Display the JWT to see if it is generated correctly
-            return HttpResponse::Ok().cookie(cookie).json(json!({
-                "success": true,
-                "message": "Successful connection"
-            }));
+            EMAIL_TO_SESSION_KEY.insert(email.clone(), session_id.clone());
+            session_id
         }
-    }
+    };
 
-    HttpResponse::Unauthorized().json(json!({
-        "success": false,
-        "message": "incorrect Email or Password"
+    let jwt = JWT::new(&session_key, user_id, &email);
+
+    let cookie = Cookie::build("user_token", serde_json::to_string(&jwt).unwrap())
+        .http_only(true)
+        .secure(true) // Use secure(true) if you are in production (HTTPS)
+        .path("/")
+        .max_age(Dudu::days(7)) // The cookie expires after 7 days
+        .finish();
+
+    // Display the JWT to see if it is generated correctly
+    HttpResponse::Ok().cookie(cookie).json(json!({
+        "success": true,
+        "message": "Successful connection"
     }))
 }
 

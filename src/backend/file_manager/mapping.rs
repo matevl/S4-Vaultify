@@ -155,7 +155,7 @@ pub async fn get_tree_vault(req: HttpRequest, info: web::Json<VaultInfo>) -> imp
     if let Some(jwt) = get_user_from_cookie(&req) {
         let vault_info = info.into_inner();
 
-        let vault_name = format!("{}_{}", vault_info.user_id, vault_info.date);
+        let vault_name = format!("{}_{}", vault_info.creator_id, vault_info.date);
 
         let vault_path = format!("{}/{}{}/", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
 
@@ -243,7 +243,7 @@ pub async fn move_tree_vault(
     if let Some(jwt) = get_user_from_cookie(&req) {
         let vault_info = info.into_inner();
 
-        let vault_name = format!("{}_{}", vault_info.user_id, vault_info.date);
+        let vault_name = format!("{}_{}", vault_info.creator_id, vault_info.date);
 
         let vault_path = format!("{}/{}{}/", ROOT.to_str().unwrap(), VAULTS_DATA, vault_name);
 

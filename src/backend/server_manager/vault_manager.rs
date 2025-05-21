@@ -7,11 +7,12 @@ use crate::backend::aes_keys::keys_password::{
 use crate::backend::file_manager::mapping::init_map;
 use crate::backend::server_manager::account_manager::{get_user_by_email, Perms, VaultForm};
 use crate::backend::server_manager::global_manager::{
-    get_user_from_cookie, is_vault_in_cache, CONNECTION, ROOT, SESSION_CACHE, VAULTS_CACHE,
+    get_user_from_cookie, is_vault_in_cache, CONNECTION, EMAIL_TO_SESSION_KEY, ROOT, SESSION_CACHE,
+    VAULTS_CACHE,
 };
 use crate::backend::{VAULTS_DATA, VAULT_CONFIG_ROOT, VAULT_USERS_DIR};
 
-use actix_web::{web, HttpRequest, HttpResponse, Responder};
+use actix_web::{test, web, HttpRequest, HttpResponse, Responder};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -29,16 +30,16 @@ type PermsMap = HashMap<u32, Perms>;
 /// Represents metadata for a vault.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VaultInfo {
-    pub user_id: u32,
+    pub creator_id: u32,
     pub name: String,
     pub date: u64,
 }
 
 impl VaultInfo {
     /// Creates a new `VaultInfo` instance.
-    pub fn new(user_id: u32, name: &str, date: u64) -> Self {
+    pub fn new(creator_id: u32, name: &str, date: u64) -> Self {
         Self {
-            user_id,
+            creator_id,
             name: name.to_string(),
             date,
         }
@@ -46,7 +47,7 @@ impl VaultInfo {
 
     /// Returns the internal vault name, e.g., "123_1700000000".
     pub fn get_name(&self) -> String {
-        format!("{}_{}", self.user_id, self.date)
+        format!("{}_{}", self.creator_id, self.date)
     }
 
     /// Constructs the full path to the vault's root directory.
@@ -88,10 +89,13 @@ impl VaultInfo {
 
         Ok(())
     }
-
+    /// get key path
+    pub fn get_key_path(&self, id: u32) -> String {
+        format!("{}{}{}.json", self.get_path(), VAULT_USERS_DIR, id)
+    }
     /// Saves the encrypted vault key for a specific user.
     pub async fn save_key(&self, vault_key: &[u8], user_key: &[u8], id: u32) -> Result<(), &str> {
-        let key_path = format!("{}{}{}.json", self.get_path(), VAULT_USERS_DIR, id);
+        let key_path = self.get_key_path(id);
 
         // Create key file if it doesn't exist
         if !std::path::Path::new(&key_path).exists() && fs::File::create(&key_path).is_err() {
@@ -180,10 +184,14 @@ impl VaultsCache {
 }
 
 /// Inserts a new vault into the database.
-pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> rusqlite::Result<VaultInfo> {
+pub fn create_vault(
+    conn: &Connection,
+    vault_info: &VaultInfo,
+    id: u32,
+) -> rusqlite::Result<VaultInfo> {
     if let Ok(_) = conn.execute(
-        "INSERT INTO vaults (user_id, name, date) VALUES (?, ?, ?)",
-        params![vault_info.user_id, vault_info.name, vault_info.date],
+        "INSERT INTO vaults (id, creator_id, name, date) VALUES (?, ?, ?, ?)",
+        params![id, vault_info.creator_id, vault_info.name, vault_info.date],
     ) {
         Ok(vault_info.clone())
     } else {
@@ -191,6 +199,18 @@ pub fn create_vault(conn: &Connection, vault_info: &VaultInfo) -> rusqlite::Resu
     }
 }
 
+pub fn remove_vault(conn: &Connection, vault_info: &VaultInfo, id: u32) -> rusqlite::Result<()> {
+    let rows_affected = conn.execute(
+        "DELETE FROM vaults WHERE (id, creator_id, name, date) VALUES (?, ?, ?, ?)",
+        params![id, vault_info.creator_id, vault_info.name, vault_info.date],
+    )?;
+
+    if rows_affected == 1 {
+        Ok(())
+    } else {
+        Err(rusqlite::Error::QueryReturnedNoRows)
+    }
+}
 /// HTTP endpoint: creates a new vault for a user.
 pub async fn create_vault_query(req: HttpRequest, form: web::Form<VaultForm>) -> impl Responder {
     // Authenticate the user via cookie
@@ -254,10 +274,10 @@ pub async fn create_vault_query(req: HttpRequest, form: web::Form<VaultForm>) ->
             );
 
             // Persist the vault in the database
-            match create_vault(&connection, &info) {
+            match create_vault(&connection, &info, session.user_id) {
                 Ok(res) => HttpResponse::Ok().json(json!({
                     "message": format!("Vault '{}' created successfully!", res.name),
-                    "vault_id": res.user_id.clone(),
+                    "vault_id": res.creator_id.clone(),
                     "date": res.date,
                 })),
                 Err(e) => {
@@ -287,10 +307,10 @@ pub async fn load_vault_query(
             jwt.loaded_vault = Some(info.clone());
             HttpResponse::Ok().json(jwt)
         } else if let Some(session) = SESSION_CACHE.get(&jwt.session_id) {
-            let mut session = session.lock().unwrap();
+            let session = session.lock().unwrap();
 
             let vault_name = info.get_name();
-            let key_path = format!("{}{}{}.json", info.get_path(), VAULT_USERS_DIR, jwt.id);
+            let key_path = info.get_key_path(jwt.id);
 
             // Read user's encrypted key file
             let encrypted_content = match fs::read(&key_path) {
@@ -313,7 +333,6 @@ pub async fn load_vault_query(
                         return HttpResponse::InternalServerError().body("Invalid vault data")
                     }
                 };
-
             // Load and decrypt permissions
             let vault_perms: PermsMap = match info.get_perms(&vault_key).await {
                 Ok(perms) => perms,
@@ -343,28 +362,210 @@ pub async fn load_vault_query(
 
 // Stubbed endpoints for future implementation
 pub async fn get_perms_query(req: HttpRequest, vault_info: web::Json<VaultInfo>) -> impl Responder {
-    HttpResponse::Ok().json("")
+    let jwt = match get_user_from_cookie(&req) {
+        Some(jwt) => jwt,
+        None => return HttpResponse::Unauthorized().body("Invalid email or password"),
+    };
+
+    load_vault_query(req, web::Json(vault_info.clone())).await;
+
+    let cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
+        Some(cache) => cache,
+        None => return HttpResponse::InternalServerError().body("Failed to get vault"),
+    };
+
+    let vault = cache.lock().unwrap();
+
+    match vault.perms.get(&jwt.id) {
+        Some(perm) => HttpResponse::Ok().json(perm),
+        None => HttpResponse::InternalServerError().body("Failed to get vault"),
+    }
 }
 
+/// Shares a vault with another user by email and sets permissions.
 pub async fn share_vault_query(
     req: HttpRequest,
-    data: web::Json<(VaultInfo, String)>,
+    data: web::Json<(VaultInfo, String, String)>,
 ) -> impl Responder {
-    HttpResponse::Ok().json("")
+    let _ = match get_user_from_cookie(&req) {
+        Some(jwt) => jwt,
+        None => return HttpResponse::Unauthorized().body("Invalid email or password"),
+    };
+
+    let con = CONNECTION.lock().unwrap();
+    let (vault_info, email, perm) = data.into_inner();
+
+    // test if other user exist
+    let id = match get_user_by_email(&con, &email) {
+        Ok(Some((id, _))) => id,
+        _ => return HttpResponse::InternalServerError().body("user do not exist"),
+    };
+
+    // check if vault could be load or is already_loaded
+    if !load_vault_query(req, web::Json(vault_info.clone()))
+        .await
+        .respond_to(&test::TestRequest::default().to_http_request())
+        .status()
+        .is_success()
+    {
+        return HttpResponse::InternalServerError().body("Failed to get vault");
+    }
+
+    // case if the other user is connected
+    if let Some(key) = EMAIL_TO_SESSION_KEY.get(&email) {
+        let user_key = {
+            SESSION_CACHE
+                .get(&key)
+                .unwrap()
+                .lock()
+                .unwrap()
+                .user_key
+                .clone()
+        };
+
+        // get vault cache
+        let vault_cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
+            Some(vault_cache) => vault_cache,
+            None => return HttpResponse::InternalServerError().body("Failed to get vault"),
+        };
+
+        let mut vault = vault_cache.lock().unwrap();
+        vault.perms.insert(id, Perms::from_str(&perm));
+
+        let keys = vault.vault_key.clone();
+        let perms = vault.perms.clone();
+
+        // save perms of the other user
+        if vault_info.set_perms(keys.as_slice(), &perms).await.is_err() {
+            return HttpResponse::InternalServerError().body("Failed to set vault");
+        }
+
+        // save access of vault_key using the private key of the other user
+        if vault_info
+            .save_key(keys.as_slice(), user_key.as_slice(), id)
+            .await
+            .is_err()
+        {
+            return HttpResponse::InternalServerError().body("Failed to save vault");
+        }
+
+        // Persist the vault in the database
+        match create_vault(&con, &vault_info, id) {
+            Ok(res) => HttpResponse::Ok().json(json!({
+                "message": format!("Vault '{}' shared successfully!", res.name),
+                "vault_id": res.creator_id.clone(),
+                "date": res.date,
+            })),
+            Err(_) => return HttpResponse::InternalServerError().body("Error creating vault."),
+        };
+
+        HttpResponse::Ok().json("")
+    } else {
+        // To handle later
+        HttpResponse::InternalServerError().body("Failed to share vault")
+    }
 }
 
 pub async fn remove_user_from_vault_query(
     req: HttpRequest,
     data: web::Json<(VaultInfo, String)>,
 ) -> impl Responder {
-    HttpResponse::Ok().json("")
+    let jwt = match get_user_from_cookie(&req) {
+        Some(jwt) => jwt,
+        None => return HttpResponse::Unauthorized().body("Invalid email or password"),
+    };
+
+    let (vault_info, email_to_remove) = data.into_inner();
+
+    if !load_vault_query(req, web::Json(vault_info.clone()))
+        .await
+        .respond_to(&test::TestRequest::default().to_http_request())
+        .status()
+        .is_success()
+    {
+        return HttpResponse::InternalServerError().body("Failed to get vault");
+    }
+
+    let con = CONNECTION.lock().unwrap();
+    let id_to_remove = match get_user_by_email(&con, &email_to_remove) {
+        Ok(Some((id, _))) => id,
+        _ => return HttpResponse::InternalServerError().body("user do not exist"),
+    };
+
+    let cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
+        Some(cache) => cache,
+        None => return HttpResponse::InternalServerError().body("Failed to get vault"),
+    };
+
+    let mut vault = cache.lock().unwrap();
+    {
+        let perms = &mut vault.perms;
+
+        let (p1, p2) = match (perms.get(&jwt.id), perms.get(&id_to_remove)) {
+            (Some(p1), Some(p2)) => (p1, p2),
+            _ => return HttpResponse::InternalServerError().body("Failed to get vault"),
+        };
+
+        if p1 < p2 {
+            return HttpResponse::InternalServerError().body("Failed to get vault");
+        }
+        perms.remove(&id_to_remove);
+    }
+    let key = vault.vault_key.as_slice();
+    if vault_info.set_perms(key, &vault.perms).await.is_err() {
+        return HttpResponse::InternalServerError().body("Failed to set vault");
+    }
+
+    if fs::remove_file(vault_info.get_key_path(id_to_remove)).is_err() {
+        return HttpResponse::InternalServerError().body("Failed to remove file");
+    }
+
+    match remove_vault(&con, &vault_info, id_to_remove) {
+        Ok(_) => HttpResponse::Ok().json(""),
+        Err(_) => HttpResponse::InternalServerError().body("Failed to remove vault"),
+    }
 }
 
 pub async fn delete_vault_query(
     req: HttpRequest,
     vault_info: web::Json<VaultInfo>,
 ) -> impl Responder {
-    HttpResponse::Ok().json("")
+    if let Some(jwt) = get_user_from_cookie(&req) {
+        let con = CONNECTION.lock().unwrap();
+        let vault_info = vault_info.into_inner();
+        if !load_vault_query(req, web::Json(vault_info.clone()))
+            .await
+            .respond_to(&test::TestRequest::default().to_http_request())
+            .status()
+            .is_success()
+        {
+            return HttpResponse::InternalServerError().body("Failed to get vault");
+        }
+        let cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
+            Some(cache) => cache,
+            None => return HttpResponse::InternalServerError().body("Failed to get vault"),
+        };
+        let vault = cache.lock().unwrap();
+        let perms = vault.perms.clone();
+        if !perms.contains_key(&jwt.id) || perms.get(&jwt.id).unwrap() < &Perms::Creator {
+            return HttpResponse::Unauthorized()
+                .body("You do not have permission to delete this vault");
+        }
+
+        for id in vault.perms.keys() {
+            if remove_vault(&con, &vault_info, *id).is_err() {
+                return HttpResponse::InternalServerError().body("Failed to remove vault");
+            }
+        }
+
+        if fs::remove_dir_all(vault_info.get_path()).is_err() {
+            return HttpResponse::InternalServerError().body("Failed to remove vault");
+        }
+
+        HttpResponse::Ok().json("")
+    } else {
+        HttpResponse::Unauthorized().body("Invalid email or password")
+    }
 }
 
 pub async fn leave_vault_query(
