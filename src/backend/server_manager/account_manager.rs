@@ -11,6 +11,7 @@ use bcrypt::{hash, verify, DEFAULT_COST};
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::cmp::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use uuid::Uuid;
@@ -18,13 +19,13 @@ use uuid::Uuid;
 /**
  * Enum representing user permissions.
  */
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub enum Perms {
-    Creator,
-    Admin,
-    Write,
-    Read,
     NoLoad,
+    Read,
+    Write,
+    Admin,
+    Creator,
 }
 
 impl Perms {
