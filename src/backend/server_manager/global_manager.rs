@@ -86,11 +86,11 @@ pub fn init_server_config() {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS vaults (
             id INTEGER NOT NULL,
-            user_id INTEGER NOT NULL,
+            creator_id INTEGER NOT NULL,
             name TEXT NOT NULL,
             date INTEGER NOT NULL,
             FOREIGN KEY (id) REFERENCES users(id)
-            PRIMARY KEY (id, user_id, date)
+            PRIMARY KEY (id, creator_id, date)
         )",
         [],
     )

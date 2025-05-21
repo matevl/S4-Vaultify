@@ -31,16 +31,16 @@ type PermsMap = HashMap<u32, Perms>;
 /// Represents metadata for a vault.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VaultInfo {
-    pub user_id: u32,
+    pub creator_id: u32,
     pub name: String,
     pub date: u64,
 }
 
 impl VaultInfo {
     /// Creates a new `VaultInfo` instance.
-    pub fn new(user_id: u32, name: &str, date: u64) -> Self {
+    pub fn new(creator_id: u32, name: &str, date: u64) -> Self {
         Self {
-            user_id,
+            creator_id,
             name: name.to_string(),
             date,
         }
@@ -48,7 +48,7 @@ impl VaultInfo {
 
     /// Returns the internal vault name, e.g., "123_1700000000".
     pub fn get_name(&self) -> String {
-        format!("{}_{}", self.user_id, self.date)
+        format!("{}_{}", self.creator_id, self.date)
     }
 
     /// Constructs the full path to the vault's root directory.
@@ -189,7 +189,7 @@ pub fn create_vault(
 ) -> rusqlite::Result<VaultInfo> {
     if let Ok(_) = conn.execute(
         "INSERT INTO vaults (id, user_id, name, date) VALUES (?, ?, ?, ?)",
-        params![id, vault_info.user_id, vault_info.name, vault_info.date],
+        params![id, vault_info.creator_id, vault_info.name, vault_info.date],
     ) {
         Ok(vault_info.clone())
     } else {
@@ -263,7 +263,7 @@ pub async fn create_vault_query(req: HttpRequest, form: web::Form<VaultForm>) ->
             match create_vault(&connection, &info, session.user_id) {
                 Ok(res) => HttpResponse::Ok().json(json!({
                     "message": format!("Vault '{}' created successfully!", res.name),
-                    "vault_id": res.user_id.clone(),
+                    "vault_id": res.creator_id.clone(),
                     "date": res.date,
                 })),
                 Err(e) => {
@@ -358,7 +358,7 @@ pub async fn get_perms_query(req: HttpRequest, vault_info: web::Json<VaultInfo>)
 
     let vault = cache.lock().unwrap();
 
-    match vault.perms.get(&vault_info.user_id) {
+    match vault.perms.get(&vault_info.creator_id) {
         Some(perm) => HttpResponse::Ok().json(perm),
         None => HttpResponse::InternalServerError().body("Failed to get vault"),
     }
@@ -434,11 +434,11 @@ pub async fn share_vault_query(
         // Persist the vault in the database
         match create_vault(&con, &vault_info, id) {
             Ok(res) => HttpResponse::Ok().json(json!({
-                "message": format!("Vault '{}' created successfully!", res.name),
-                "vault_id": res.user_id.clone(),
+                "message": format!("Vault '{}' shared successfully!", res.name),
+                "vault_id": res.creator_id.clone(),
                 "date": res.date,
             })),
-            Err(e) => return HttpResponse::InternalServerError().body("Error creating vault."),
+            Err(_) => return HttpResponse::InternalServerError().body("Error creating vault."),
         };
 
         HttpResponse::Ok().json("")

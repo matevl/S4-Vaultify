@@ -186,7 +186,7 @@ pub fn get_user_vaults(conn: &Connection, user_id: u32) -> Result<Vec<VaultInfo>
 
     while let Some(row) = rows.next()? {
         vaults.push(VaultInfo {
-            user_id: row.get(1)?,
+            creator_id: row.get(1)?,
             name: row.get(2)?,
             date: row.get(3)?,
         });
