@@ -4,8 +4,8 @@ use crate::backend::server_manager::global_manager::{
 };
 use crate::backend::server_manager::vault_manager::VaultInfo;
 use crate::backend::{VAULTS_DATA, VAULT_USERS_DIR};
-use actix_web::cookie::time::Duration as Dudu;
-use actix_web::cookie::Cookie;
+use actix_web::cookie::time::{Duration as Dudu, Duration, OffsetDateTime};
+use actix_web::cookie::{Cookie, SameSite};
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use dirs;
@@ -283,6 +283,28 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
     }))
 }
 
+pub async fn logout_user_query(req: HttpRequest) -> impl Responder {
+    // 1) Supprime la session côté serveur, si le cookie existait
+    if let Some(cookie) = req.cookie("user_token") {
+        if let Ok(jwt) = serde_json::from_str::<JWT>(cookie.value()) {
+            SESSION_CACHE.invalidate(&jwt.session_id);
+        }
+    }
+
+
+    let expired_cookie = Cookie::build("user_token", "")
+        .path("/")
+        .http_only(true)
+        .secure(true)
+        .same_site(SameSite::Lax)
+        .expires(OffsetDateTime::now_utc() - Duration::days(1)) // important
+        .max_age(Duration::seconds(0)) // important aussi
+        .finish();
+
+    HttpResponse::Ok()
+        .cookie(expired_cookie)
+        .json(json!({ "success": true }))
+}
 /**
  * Endpoint to get the list of vaults for a user.
  *
@@ -291,15 +313,14 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
  */
 pub async fn get_vaults_list_query(req: HttpRequest) -> HttpResponse {
     if let Some(jwt) = get_user_from_cookie(&req) {
-        let conn = CONNECTION.lock().unwrap();
-        if let Ok(vaults) = get_user_vaults(&conn, jwt.id) {
-            HttpResponse::Ok().json(vaults)
-        } else {
-            HttpResponse::Unauthorized().finish()
+        if SESSION_CACHE.get(&jwt.session_id).is_some() {
+            let conn = CONNECTION.lock().unwrap();
+            if let Ok(vaults) = get_user_vaults(&conn, jwt.id) {
+                return HttpResponse::Ok().json(vaults);
+            }
         }
-    } else {
-        HttpResponse::Unauthorized().finish()
     }
+    HttpResponse::Unauthorized().finish()
 }
 
 #[derive(Deserialize)]

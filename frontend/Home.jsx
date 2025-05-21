@@ -8,6 +8,16 @@ export default function Home() {
     const btnRef = useRef(null);
 
     useEffect(() => {
+        fetch("/vaults", { credentials: "include" }).then(res => {
+            if (res.status === 401 || res.redirected) {
+                window.location.href = "/login";
+            }
+        }).catch(() => {
+            window.location.href = "/login";
+        });
+    }, []);
+
+    useEffect(() => {
         if (localStorage.getItem('loginSuccess') === 'true') {
             setShowToast(true);
             localStorage.removeItem('loginSuccess');
@@ -17,9 +27,10 @@ export default function Home() {
 
     useEffect(() => {
       const onClickOutside = (e) => {
-        if (btnRef.current && !btnRef.current.contains(e.target)) {
-          setShowPopover(false);
-        }
+          const isLogoutBtn = e.target.closest(".logout-btn");
+          if (btnRef.current && !btnRef.current.contains(e.target) && !isLogoutBtn) {
+              setShowPopover(false);
+          }
       };
       document.addEventListener("mousedown", onClickOutside);
       return () => document.removeEventListener("mousedown", onClickOutside);
@@ -74,9 +85,22 @@ export default function Home() {
         }
     };
 
-    const handleLogout = () => {
-      // ta logique de déconnexion ici
-      console.log("Log out");
+    const handleLogout = async () => {
+        console.log("Déconnexion déclenchée");
+
+        try {
+            const res = await fetch('/logout', {
+                method: 'POST',
+                credentials: 'include'
+            });
+            const text = await res.text();
+            console.log("Réponse serveur :", res.status, text);
+        } catch (err) {
+            console.error("Erreur de logout", err);
+        } finally {
+            localStorage.clear();
+            window.location.href = '/';
+        }
     };
 
     return (
@@ -96,6 +120,9 @@ export default function Home() {
             <div className="main-content">
                 <div className="dashboard-header">
                     <h1 className="vaultify-title">Welcome</h1>
+                    <div className="dashboard-logo">
+                        <img src="/static/Vaultify-Color-svg.svg" alt="Logo" />
+                    </div>
                     <div className="header-buttons">
                         <button className="btn btn-primary" onClick={openModal}>
                             + Create a Vault
@@ -194,6 +221,8 @@ export default function Home() {
                     <span>Successful vault creation</span>
                 </div>
             )}
+
+
         </div>
 
     );
