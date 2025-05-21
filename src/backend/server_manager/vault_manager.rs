@@ -530,7 +530,42 @@ pub async fn delete_vault_query(
     req: HttpRequest,
     vault_info: web::Json<VaultInfo>,
 ) -> impl Responder {
-    HttpResponse::Ok().json("")
+    if let Some(jwt) = get_user_from_cookie(&req) {
+        let con = CONNECTION.lock().unwrap();
+        let vault_info = vault_info.into_inner();
+        if !load_vault_query(req, web::Json(vault_info.clone()))
+            .await
+            .respond_to(&test::TestRequest::default().to_http_request())
+            .status()
+            .is_success()
+        {
+            return HttpResponse::InternalServerError().body("Failed to get vault");
+        }
+        let cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
+            Some(cache) => cache,
+            None => return HttpResponse::InternalServerError().body("Failed to get vault"),
+        };
+        let vault = cache.lock().unwrap();
+        let perms = vault.perms.clone();
+        if !perms.contains_key(&jwt.id) || perms.get(&jwt.id).unwrap() < &Perms::Creator {
+            return HttpResponse::Unauthorized()
+                .body("You do not have permission to delete this vault");
+        }
+
+        for key in vault.perms.keys() {
+            if remove_vault(&con, &vault_info, *key).is_err() {
+                return HttpResponse::InternalServerError().body("Failed to remove vault");
+            }
+        }
+
+        if fs::remove_dir_all(vault_info.get_path()).is_err() {
+            return HttpResponse::InternalServerError().body("Failed to remove vault");
+        }
+
+        HttpResponse::Ok().json("")
+    } else {
+        HttpResponse::Unauthorized().body("Invalid email or password")
+    }
 }
 
 pub async fn leave_vault_query(
