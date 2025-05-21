@@ -552,8 +552,8 @@ pub async fn delete_vault_query(
                 .body("You do not have permission to delete this vault");
         }
 
-        for key in vault.perms.keys() {
-            if remove_vault(&con, &vault_info, *key).is_err() {
+        for id in vault.perms.keys() {
+            if remove_vault(&con, &vault_info, *id).is_err() {
                 return HttpResponse::InternalServerError().body("Failed to remove vault");
             }
         }
