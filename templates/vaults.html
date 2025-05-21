@@ -85,13 +85,13 @@
 <div class="vault-container">
     {% for vault in vaults %}
     <a href="#"
-       data-user="{{ vault.user_id }}"
+       data-creator_id="{{ vault.creator_id }}"
        data-name="{{ vault.name | escape }}"
        data-date="{{ vault.date }}"
        onclick="event.preventDefault(); handleVaultClick(this)">
         <div class="vault-box">
             <p><strong>Name:</strong> {{ vault.name }}</p>
-            <p><strong>Owner ID:</strong> {{ vault.user_id }}</p>
+            <p><strong>Owner ID:</strong> {{ vault.creator_id }}</p>
             <p>
                 <strong>Created:</strong>
                 <span class="raw-date">{{ vault.date }}</span>
@@ -114,7 +114,7 @@
             });
             if (!response.ok) throw new Error(await response.text());
             const updatedJwt = await response.json();
-            window.location.href = `/vaults/${vaultInfo.user_id}_${vaultInfo.date}`;
+            window.location.href = `/vaults/${vaultInfo.creator_id}_${vaultInfo.date}`;
         } catch (err) {
             console.error("❌ Erreur loadVault :", err);
             alert("Erreur lors du chargement du vault !");
@@ -123,7 +123,7 @@
 
     function handleVaultClick(element) {
         const vaultInfo = {
-            user_id: Number(element.dataset.user),
+            creator_id: Number(element.dataset.creator_id),
             name:    element.dataset.name,
             date:    Number(element.dataset.date)
         };

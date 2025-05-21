@@ -8,11 +8,9 @@ use actix_web::cookie::time::Duration as Dudu;
 use actix_web::cookie::Cookie;
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
-use dirs;
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use uuid::Uuid;
@@ -177,7 +175,7 @@ pub fn get_user_by_email(conn: &Connection, email: &str) -> Result<Option<(u32, 
  */
 pub fn get_user_vaults(conn: &Connection, user_id: u32) -> Result<Vec<VaultInfo>> {
     let mut stmt = conn.prepare(
-        "SELECT id, user_id, name, date
+        "SELECT id, creator_id, name, date
          FROM vaults
          WHERE id = ?",
     )?;

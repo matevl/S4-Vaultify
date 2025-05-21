@@ -13,7 +13,6 @@ use crate::backend::server_manager::global_manager::{
 use crate::backend::{VAULTS_DATA, VAULT_CONFIG_ROOT, VAULT_USERS_DIR};
 
 use actix_web::{test, web, HttpRequest, HttpResponse, Responder};
-use rusqlite::ffi::sqlite3_mutex_notheld;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -188,7 +187,7 @@ pub fn create_vault(
     id: u32,
 ) -> rusqlite::Result<VaultInfo> {
     if let Ok(_) = conn.execute(
-        "INSERT INTO vaults (id, user_id, name, date) VALUES (?, ?, ?, ?)",
+        "INSERT INTO vaults (id, creator_id, name, date) VALUES (?, ?, ?, ?)",
         params![id, vault_info.creator_id, vault_info.name, vault_info.date],
     ) {
         Ok(vault_info.clone())
@@ -293,7 +292,7 @@ pub async fn load_vault_query(
             jwt.loaded_vault = Some(info.clone());
             HttpResponse::Ok().json(jwt)
         } else if let Some(session) = SESSION_CACHE.get(&jwt.session_id) {
-            let mut session = session.lock().unwrap();
+            let session = session.lock().unwrap();
 
             let vault_name = info.get_name();
             let key_path = format!("{}{}{}.json", info.get_path(), VAULT_USERS_DIR, jwt.id);
@@ -319,7 +318,6 @@ pub async fn load_vault_query(
                         return HttpResponse::InternalServerError().body("Invalid vault data")
                     }
                 };
-
             // Load and decrypt permissions
             let vault_perms: PermsMap = match info.get_perms(&vault_key).await {
                 Ok(perms) => perms,
@@ -349,6 +347,11 @@ pub async fn load_vault_query(
 
 // Stubbed endpoints for future implementation
 pub async fn get_perms_query(req: HttpRequest, vault_info: web::Json<VaultInfo>) -> impl Responder {
+    let jwt = match get_user_from_cookie(&req) {
+        Some(jwt) => jwt,
+        None => return HttpResponse::Unauthorized().body("Invalid email or password"),
+    };
+
     load_vault_query(req, web::Json(vault_info.clone())).await;
 
     let cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
@@ -358,7 +361,7 @@ pub async fn get_perms_query(req: HttpRequest, vault_info: web::Json<VaultInfo>)
 
     let vault = cache.lock().unwrap();
 
-    match vault.perms.get(&vault_info.creator_id) {
+    match vault.perms.get(&jwt.id) {
         Some(perm) => HttpResponse::Ok().json(perm),
         None => HttpResponse::InternalServerError().body("Failed to get vault"),
     }
