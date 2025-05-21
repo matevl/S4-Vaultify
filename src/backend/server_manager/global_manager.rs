@@ -90,7 +90,7 @@ pub fn init_server_config() {
             name TEXT NOT NULL,
             date INTEGER NOT NULL,
             FOREIGN KEY (id) REFERENCES users(id)
-            PRIMARY KEY (id, user_id)
+            PRIMARY KEY (id, user_id, date)
         )",
         [],
     )
