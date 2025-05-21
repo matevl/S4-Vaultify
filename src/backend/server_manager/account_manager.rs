@@ -305,14 +305,6 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
 }
 
 pub async fn logout_user_query(req: HttpRequest) -> impl Responder {
-    // 1) Supprime la session côté serveur, si le cookie existait
-    if let Some(cookie) = req.cookie("user_token") {
-        if let Ok(jwt) = serde_json::from_str::<JWT>(cookie.value()) {
-            SESSION_CACHE.invalidate(&jwt.session_id);
-        }
-    }
-
-
     let expired_cookie = Cookie::build("user_token", "")
         .path("/")
         .http_only(true)
