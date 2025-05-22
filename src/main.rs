@@ -8,11 +8,14 @@ use rusqlite::Result;
 use rustls::Certificate;
 use rustls::PrivateKey;
 use rustls_pemfile::{certs, pkcs8_private_keys};
-use s4_vaultify::backend::file_manager::mapping::{get_tree_vault, move_tree_vault};
-use s4_vaultify::backend::server_manager::account_manager::{create_user_query, get_vaults_list_query, login_user_query, logout_user_query, CreateUserForm, JWT};
+use s4_vaultify::backend::server_manager::account_manager::{
+    create_user_query, get_vaults_list_query, login_user_query, logout_user_query, CreateUserForm,
+    JWT,
+};
+use s4_vaultify::backend::server_manager::file_manager::file_handler::get_file_tree_query;
 use s4_vaultify::backend::server_manager::global_manager::{init_server_config, SESSION_CACHE};
 use s4_vaultify::backend::server_manager::vault_manager::{
-    create_vault_query, load_vault_query, VaultInfo,
+    create_vault_query, load_vault_query, share_vault_query, VaultInfo,
 };
 use std::fs::File;
 use std::io::BufReader;
@@ -90,7 +93,8 @@ pub async fn home(req: HttpRequest) -> impl Responder {
             let html = HomeTemplate {
                 username: decoded_jwt.email.clone(),
                 email: decoded_jwt.email.clone(),
-                vault_info: decoded_jwt.loaded_vault
+                vault_info: decoded_jwt
+                    .loaded_vault
                     .as_ref()
                     .map_or("No data".to_string(), |v| v.name.clone()),
             };
@@ -99,7 +103,7 @@ pub async fn home(req: HttpRequest) -> impl Responder {
                 .body(html.render().unwrap());
         }
     }
-    
+
     HttpResponse::Found()
         .insert_header((header::LOCATION, "/login"))
         .finish()
@@ -167,18 +171,18 @@ async fn main() -> std::io::Result<()> {
             // POST routes
             .route("/create-user", web::post().to(create_user))
             .route("/login", web::post().to(login_user_query))
-            .route("/logout",  web::post().to(logout_user_query))
+            .route("/logout", web::post().to(logout_user_query))
             .route("/create-vault", web::post().to(create_vault_query))
             .route("/load-vault", web::post().to(load_vault_query))
-            .route("/vaults/{vault_id}/tree", web::post().to(get_tree_vault))
-            .route("/vaults/{vault_id}/move", web::post().to(move_tree_vault))
+            .route(
+                "/vaults/{vault_id}/tree",
+                web::post().to(get_file_tree_query),
+            )
+            .route("/share-vault", web::post().to(share_vault_query))
             //.route("/vault/{vault_id}/add-file", web::post().to(add_file_to_vault))
             // Routes for static files (images, CSS, JS, etc.)
             .service(Files::new("/static", "../static").show_files_listing()) // Serve static content
-            .service(
-                Files::new("/", "../templates")
-                    .index_file("index.html")
-            )
+            .service(Files::new("/", "../templates").index_file("index.html"))
     })
     .bind_rustls("0.0.0.0:443", Arc::try_unwrap(rustls_config).unwrap())? // Use SSL with Rustls
     .workers(8) // Number of workers (threads) to improve performance
