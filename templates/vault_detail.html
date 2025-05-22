@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vault Detail</title>
     <style>
-        /* --- Global --- */
         body { font-family: Arial, sans-serif; margin: 20px; background: #021433; color: #e5e7eb; }
         .button-group { margin-bottom: 20px; }
         button { padding: 10px 20px; margin-right: 10px; cursor: pointer; }
@@ -16,18 +15,14 @@
         .btn-secondary { background-color: transparent; border: 2px solid #6366f1; color: #6366f1; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; text-decoration: none; transition: background-color 0.3s ease; }
         .btn-secondary:hover { background-color: #6366f1; color: white; }
 
-        /* --- Tree --- */
         .tree-view ul { list-style: none; padding-left: 20px; }
         .tree-view li { cursor: pointer; padding: 5px; }
         .drop-target { border: 2px dashed #aaa; background-color: #f0f0f0; }
 
-        /* --- Modal Base --- */
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000; }
-        .modal-content { background: rgba(255,255,255,0.08); backdrop-filter: blur(10px); padding: 2rem; border-radius: 12px; width: 90%; max-width: 400px; color: #fff;
-            box-sizing: border-box;}
+        .modal-content { background: rgba(255,255,255,0.08); backdrop-filter: blur(10px); padding: 2rem; border-radius: 12px; width: 90%; max-width: 400px; color: #fff; box-sizing: border-box;}
         .modal-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
 
-        /* --- Switches --- */
         .switch-group { display: flex; align-items: center; margin-bottom: 1rem; gap: 1rem; }
         .switch { position: relative; display: inline-block; width: 40px; height: 22px; }
         .switch input { opacity: 0; width: 0; height: 0; }
@@ -36,77 +31,21 @@
         .switch input:checked + .slider { background-color: #6366f1; }
         .switch input:checked + .slider:before { transform: translateX(18px); }
 
-        /* --- Email Input --- */
-        .input-icon-wrapper {
-            position: relative;
-            width: 100%;
-            margin-bottom: 1rem;
-            box-sizing: border-box; /* ✅ important pour éviter de dépasser */
-        }
-
-        .input-icon {
-            stroke: #ffffff;
-            position: absolute;
-            top: 50%;
-            left: 0.75rem; /* espace depuis le bord */
-            transform: translateY(-50%);
-            width: 20px;
-            height: 20px;
-            pointer-events: none;
-        }
+        .input-icon-wrapper { position: relative; width: 100%; margin-bottom: 1rem; box-sizing: border-box; }
+        .input-icon { stroke: #ffffff; position: absolute; top: 50%; left: 0.75rem; transform: translateY(-50%); width: 20px; height: 20px; pointer-events: none; }
         .input-icon-wrapper:focus-within .input-icon { stroke: #818cf8; filter: drop-shadow(0 0 6px #818cf8); transition: all 0.3s ease; }
-
-        .login-input {
-            width: 100%;
-            padding: 0.5rem 0.75rem 0.5rem 2.75rem; /* ✅ left padding ajusté pour l’icône */
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            background-color: rgba(255, 255, 255, 0.05);
-            color: #fff;
-            border-radius: 0.5rem;
-            font-size: 1rem;
-            outline: none;
-            transition: border-color 0.2s ease, background-color 0.2s ease;
-            box-sizing: border-box; /* ✅ garantit que le padding est inclus dans la largeur */
-        }
+        .login-input { width: 100%; padding: 0.5rem 0.75rem 0.5rem 2.75rem; border: 1px solid rgba(255, 255, 255, 0.2); background-color: rgba(255, 255, 255, 0.05); color: #fff; border-radius: 0.5rem; font-size: 1rem; outline: none; transition: border-color 0.2s ease, background-color 0.2s ease; box-sizing: border-box; }
         .login-input::placeholder { color: #bbb; }
         .login-input:focus { border-color: #818cf8; background-color: rgba(255,255,255,0.08); }
 
-        /* --- Toast Notifications --- */
-        .toast-notification {
-            position: fixed;
-            bottom: 1.5rem;
-            right: 1.5rem;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            background-color: rgba(34,197,94,0.9);
-            color: white;
-            padding: 0.75rem 1.25rem;
-            border-radius: 8px;
-            font-weight: bold;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            z-index: 9999;
-            animation: fadeInOut 3s ease forwards;
-        }
-        .toast-notification.error {
-            background-color: rgba(239,68,68,0.95);
-        }
-        .toast-icon {
-            display: flex;
-            align-items: center;
-        }
-        .icon-size {
-            width: 20px;
-            height: 20px;
-        }
-        @keyframes fadein {
-            from {opacity: 0; transform: translateY(20px);}
-            to {opacity: 1; transform: translateY(0);}
-        }
+        .toast-notification { position: fixed; bottom: 1.5rem; right: 1.5rem; display: flex; align-items: center; gap: 0.75rem; background-color: rgba(34,197,94,0.9); color: white; padding: 0.75rem 1.25rem; border-radius: 8px; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.3); z-index: 9999; animation: fadeInOut 3s ease forwards; }
+        .toast-notification.error { background-color: rgba(239,68,68,0.95); }
+        .toast-icon { display: flex; align-items: center; }
+        .icon-size { width: 20px; height: 20px; }
+        @keyframes fadein { from {opacity: 0; transform: translateY(20px);} to {opacity: 1; transform: translateY(0);} }
     </style>
 </head>
 <body>
-<!-- Share Button -->
 <button class="btn btn-primary" onclick="openSharePopup()" style="display: flex; align-items: center; gap: 0.5rem;">
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="20" height="20">
         <path stroke-linecap="round" stroke-linejoin="round" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
@@ -114,18 +53,15 @@
     Share
 </button>
 
-<!-- Action Buttons -->
 <div class="button-group">
     <button onclick="window.location.href='/vaults'">Go Back to Vaults</button>
     <button onclick="triggerUpload()">Upload to DST</button>
     <button onclick="triggerDownload()">Download from DST</button>
 </div>
 
-<!-- File Tree -->
 <input type="file" id="uploadInput" style="display: none;" onchange="handleUpload(event)">
 <div id="tree" class="tree-view"></div>
 
-<!-- Move Confirmation Modal -->
 <div id="moveConfirm" class="modal">
     <div class="modal-content">
         <p id="moveMsg"></p>
@@ -136,21 +72,16 @@
     </div>
 </div>
 
-<!-- Share Modal -->
 <div id="sharePopup" class="modal">
     <div class="modal-content">
         <h3>Share Vault</h3>
-
-        <!-- Email Field -->
         <div class="input-icon-wrapper">
             <svg xmlns="http://www.w3.org/2000/svg" class="input-icon" fill="none" viewBox="0 0 24 24" stroke="#ffffff">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                      d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/>
             </svg>
             <input type="email" id="shareEmailInput" placeholder="Email" required class="login-input" />
         </div>
 
-        <!-- Permission Toggles -->
         <label>Permissions :</label>
         <div>
             <div class="switch-group">
@@ -176,7 +107,6 @@
             </div>
         </div>
 
-        <!-- Modal Actions -->
         <div class="modal-actions">
             <button class="btn btn-primary" onclick="submitShare()">Send</button>
             <button class="btn btn-secondary" onclick="closeSharePopup()">Cancel</button>
@@ -185,91 +115,139 @@
 </div>
 
 <script>
-    window.currentVaultInfo = JSON.parse(localStorage.getItem('vault_info'));
-    function openSharePopup() {
-        document.getElementById('sharePopup').style.display = 'flex';
-    }
-    function closeSharePopup() {
-        document.getElementById('sharePopup').style.display = 'none';
-    }
-    function updatePermissionToggles(changedId) {
-        const admin = document.getElementById('permAdmin');
-        const read  = document.getElementById('permRead');
-        const write = document.getElementById('permWrite');
-        if (changedId==='permAdmin' && admin.checked) {
-            read.checked = write.checked = false;
-            read.disabled = write.disabled = true;
-        }
-        if ((changedId==='permRead'||changedId==='permWrite') && (read.checked||write.checked)) {
-            admin.checked = false;
-            read.disabled = write.disabled = false;
-        }
-        if (!admin.checked && !read.checked && !write.checked) {
-            read.disabled = write.disabled = false;
-        }
+    function triggerUpload() {
+        document.getElementById("uploadInput").click();
     }
 
-    function showToast(message, type = "success") {
-        const toast = document.createElement("div");
-        toast.className = `toast-notification ${type}`;
-        toast.innerHTML = `
-            <span class="toast-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none"
-                     viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
-                     class="icon-size">
-                    <path stroke-linecap="round" stroke-linejoin="round"
-                          d="${type === 'success'
-                              ? 'M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z'
-                              : 'M6 18 18 6M6 6l12 12'}" />
-                </svg>
-            </span>
-            <span>${message}</span>
-        `;
-        document.body.appendChild(toast);
-        setTimeout(() => {
-            toast.remove();
-        }, 3000);
+    function handleUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        fetch("/upload", {
+            method: "POST",
+            body: formData
+        })
+            .then(res => {
+                if (res.ok) {
+                    showToast("File uploaded successfully!", "success");
+                } else {
+                    showToast("Upload failed.", "error");
+                }
+            })
+            .catch(() => showToast("Upload failed.", "error"));
     }
 
-    async function submitShare() {
-        const email = document.getElementById("shareEmailInput").value.trim();
-        const read = document.getElementById("permRead").checked;
-        const write = document.getElementById("permWrite").checked;
-        const admin = document.getElementById("permAdmin").checked;
-
-        let permission = "None";
-        if (admin) permission = "Admin";
-        else if (write) permission = "Write";
-        else if (read) permission = "Read";
-        // Require at least one permission
-        if (permission === "None") {
-            showToast("Please select a permission", "error");
-            return;
-        }
-
-        let vault = JSON.parse(localStorage.getItem("vault_info"));
-
+    // <!-- TEST_TREE: begin -->
+    async function loadFileTree() {
+        const parts = window.location.pathname.split('/');
+        const vaultId = parts[parts.length - 1];
+        const url = window.location.hostname === 'localhost'
+            ? '/static/test.json'
+            : `/vaults/${vaultId}/tree`;
         try {
-            const response = await fetch("/share-vault", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify([vault, email, permission])
-            });
+            const res = await fetch(url);
+            const treeData = await res.json();
+            window.fullTree = treeData;
+            renderTree(treeData);
+        } catch (e) {
+            console.error('Cannot load file tree:', e);
+        }
+    }
+    // <!-- TEST_TREE: end -->
+</script>
+<script>
+    let fileTreeMap = new Map();
+    let currentPath = [];
 
-            if (response.ok) {
-                showToast("Vault shared successfully!", "success");
-                closeSharePopup();
+    function buildMapFromJSON(json, path = []) {
+        const node = new Map();
+        for (const [name, value] of Object.entries(json.files)) {
+            const [type, content] = Object.entries(value)[0];
+            if (type === "Dir") {
+                node.set(name, { type: "dir", content: buildMapFromJSON(content, path.concat(name)) });
             } else {
-                showToast("Error sharing vault", "error");
+                node.set(name, { type: "file" });
             }
-        } catch (_) {
-            showToast("Error sharing vault", "error");
+        }
+        return node;
+    }
+
+    function renderMap(map, path = []) {
+        const treeContainer = document.getElementById("tree");
+        treeContainer.innerHTML = "";
+
+        const container = document.createElement("div");
+
+        if (path.length > 0) {
+            const back = document.createElement("div");
+            back.textContent = "⬅️ Retour";
+            back.style.cursor = "pointer";
+            back.style.marginBottom = "1rem";
+            back.onclick = () => {
+                currentPath.pop();
+                renderMap(fileTreeMap, currentPath);
+            };
+            container.appendChild(back);
+        }
+
+        const currentMap = path.reduce((acc, key) => acc.get(key)?.content, map);
+        for (const [name, item] of currentMap) {
+            const card = document.createElement("div");
+            card.style.border = "1px solid #6366f1";
+            card.style.padding = "1rem";
+            card.style.borderRadius = "8px";
+            card.style.margin = "10px 0";
+            card.style.cursor = "pointer";
+            card.style.display = "flex";
+            card.style.alignItems = "center";
+            card.style.gap = "1rem";
+            card.style.background = "rgba(255,255,255,0.05)";
+            card.style.transition = "background 0.2s ease";
+
+            const icon = document.createElement("div");
+            icon.textContent = item.type === "dir" ? "📁" : "📄";
+            icon.style.fontSize = "2rem";
+            card.appendChild(icon);
+
+            const label = document.createElement("div");
+            label.textContent = name;
+            label.style.wordBreak = "break-word";
+            card.appendChild(label);
+
+            if (item.type === "dir") {
+                card.onclick = () => {
+                    currentPath.push(name);
+                    renderMap(fileTreeMap, currentPath);
+                };
+            }
+
+            container.appendChild(card);
+        }
+
+        treeContainer.appendChild(container);
+    }
+
+    async function loadFileTree() {
+        const parts = window.location.pathname.split('/');
+        const vaultId = parts[parts.length - 1];
+        const url = window.location.hostname === 'localhost'
+            ? '/static/test.json'
+            : `/vaults/${vaultId}/tree`;
+        try {
+            const res = await fetch(url);
+            const treeData = await res.json();
+            fileTreeMap = buildMapFromJSON(treeData);
+            currentPath = [];
+            renderMap(fileTreeMap);
+        } catch (e) {
+            console.error('Cannot load file tree:', e);
         }
     }
 
-
+    loadFileTree();
 </script>
 </body>
 </html>
