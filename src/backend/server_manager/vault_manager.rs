@@ -7,8 +7,8 @@ use crate::backend::aes_keys::keys_password::{
 use crate::backend::server_manager::account_manager::{get_user_by_email, Perms, VaultForm, JWT};
 use crate::backend::server_manager::file_manager::file_tree::{Directory, FILE_TREE_FILE_NAME};
 use crate::backend::server_manager::global_manager::{
-    get_user_from_cookie, is_vault_in_cache, CONNECTION, EMAIL_TO_SESSION_KEY, ROOT, SESSION_CACHE,
-    VAULTS_CACHE,
+    get_user_from_cookie, is_vault_in_cache, CONNECTION, EMAIL_TO_SESSION_KEY, PENDING_SHARE_CACHE,
+    ROOT, SESSION_CACHE, VAULTS_CACHE,
 };
 use crate::backend::{VAULTS_DATA, VAULT_CONFIG_ROOT, VAULT_USERS_DIR};
 
@@ -478,6 +478,23 @@ pub async fn share_vault_query(
         return HttpResponse::InternalServerError().body("Failed to get vault");
     }
 
+    // get vault cache
+    let vault_cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
+        Some(vault_cache) => vault_cache,
+        None => return HttpResponse::InternalServerError().body("Failed to get vault"),
+    };
+
+    let mut vault = vault_cache.lock().unwrap();
+    vault.perms.insert(id, Perms::from_str(&perm));
+
+    let keys = vault.vault_key.clone();
+    let perms = vault.perms.clone();
+
+    // save perms of the other user
+    if vault_info.set_perms(keys.as_slice(), &perms).is_err() {
+        return HttpResponse::InternalServerError().body("Failed to set vault");
+    }
+
     // case if the other user is connected
     if let Some(key) = EMAIL_TO_SESSION_KEY.get(&email) {
         let user_key = {
@@ -489,23 +506,6 @@ pub async fn share_vault_query(
                 .user_key
                 .clone()
         };
-
-        // get vault cache
-        let vault_cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
-            Some(vault_cache) => vault_cache,
-            None => return HttpResponse::InternalServerError().body("Failed to get vault"),
-        };
-
-        let mut vault = vault_cache.lock().unwrap();
-        vault.perms.insert(id, Perms::from_str(&perm));
-
-        let keys = vault.vault_key.clone();
-        let perms = vault.perms.clone();
-
-        // save perms of the other user
-        if vault_info.set_perms(keys.as_slice(), &perms).is_err() {
-            return HttpResponse::InternalServerError().body("Failed to set vault");
-        }
 
         // save access of vault_key using the private key of the other user
         if vault_info
@@ -527,7 +527,13 @@ pub async fn share_vault_query(
 
         HttpResponse::Ok().json("")
     } else {
-        // To handle later
+        let to_share = (vault_info.clone(), keys);
+        if let Some(pending) = PENDING_SHARE_CACHE.get(&email) {
+            let mut pending = pending.lock().unwrap();
+            pending.push(to_share);
+        } else {
+            PENDING_SHARE_CACHE.insert(email, Arc::new(Mutex::new(vec![to_share])));
+        }
         HttpResponse::InternalServerError().body("Failed to share vault")
     }
 }

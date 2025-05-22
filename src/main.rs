@@ -12,8 +12,11 @@ use s4_vaultify::backend::server_manager::account_manager::{
     create_user_query, get_vaults_list_query, login_user_query, logout_user_query, CreateUserForm,
     JWT,
 };
+use s4_vaultify::backend::server_manager::file_manager::file_handler::get_file_tree_query;
 use s4_vaultify::backend::server_manager::global_manager::{init_server_config, SESSION_CACHE};
-use s4_vaultify::backend::server_manager::vault_manager::{create_vault_query, load_vault_query, share_vault_query, VaultInfo};
+use s4_vaultify::backend::server_manager::vault_manager::{
+    create_vault_query, load_vault_query, share_vault_query, VaultInfo,
+};
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
@@ -21,7 +24,6 @@ use std::sync::Mutex;
 use tera::Context;
 use tera::Tera;
 use tokio_rustls::rustls::ServerConfig;
-use s4_vaultify::backend::server_manager::file_manager::file_handler::get_file_tree_query;
 
 fn load_rustls_config(cert_path: &str, key_path: &str) -> Arc<ServerConfig> {
     // Open certificate and private key files

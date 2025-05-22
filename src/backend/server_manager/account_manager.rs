@@ -1,6 +1,7 @@
 use crate::backend::aes_keys::keys_password::{derive_key, generate_salt_from_login};
 use crate::backend::server_manager::global_manager::{
-    get_user_from_cookie, CONNECTION, EMAIL_TO_SESSION_KEY, ROOT, SESSION_CACHE,
+    get_user_from_cookie, CONNECTION, EMAIL_TO_SESSION_KEY, PENDING_SHARE_CACHE, ROOT,
+    SESSION_CACHE,
 };
 use crate::backend::server_manager::vault_manager::VaultInfo;
 use crate::backend::{VAULTS_DATA, VAULT_USERS_DIR};
@@ -284,10 +285,19 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
             );
 
             EMAIL_TO_SESSION_KEY.insert(email.clone(), session_id.clone());
+
+            if let Some(pending) = PENDING_SHARE_CACHE.get(&email) {
+                let mut pending = pending.lock().unwrap();
+                for (vault_info, vault_key) in pending.drain(..) {
+                    vault_info
+                        .save_key(vault_key.as_slice(), user_key.as_slice(), user_id)
+                        .unwrap()
+                }
+            }
+
             session_id
         }
     };
-
     let jwt = JWT::new(&session_key, user_id, &email);
 
     let cookie = Cookie::build("user_token", serde_json::to_string(&jwt).unwrap())
