@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+pub const FILE_TREE_FILE_NAME: &str = "file_tree.json";
+
 /// Node in the File Tree
 ///
 /// @field file_name - the virtual name of the file
@@ -8,7 +10,7 @@ use std::collections::HashMap;
 /// @field binary_file_name - the name of the file on the disk
 ///
 /// @file_type - .jpeg, .png, .pdf ...
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct FileNode {
     file_name: String,
     binary_file_name: String,
@@ -31,7 +33,7 @@ impl FileNode {
 }
 
 /// A FileType can be either a File or a Directory
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 enum FileType {
     File(FileNode),
     Dir(Directory),
@@ -42,8 +44,8 @@ enum FileType {
 /// @field name - name of the directory
 ///
 /// @field files - hashmap file or directory name -> Filetype
-#[derive(Serialize, Deserialize, Debug)]
-struct Directory {
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Directory {
     name: String,
     files: HashMap<String, FileType>,
 }
@@ -62,16 +64,17 @@ impl Directory {
         for (key, value) in self.files.iter() {
             match value {
                 FileType::File(file) => {
-                    res.files.insert(key.clone(), PubFileType::File(file.to_public()));
-                },
+                    res.files
+                        .insert(key.clone(), PubFileType::File(file.to_public()));
+                }
                 FileType::Dir(dir) => {
-                    res.files.insert(key.clone(), PubFileType::Dir(dir.to_public()));
+                    res.files
+                        .insert(key.clone(), PubFileType::Dir(dir.to_public()));
                 }
             }
         }
         res
     }
-
 }
 
 /// Public Node in the File Tree
