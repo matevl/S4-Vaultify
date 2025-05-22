@@ -3,6 +3,7 @@ use crate::backend::server_manager::vault_manager::VaultsCache;
 use crate::backend::{VAULTIFY_CONFIG, VAULTIFY_DATABASE};
 use actix_web::HttpRequest;
 use lazy_static::lazy_static;
+use moka::notification::RemovalCause;
 use moka::sync::Cache;
 use rusqlite::Connection;
 use std::collections::HashMap;
@@ -26,6 +27,11 @@ lazy_static! {
     pub static ref SESSION_CACHE: Cache<String, Arc<Mutex<Session>>> = {
         Cache::builder()
             .time_to_idle(Duration::from_secs(1800))
+            .eviction_listener(move |session_key: Arc<String>, _session, cause| {
+        if cause != RemovalCause::Replaced {
+            let  _ = EMAIL_TO_SESSION_KEY.invalidate_entries_if(move |_email, key| key == session_key.deref());
+        }
+    })
             .build()
     };
 
