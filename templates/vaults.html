@@ -58,46 +58,6 @@
             border-radius: 12px;
             padding: 15px;
             transition: background-color 0.2s, box-shadow 0.2s;
-            position: relative;
-        }
-        .vault-menu {
-            position: relative;
-            display: inline-block;
-            float: right;
-        }
-
-        .vault-menu button {
-            background: none;
-            border: none;
-            color: var(--text-color);
-            font-size: 1.2rem;
-            cursor: pointer;
-        }
-
-        .vault-menu-options {
-            position: absolute;
-            top: 1.5rem;
-            right: 0;
-            background-color: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 6px;
-            padding: 0.5rem;
-            z-index: 1000;
-        }
-
-        .vault-menu-options.hidden {
-            display: none;
-        }
-
-        .vault-menu-options button {
-            background: none;
-            border: none;
-            color: var(--text-color);
-            cursor: pointer;
-            padding: 0.25rem 0.5rem;
-            display: block;
-            width: 100%;
-            text-align: left;
         }
 
         .vault-box p:last-child {
@@ -124,20 +84,20 @@
 
 <div class="vault-container">
     {% for vault in vaults %}
-    <div class="vault-box">
-        <div class="vault-menu">
-            <button onclick="toggleMenu(event)" data-creator_id="{{ vault.creator_id }}" data-date="{{ vault.date }}" data-name="{{ vault.name | escape }}">⋮</button>
-            <div class="vault-menu-options hidden">
-                <button onclick="confirmDelete('{{ vault.creator_id }}', '{{ vault.date }}', '{{ vault.name | escape }}')">Supprimer</button>
-            </div>
+    <a href="#"
+       data-creator_id="{{ vault.creator_id }}"
+       data-name="{{ vault.name | escape }}"
+       data-date="{{ vault.date }}"
+       onclick="event.preventDefault(); handleVaultClick(this)">
+        <div class="vault-box">
+            <p><strong>Name:</strong> {{ vault.name }}</p>
+            <p><strong>Owner ID:</strong> {{ vault.creator_id }}</p>
+            <p>
+                <strong>Created:</strong>
+                <span class="raw-date">{{ vault.date }}</span>
+            </p>
         </div>
-        <p><strong>Name:</strong> {{ vault.name }}</p>
-        <p><strong>Owner ID:</strong> {{ vault.creator_id }}</p>
-        <p>
-            <strong>Created:</strong>
-            <span class="raw-date">{{ vault.date }}</span>
-        </p>
-    </div>
+    </a>
     {% else %}
     <p>No vaults found.</p>
     {% endfor %}
@@ -161,26 +121,15 @@
         }
     }
 
-    // Désactive le clic sur la carte sauf sur le menu
-    document.querySelectorAll('.vault-box').forEach(box => {
-        box.addEventListener('click', (event) => {
-            // Ignore clicks on the menu or menu options
-            if (
-                event.target.closest('.vault-menu') ||
-                event.target.closest('.vault-menu-options')
-            ) {
-                return;
-            }
-            const btn = box.querySelector('.vault-menu button');
-            const vaultInfo = {
-                creator_id: Number(btn.getAttribute('data-creator_id')),
-                name: box.querySelector('p:nth-child(2)').textContent.replace('Name:', '').trim(),
-                date: Number(box.querySelector('.raw-date').textContent)
-            };
-            localStorage.setItem('vault_info', JSON.stringify(vaultInfo));
-            loadVault(vaultInfo);
-        });
-    });
+    function handleVaultClick(element) {
+        const vaultInfo = {
+            creator_id: Number(element.dataset.creator_id),
+            name:    element.dataset.name,
+            date:    Number(element.dataset.date)
+        };
+        localStorage.setItem('vault_info', JSON.stringify(vaultInfo));
+        loadVault(vaultInfo);
+    }
 
     document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.raw-date').forEach(span => {
@@ -197,39 +146,6 @@
             }
         });
     });
-
-    function toggleMenu(event) {
-        event.stopPropagation();
-        document.querySelectorAll('.vault-menu-options').forEach(m => m.classList.add('hidden'));
-        const menu = event.currentTarget.nextElementSibling;
-        menu.classList.toggle('hidden');
-    }
-
-    document.addEventListener('click', () => {
-        document.querySelectorAll('.vault-menu-options').forEach(m => m.classList.add('hidden'));
-    });
-
-    function confirmDelete(creatorId, date, name) {
-        if (confirm("Êtes-vous sûr de vouloir supprimer ce vault ?")) {
-            deleteVault(creatorId, date, name);
-        }
-    }
-
-    async function deleteVault(creatorId, date, name) {
-        try {
-            const response = await fetch("/delete-vault", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ creator_id: Number(creatorId), date: Number(date), name })
-            });
-            if (!response.ok) throw new Error(await response.text());
-            location.reload();
-        } catch (err) {
-            console.error("❌ Erreur deleteVault :", err);
-            alert("Erreur lors de la suppression du vault !");
-        }
-    }
 </script>
 </body>
 </html>

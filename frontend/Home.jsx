@@ -184,7 +184,7 @@ export default function Home() {
                                     onClick={closeModal}
                                     disabled={creating}
                                 >
-                                    Annuler
+                                    Cancel
                                 </button>
                                 <button
                                     type="submit"
