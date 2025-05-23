@@ -177,6 +177,10 @@ async fn main() -> std::io::Result<()> {
             .route("/home", web::get().to(home))
             .route("/vaults", web::get().to(get_user_vaults_query))
             .route("/vaults/{vault_id}", web::get().to(vault_detail_page))
+            .route(
+                "/vaults/{vault_id}/tree",
+                web::get().to(get_file_tree_query),
+            )
             // POST routes
             .route("/create-user", web::post().to(create_user))
             .route("/login", web::post().to(login_user_query))

@@ -15,32 +15,23 @@ const BUFFER_SIZE: usize = 4096;
 
 pub async fn get_file_tree_query(
     req: HttpRequest,
-    vault_info: web::Json<VaultInfo>,
+    path: web::Path<String>,
 ) -> impl Responder {
-    let _ = match get_user_from_cookie(&req) {
+    let _jwt = match get_user_from_cookie(&req) {
         Some(jwt) => jwt,
         None => return HttpResponse::Unauthorized().finish(),
     };
 
-    let vault_info = vault_info.into_inner();
-    if load_vault(req, web::Json(vault_info.clone()))
-        .await
-        .is_err()
-    {
-        return HttpResponse::Unauthorized().finish();
-    }
+    let vault_id = path.into_inner();
 
-    let cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
+    let cache = match VAULTS_CACHE.get(&vault_id) {
         Some(cache) => cache,
         None => return HttpResponse::Unauthorized().finish(),
     };
-
     let vault_cache = cache.lock().unwrap();
 
-    match vault_info.get_file_tree(vault_cache.vault_key.as_slice()) {
-        Ok(tree) => HttpResponse::Ok().json(tree),
-        Err(_) => HttpResponse::Unauthorized().finish(),
-    }
+    let public_tree = vault_cache.vault_file_tree.to_public();
+    HttpResponse::Ok().json(public_tree)
 }
 
 /// Payload for creating a new folder
@@ -52,47 +43,48 @@ pub struct CreateFolderPayload {
     name: String,
 }
 
+#[derive(Deserialize)]
+pub struct CreateFolderRequest {
+    pub vault_info: VaultInfo,
+    pub path: String,
+    pub name: String,
+}
+
 /// Handler to create a new folder at the specified path
 pub async fn create_folder_query(
     req: HttpRequest,
-    vault_info: web::Json<VaultInfo>,
-    payload: web::Json<CreateFolderPayload>,
+    data: web::Json<CreateFolderRequest>,
 ) -> impl Responder {
-    // Authenticate user from cookie
-    let jwt = match get_user_from_cookie(&req) {
+    let _jwt = match get_user_from_cookie(&req) {
         Some(jwt) => jwt,
         None => return HttpResponse::Unauthorized().body("Unauthorized"),
     };
 
-    let vault_info = vault_info.into_inner();
-
-    // Load the vault if needed
+    let vault_info = data.vault_info.clone();
+    
     if load_vault(req, web::Json(vault_info.clone()))
         .await
         .is_err()
     {
         return HttpResponse::Unauthorized().body("Unauthorized");
     }
-
-    // Access vault cache
+    
     let cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
         Some(cache) => cache,
         None => return HttpResponse::Unauthorized().body("Unauthorized"),
     };
     let mut vault_cache = cache.lock().unwrap();
-
-    // Navigate to the target directory using path
+    
     let target_dir = match vault_cache
         .vault_file_tree
-        .get_mut_directory_from_path(&payload.path)
+        .get_mut_directory_from_path(&data.path)
     {
         Ok(dir) => dir,
         Err(_) => return HttpResponse::NotFound().body("Invalid path"),
     };
-
-    // Add the new folder
-    target_dir.add_dir(&payload.name);
-
+    
+    target_dir.add_dir(&data.name);
+    
     match vault_info.save_file_tree(
         vault_cache.vault_key.as_slice(),
         vault_cache.vault_file_tree.clone(),

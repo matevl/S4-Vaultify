@@ -45,22 +45,54 @@
         @keyframes fadein { from {opacity: 0; transform: translateY(20px);} to {opacity: 1; transform: translateY(0);} }
     </style>
 </head>
-<body>
-<button class="btn btn-primary" onclick="openSharePopup()" style="display: flex; align-items: center; gap: 0.5rem;">
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="20" height="20">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
-    </svg>
-    Share
-</button>
+
+
 
 <div class="button-group">
     <button onclick="window.location.href='/vaults'">Go Back to Vaults</button>
     <button onclick="triggerUpload()">Upload to DST</button>
     <button onclick="triggerDownload()">Download from DST</button>
+
+    <body>
+    <button class="btn btn-primary" onclick="openSharePopup()" style="display: flex; align-items: center; gap: 0.5rem;">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="20" height="20">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
+        </svg>
+        Share
+    </button>
+
+    <button onclick="openNewFolderModal()" class="btn btn-primary" style="display:flex;align-items:center;gap:0.5rem;">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.5" stroke="currentColor" width="20" height="20">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5
+                 A2.25 2.25 0 0 0 2.25 6v12A2.25 2.25 0 0 0 4.5 20.25h15
+                 A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379
+                 a1.5 1.5 0 0 1-1.06-.44Z" />
+        </svg>
+        New Folder
+    </button>
 </div>
 
 <input type="file" id="uploadInput" style="display: none;" onchange="handleUpload(event)">
 <div id="tree" class="tree-view"></div>
+
+<div id="newFolderPopup" class="modal">
+    <div class="modal-content">
+        <h3>Create a new folder</h3>
+        <div class="input-icon-wrapper">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width="24" height="24" className="size-6" class="input-icon">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
+            </svg>
+            <input id="folderNameInput" class="login-input" placeholder="Folder name" />
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-primary" onclick="createNewFolder()">Create</button>
+            <button class="btn btn-secondary" onclick="closeNewFolderModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
 
 <div id="moveConfirm" class="modal">
     <div class="modal-content">
@@ -233,12 +265,22 @@
     async function loadFileTree() {
         const parts = window.location.pathname.split('/');
         const vaultId = parts[parts.length - 1];
-        const url = window.location.hostname === 'localhost'
-            ? '/static/test.json'
-            : `/vaults/${vaultId}/tree`;
+        const url = `/vaults/${vaultId}/tree`;
         try {
             const res = await fetch(url);
-            const treeData = await res.json();
+
+            // Ajoute ça pour comprendre ce qui revient vraiment du backend :
+            const text = await res.text();
+            console.log("Contenu brut reçu :", text);
+
+            // Essaye de parser si c'est du JSON (pas sûr !)
+            let treeData;
+            try {
+                treeData = JSON.parse(text);
+            } catch (e) {
+                throw new Error("Réponse du backend non-JSON ! " + text);
+            }
+
             fileTreeMap = buildMapFromJSON(treeData);
             currentPath = [];
             renderMap(fileTreeMap);
@@ -326,6 +368,42 @@
             }
         } catch (_) {
             showToast("Error sharing vault", "error");
+        }
+    }
+
+    function openNewFolderModal() {
+        document.getElementById('newFolderPopup').style.display = 'flex';
+    }
+
+    function closeNewFolderModal() {
+        document.getElementById('newFolderPopup').style.display = 'none';
+    }
+
+
+    async function createNewFolder() {
+        const name = document.getElementById('folderNameInput').value.trim();
+        if (!name) return showToast('Folder name required', 'error');
+
+        const vaultId = location.pathname.split('/').pop();
+        const parentPath = currentPath.join('/');
+        const vaultInfo = JSON.parse(localStorage.getItem('vault_info'));
+
+        const res = await fetch(`/vaults/${vaultId}/create-folder`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                vault_info: vaultInfo,
+                path: parentPath,
+                name: name
+            })
+        });
+
+        if (res.ok) {
+            showToast('Folder created!', 'success');
+            closeNewFolderModal();
+            loadFileTree();
+        } else {
+            showToast('Error creating folder', 'error');
         }
     }
 </script>
