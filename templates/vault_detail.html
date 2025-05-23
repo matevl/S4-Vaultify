@@ -248,6 +248,86 @@
     }
 
     loadFileTree();
+
+    function openSharePopup() {
+        document.getElementById('sharePopup').style.display = 'flex';
+    }
+
+    function closeSharePopup() {
+        document.getElementById('sharePopup').style.display = 'none';
+    }
+
+    function updatePermissionToggles(changedId) {
+        const admin = document.getElementById('permAdmin');
+        const read  = document.getElementById('permRead');
+        const write = document.getElementById('permWrite');
+        if (changedId==='permAdmin' && admin.checked) {
+            read.checked = write.checked = false;
+            read.disabled = write.disabled = true;
+        }
+        if ((changedId==='permRead'||changedId==='permWrite') && (read.checked||write.checked)) {
+            admin.checked = false;
+            read.disabled = write.disabled = false;
+        }
+        if (!admin.checked && !read.checked && !write.checked) {
+            read.disabled = write.disabled = false;
+        }
+    }
+
+    function showToast(message, type = "success") {
+        const toast = document.createElement("div");
+        toast.className = `toast-notification ${type}`;
+        toast.innerHTML = `
+            <span class="toast-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none"
+                     viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
+                     class="icon-size">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="${type === 'success'
+            ? 'M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z'
+            : 'M6 18 18 6M6 6l12 12'}" />
+                </svg>
+            </span>
+            <span>${message}</span>
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+
+    async function submitShare() {
+        const email = document.getElementById("shareEmailInput").value.trim();
+        const read = document.getElementById("permRead").checked;
+        const write = document.getElementById("permWrite").checked;
+        const admin = document.getElementById("permAdmin").checked;
+
+        let permission = "None";
+        if (admin) permission = "Admin";
+        else if (write) permission = "Write";
+        else if (read) permission = "Read";
+
+        if (permission === "None") {
+            showToast("Please select a permission", "error");
+            return;
+        }
+
+        const vault = JSON.parse(localStorage.getItem("vault_info"));
+        try {
+            const response = await fetch("/share-vault", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify([vault, email, permission])
+            });
+
+            if (response.ok) {
+                showToast("Vault shared successfully!", "success");
+                closeSharePopup();
+            } else {
+                showToast("Error sharing vault", "error");
+            }
+        } catch (_) {
+            showToast("Error sharing vault", "error");
+        }
+    }
 </script>
 </body>
 </html>
