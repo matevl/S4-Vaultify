@@ -17,9 +17,7 @@ use s4_vaultify::backend::server_manager::file_manager::file_handler::{
     rename_item_query,
 };
 use s4_vaultify::backend::server_manager::global_manager::{init_server_config, SESSION_CACHE};
-use s4_vaultify::backend::server_manager::vault_manager::{
-    create_vault_query, load_vault_query, share_vault_query, VaultInfo,
-};
+use s4_vaultify::backend::server_manager::vault_manager::{create_vault_query, delete_vault_query, load_vault_query, share_vault_query, VaultInfo};
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
@@ -177,6 +175,7 @@ async fn main() -> std::io::Result<()> {
             .route("/logout", web::post().to(logout_user_query))
             .route("/create-vault", web::post().to(create_vault_query))
             .route("/load-vault", web::post().to(load_vault_query))
+            .route("/delete-vault", web::post().to(delete_vault_query))
             .route(
                 "/vaults/{vault_id}/tree",
                 web::post().to(get_file_tree_query),
