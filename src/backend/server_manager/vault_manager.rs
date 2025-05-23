@@ -635,7 +635,7 @@ pub async fn delete_vault_query(
         if fs::remove_dir_all(vault_info.get_path()).is_err() {
             return HttpResponse::InternalServerError().body("Failed to remove vault");
         }
-
+        VAULTS_CACHE.invalidate(&vault_info.get_name());
         HttpResponse::Ok().json("")
     } else {
         HttpResponse::Unauthorized().body("Invalid email or password")
