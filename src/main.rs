@@ -9,8 +9,7 @@ use rustls::Certificate;
 use rustls::PrivateKey;
 use rustls_pemfile::{certs, pkcs8_private_keys};
 use s4_vaultify::backend::server_manager::account_manager::{
-    create_user_query, get_user_vaults, get_vaults_list_query, login_user_query, logout_user_query,
-    CreateUserForm, JWT,
+    create_user_query, get_user_vaults, login_user_query, logout_user_query, CreateUserForm, JWT,
 };
 use s4_vaultify::backend::server_manager::file_manager::file_handler::{
     create_folder_query, get_file_tree_query, remove_file_query, remove_folder_query,
