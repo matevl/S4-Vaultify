@@ -251,8 +251,8 @@ pub async fn remove_file_query(
     }
 }
 
-/// send files to the server
-pub async fn send_file_query(
+/// upload files to the server
+pub async fn upload_file_query(
     req: HttpRequest,
     vault_info: web::Json<VaultInfo>,
     mut payload: web::Payload,

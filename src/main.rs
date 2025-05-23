@@ -14,7 +14,7 @@ use s4_vaultify::backend::server_manager::account_manager::{
 };
 use s4_vaultify::backend::server_manager::file_manager::file_handler::{
     create_folder_query, get_file_tree_query, remove_file_query, remove_folder_query,
-    rename_item_query,
+    rename_item_query, upload_file_query,
 };
 use s4_vaultify::backend::server_manager::global_manager::{init_server_config, SESSION_CACHE};
 use s4_vaultify::backend::server_manager::vault_manager::{
@@ -198,6 +198,10 @@ async fn main() -> std::io::Result<()> {
             .route(
                 "/vaults/{vault_id}/remove-file",
                 web::post().to(remove_file_query),
+            )
+            .route(
+                "/vaults/{vault_id}/upload",
+                web::post().to(upload_file_query),
             )
             // Routes for static files (images, CSS, JS, etc.)
             .service(Files::new("/static", "../static").show_files_listing()) // Serve static content
