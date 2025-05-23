@@ -13,10 +13,7 @@ use std::io::Write;
 
 const BUFFER_SIZE: usize = 4096;
 
-pub async fn get_file_tree_query(
-    req: HttpRequest,
-    path: web::Path<String>,
-) -> impl Responder {
+pub async fn get_file_tree_query(req: HttpRequest, path: web::Path<String>) -> impl Responder {
     let _jwt = match get_user_from_cookie(&req) {
         Some(jwt) => jwt,
         None => return HttpResponse::Unauthorized().finish(),
@@ -61,20 +58,20 @@ pub async fn create_folder_query(
     };
 
     let vault_info = data.vault_info.clone();
-    
+
     if load_vault(req, web::Json(vault_info.clone()))
         .await
         .is_err()
     {
         return HttpResponse::Unauthorized().body("Unauthorized");
     }
-    
+
     let cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
         Some(cache) => cache,
         None => return HttpResponse::Unauthorized().body("Unauthorized"),
     };
     let mut vault_cache = cache.lock().unwrap();
-    
+
     let target_dir = match vault_cache
         .vault_file_tree
         .get_mut_directory_from_path(&data.path)
@@ -82,9 +79,9 @@ pub async fn create_folder_query(
         Ok(dir) => dir,
         Err(_) => return HttpResponse::NotFound().body("Invalid path"),
     };
-    
+
     target_dir.add_dir(&data.name);
-    
+
     match vault_info.save_file_tree(
         vault_cache.vault_key.as_slice(),
         vault_cache.vault_file_tree.clone(),
