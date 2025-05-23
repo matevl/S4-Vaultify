@@ -534,7 +534,7 @@ pub async fn share_vault_query(
         } else {
             PENDING_SHARE_CACHE.insert(email, Arc::new(Mutex::new(vec![to_share])));
         }
-        HttpResponse::InternalServerError().body("Failed to share vault")
+        HttpResponse::Ok().json("")
     }
 }
 
