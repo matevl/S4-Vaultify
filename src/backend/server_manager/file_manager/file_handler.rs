@@ -93,8 +93,13 @@ pub async fn create_folder_query(
     // Add the new folder
     target_dir.add_dir(&payload.name);
 
-    // Return updated public representation
-    HttpResponse::Ok().json(target_dir.to_public())
+    match vault_info.save_file_tree(
+        vault_cache.vault_key.as_slice(),
+        vault_cache.vault_file_tree.clone(),
+    ) {
+        Ok(_) => HttpResponse::Ok().finish(),
+        Err(_) => HttpResponse::InternalServerError().finish(),
+    }
 }
 
 /// Payload for renaming a file or directory
@@ -148,8 +153,16 @@ pub async fn rename_item_query(
 
     // Rename the item
     match target_dir.rename(&payload.old_name, &payload.new_name) {
-        Ok(_) => HttpResponse::Ok().json(target_dir.to_public()),
-        Err(err) => HttpResponse::BadRequest().body(err),
+        Ok(_) => {}
+        Err(err) => return HttpResponse::BadRequest().body(err),
+    }
+
+    match vault_info.save_file_tree(
+        vault_cache.vault_key.as_slice(),
+        vault_cache.vault_file_tree.clone(),
+    ) {
+        Ok(_) => HttpResponse::Ok().json(vault_cache.vault_file_tree.to_public()),
+        Err(_) => HttpResponse::InternalServerError().finish(),
     }
 }
 
@@ -197,8 +210,16 @@ pub async fn remove_folder_query(
     };
 
     match remove_directory_recursively(parent_dir, &payload.folder_name, &vault_info.get_path()) {
-        Ok(_) => HttpResponse::Ok().json(parent_dir.to_public()),
-        Err(e) => HttpResponse::InternalServerError().body(e),
+        Ok(_) => {}
+        Err(e) => return HttpResponse::InternalServerError().body(e),
+    }
+
+    match vault_info.save_file_tree(
+        vault_cache.vault_key.as_slice(),
+        vault_cache.vault_file_tree.clone(),
+    ) {
+        Ok(_) => HttpResponse::Ok().json(vault_cache.vault_file_tree.to_public()),
+        Err(_) => HttpResponse::InternalServerError().finish(),
     }
 }
 
@@ -246,8 +267,16 @@ pub async fn remove_file_query(
     };
 
     match remove_file_from_directory(parent_dir, &payload.file_name, &vault_info.get_path()) {
-        Ok(_) => HttpResponse::Ok().json(parent_dir.to_public()),
-        Err(e) => HttpResponse::InternalServerError().body(e),
+        Ok(_) => {}
+        Err(e) => return HttpResponse::InternalServerError().body(e),
+    }
+
+    match vault_info.save_file_tree(
+        vault_cache.vault_key.as_slice(),
+        vault_cache.vault_file_tree.clone(),
+    ) {
+        Ok(_) => HttpResponse::Ok().json(vault_cache.vault_file_tree.to_public()),
+        Err(_) => HttpResponse::InternalServerError().finish(),
     }
 }
 
