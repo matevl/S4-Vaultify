@@ -102,21 +102,29 @@ pub struct RenamePayload {
     new_name: String,
 }
 
+#[derive(Deserialize)]
+pub struct RenameRequest {
+    pub vault_info: VaultInfo,
+    pub path: String,
+    pub old_name: String,
+    pub new_name: String,
+}
+
 /// Handler to rename a file or folder
 pub async fn rename_item_query(
     req: HttpRequest,
-    vault_info: web::Json<VaultInfo>,
-    payload: web::Json<RenamePayload>,
+    payload: web::Json<RenameRequest>,
 ) -> impl Responder {
     // Authenticate user
-    let jwt = match get_user_from_cookie(&req) {
+    let _jwt = match get_user_from_cookie(&req) {
         Some(jwt) => jwt,
         None => return HttpResponse::Unauthorized().body("Unauthorized"),
     };
 
-    let vault_info = vault_info.into_inner();
+    // On clone pour garder la valeur locale utilisable
+    let vault_info = payload.vault_info.clone();
 
-    // Load vault
+    // Load vault (nécessaire pour valider l'accès utilisateur)
     if load_vault(req, web::Json(vault_info.clone()))
         .await
         .is_err()
@@ -124,14 +132,15 @@ pub async fn rename_item_query(
         return HttpResponse::Unauthorized().body("Unauthorized");
     }
 
-    // Access vault cache
+    // Accès au cache du vault
     let cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
         Some(cache) => cache,
         None => return HttpResponse::Unauthorized().body("Unauthorized"),
     };
 
     let mut vault_cache = cache.lock().unwrap();
-    // Navigate to the directory containing the item
+
+    // Trouve le dossier parent contenant l'élément à renommer
     let target_dir = match vault_cache
         .vault_file_tree
         .get_mut_directory_from_path(&payload.path)
@@ -140,12 +149,13 @@ pub async fn rename_item_query(
         Err(_) => return HttpResponse::NotFound().body("Invalid path"),
     };
 
-    // Rename the item
+    // Rename
     match target_dir.rename(&payload.old_name, &payload.new_name) {
         Ok(_) => {}
         Err(err) => return HttpResponse::BadRequest().body(err),
     }
 
+    // Sauvegarde l'arborescence modifiée
     match vault_info.save_file_tree(
         vault_cache.vault_key.as_slice(),
         vault_cache.vault_file_tree.clone(),
