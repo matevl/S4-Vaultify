@@ -456,7 +456,7 @@ pub async fn share_vault_query(
     req: HttpRequest,
     data: web::Json<(VaultInfo, String, String)>,
 ) -> impl Responder {
-    let _ = match get_user_from_cookie(&req) {
+    let jwt = match get_user_from_cookie(&req) {
         Some(jwt) => jwt,
         None => return HttpResponse::Unauthorized().body("Invalid email or password"),
     };
@@ -485,6 +485,12 @@ pub async fn share_vault_query(
     };
 
     let mut vault = vault_cache.lock().unwrap();
+
+    if !vault.perms.contains_key(&jwt.id) || vault.perms.get(&jwt.id).unwrap() < &Perms::Admin {
+        return HttpResponse::Unauthorized()
+            .body("You do not have permission to delete this vault");
+    }
+
     vault.perms.insert(id, Perms::from_str(&perm));
 
     let keys = vault.vault_key.clone();
