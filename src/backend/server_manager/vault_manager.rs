@@ -211,10 +211,10 @@ impl VaultInfo {
 
 /// Struct representing cached vault data.
 pub struct VaultsCache {
-    info: VaultInfo,
-    perms: PermsMap,
-    pub(crate) vault_key: Vec<u8>,
-    vault_file_tree: Directory,
+    pub info: VaultInfo,
+    pub perms: PermsMap,
+    pub vault_key: Vec<u8>,
+    pub vault_file_tree: Directory,
 }
 
 impl VaultsCache {

@@ -12,7 +12,10 @@ use s4_vaultify::backend::server_manager::account_manager::{
     create_user_query, get_vaults_list_query, login_user_query, logout_user_query, CreateUserForm,
     JWT,
 };
-use s4_vaultify::backend::server_manager::file_manager::file_handler::get_file_tree_query;
+use s4_vaultify::backend::server_manager::file_manager::file_handler::{
+    create_folder_query, get_file_tree_query, remove_file_query, remove_folder,
+    remove_folder_query, rename_item_query,
+};
 use s4_vaultify::backend::server_manager::global_manager::{init_server_config, SESSION_CACHE};
 use s4_vaultify::backend::server_manager::vault_manager::{
     create_vault_query, load_vault_query, share_vault_query, VaultInfo,
@@ -179,7 +182,22 @@ async fn main() -> std::io::Result<()> {
                 web::post().to(get_file_tree_query),
             )
             .route("/share-vault", web::post().to(share_vault_query))
-            //.route("/vault/{vault_id}/add-file", web::post().to(add_file_to_vault))
+            .route(
+                "/vaults/{vault_id}/create-folder",
+                web::post().to(create_folder_query),
+            )
+            .route(
+                "/vaults/{vault_id}/rename-item",
+                web::post().to(rename_item_query),
+            )
+            .route(
+                "/vaults/{vault_id}/remove-folder",
+                web::post().to(remove_folder_query),
+            )
+            .route(
+                "/vaults/{vault_id}/remove-file",
+                web::post().to(remove_file_query),
+            )
             // Routes for static files (images, CSS, JS, etc.)
             .service(Files::new("/static", "../static").show_files_listing()) // Serve static content
             .service(Files::new("/", "../templates").index_file("index.html"))
