@@ -3,7 +3,7 @@ use crate::backend::server_manager::global_manager::{
     get_user_from_cookie, CONNECTION, EMAIL_TO_SESSION_KEY, PENDING_SHARE_CACHE, ROOT,
     SESSION_CACHE,
 };
-use crate::backend::server_manager::vault_manager::VaultInfo;
+use crate::backend::server_manager::vault_manager::{create_vault, VaultInfo};
 use crate::backend::{VAULTS_DATA, VAULT_USERS_DIR};
 use actix_web::cookie::time::{Duration as Dudu, Duration, OffsetDateTime};
 use actix_web::cookie::{Cookie, SameSite};
@@ -291,7 +291,8 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
                 for (vault_info, vault_key) in pending.drain(..) {
                     vault_info
                         .save_key(vault_key.as_slice(), user_key.as_slice(), user_id)
-                        .unwrap()
+                        .unwrap();
+                    create_vault(&conn, &vault_info, user_id).unwrap();
                 }
             }
 
@@ -327,23 +328,6 @@ pub async fn logout_user_query(req: HttpRequest) -> impl Responder {
     HttpResponse::Ok()
         .cookie(expired_cookie)
         .json(json!({ "success": true }))
-}
-/**
- * Endpoint to get the list of vaults for a user.
- *
- * @param user - The JWT containing the user information.
- * @return An HTTP response containing the list of vaults.
- */
-pub async fn get_vaults_list_query(req: HttpRequest) -> HttpResponse {
-    if let Some(jwt) = get_user_from_cookie(&req) {
-        if SESSION_CACHE.get(&jwt.session_id).is_some() {
-            let conn = CONNECTION.lock().unwrap();
-            if let Ok(vaults) = get_user_vaults(&conn, jwt.id) {
-                return HttpResponse::Ok().json(vaults);
-            }
-        }
-    }
-    HttpResponse::Unauthorized().finish()
 }
 
 #[derive(Deserialize)]

@@ -9,14 +9,16 @@ use rustls::Certificate;
 use rustls::PrivateKey;
 use rustls_pemfile::{certs, pkcs8_private_keys};
 use s4_vaultify::backend::server_manager::account_manager::{
-    create_user_query, get_vaults_list_query, login_user_query, logout_user_query, CreateUserForm,
-    JWT,
+    create_user_query, get_user_vaults, get_vaults_list_query, login_user_query, logout_user_query,
+    CreateUserForm, JWT,
 };
 use s4_vaultify::backend::server_manager::file_manager::file_handler::{
     create_folder_query, get_file_tree_query, remove_file_query, remove_folder_query,
     rename_item_query, upload_file_query,
 };
-use s4_vaultify::backend::server_manager::global_manager::{init_server_config, SESSION_CACHE};
+use s4_vaultify::backend::server_manager::global_manager::{
+    init_server_config, CONNECTION, SESSION_CACHE,
+};
 use s4_vaultify::backend::server_manager::vault_manager::{
     create_vault_query, delete_vault_query, load_vault_query, share_vault_query, VaultInfo,
 };
@@ -119,11 +121,16 @@ pub async fn home(req: HttpRequest) -> impl Responder {
  * @return An HTTP response containing the user's vaults or an error message.
  */
 pub async fn get_user_vaults_query(req: HttpRequest) -> impl Responder {
-    let vaults_response = get_vaults_list_query(req).await;
+    let jwt = match get_user_from_cookie(&req) {
+        Some(jwt) => jwt,
+        None => return HttpResponse::Found().finish(),
+    };
 
-    let body = vaults_response.into_body();
-    let body_bytes = actix_web::body::to_bytes(body).await.unwrap();
-    let vaults: Vec<VaultInfo> = serde_json::from_slice(&body_bytes).unwrap();
+    let con = CONNECTION.lock().unwrap();
+    let vaults = match get_user_vaults(&con, jwt.id) {
+        Ok(vaults) => vaults,
+        Err(e) => return HttpResponse::InternalServerError().body(e.to_string()),
+    };
 
     // Create the context for Tera
     let mut context = Context::new();
