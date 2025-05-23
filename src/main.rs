@@ -1,25 +1,31 @@
-use actix_files::NamedFile;
-use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer, Responder};
-use rustls_pemfile::{certs, pkcs8_private_keys};
-use s4_vaultify::backend::server_manager::account_manager::{
-    create_user_query, get_vaults_list_query, login_user_query, CreateUserForm, JWT,
-};
-use std::fs::File;
-use std::io::BufReader;
-use std::sync::Arc;
-use tera::Context;
 //use tokio_rustls::rustls::HandshakeType::Certificate;
 use actix_files::Files;
+use actix_files::NamedFile;
+use actix_web::http::header;
+use actix_web::{guard, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use askama::Template;
 use rusqlite::Result;
 use rustls::Certificate;
 use rustls::PrivateKey;
-use s4_vaultify::backend::file_manager::mapping::{get_tree_vault, move_tree_vault};
-use s4_vaultify::backend::server_manager::global_manager::init_server_config;
-use s4_vaultify::backend::server_manager::vault_manager::{
-    create_vault_query, load_vault_query, VaultInfo,
+use rustls_pemfile::{certs, pkcs8_private_keys};
+use s4_vaultify::backend::server_manager::account_manager::{
+    create_user_query, get_user_vaults, login_user_query, logout_user_query, CreateUserForm, JWT,
 };
+use s4_vaultify::backend::server_manager::file_manager::file_handler::{
+    create_folder_query, get_file_tree_query, remove_file_query, remove_folder_query,
+    rename_item_query, upload_file_query,
+};
+use s4_vaultify::backend::server_manager::global_manager::{
+    init_server_config, CONNECTION, SESSION_CACHE,
+};
+use s4_vaultify::backend::server_manager::vault_manager::{
+    create_vault_query, delete_vault_query, load_vault_query, share_vault_query, VaultInfo,
+};
+use std::fs::File;
+use std::io::BufReader;
+use std::sync::Arc;
 use std::sync::Mutex;
+use tera::Context;
 use tera::Tera;
 use tokio_rustls::rustls::ServerConfig;
 
@@ -84,22 +90,27 @@ async fn create_user(form: web::Json<CreateUserForm>) -> HttpResponse {
 }
 
 // Main route
+
 pub async fn home(req: HttpRequest) -> impl Responder {
     if let Some(decoded_jwt) = get_user_from_cookie(&req) {
-        let html = HomeTemplate {
-            username: decoded_jwt.email.clone(),
-            email: decoded_jwt.email.clone(),
-            vault_info: match &decoded_jwt.loaded_vault {
-                Some(vault) => vault.name.clone(), // or vault.id, or any field you want
-                None => "No data".to_string(),
-            },
-        };
-        HttpResponse::Ok()
-            .content_type("text/html")
-            .body(html.render().unwrap())
-    } else {
-        HttpResponse::Unauthorized().body("No token found.")
+        if SESSION_CACHE.get(&decoded_jwt.session_id).is_some() {
+            let html = HomeTemplate {
+                username: decoded_jwt.email.clone(),
+                email: decoded_jwt.email.clone(),
+                vault_info: decoded_jwt
+                    .loaded_vault
+                    .as_ref()
+                    .map_or("No data".to_string(), |v| v.name.clone()),
+            };
+            return HttpResponse::Ok()
+                .content_type("text/html")
+                .body(html.render().unwrap());
+        }
     }
+
+    HttpResponse::Found()
+        .insert_header((header::LOCATION, "/login"))
+        .finish()
 }
 
 /**
@@ -109,11 +120,16 @@ pub async fn home(req: HttpRequest) -> impl Responder {
  * @return An HTTP response containing the user's vaults or an error message.
  */
 pub async fn get_user_vaults_query(req: HttpRequest) -> impl Responder {
-    let vaults_response = get_vaults_list_query(req).await;
+    let jwt = match get_user_from_cookie(&req) {
+        Some(jwt) => jwt,
+        None => return HttpResponse::Found().finish(),
+    };
 
-    let body = vaults_response.into_body();
-    let body_bytes = actix_web::body::to_bytes(body).await.unwrap();
-    let vaults: Vec<VaultInfo> = serde_json::from_slice(&body_bytes).unwrap();
+    let con = CONNECTION.lock().unwrap();
+    let vaults = match get_user_vaults(&con, jwt.id) {
+        Ok(vaults) => vaults,
+        Err(e) => return HttpResponse::InternalServerError().body(e.to_string()),
+    };
 
     // Create the context for Tera
     let mut context = Context::new();
@@ -161,17 +177,45 @@ async fn main() -> std::io::Result<()> {
             .route("/home", web::get().to(home))
             .route("/vaults", web::get().to(get_user_vaults_query))
             .route("/vaults/{vault_id}", web::get().to(vault_detail_page))
+            .route(
+                "/vaults/{vault_id}/tree",
+                web::get().to(get_file_tree_query),
+            )
             // POST routes
             .route("/create-user", web::post().to(create_user))
             .route("/login", web::post().to(login_user_query))
+            .route("/logout", web::post().to(logout_user_query))
             .route("/create-vault", web::post().to(create_vault_query))
             .route("/load-vault", web::post().to(load_vault_query))
-            .route("/vaults/{vault_id}/tree", web::post().to(get_tree_vault))
-            .route("/vaults/{vault_id}/move", web::post().to(move_tree_vault))
-            //.route("/vault/{vault_id}/add-file", web::post().to(add_file_to_vault))
+            .route("/delete-vault", web::post().to(delete_vault_query))
+            .route(
+                "/vaults/{vault_id}/tree",
+                web::post().to(get_file_tree_query),
+            )
+            .route("/share-vault", web::post().to(share_vault_query))
+            .route(
+                "/vaults/{vault_id}/create-folder",
+                web::post().to(create_folder_query),
+            )
+            .route(
+                "/vaults/{vault_id}/rename-item",
+                web::post().to(rename_item_query),
+            )
+            .route(
+                "/vaults/{vault_id}/remove-folder",
+                web::post().to(remove_folder_query),
+            )
+            .route(
+                "/vaults/{vault_id}/remove-file",
+                web::post().to(remove_file_query),
+            )
+            .route(
+                "/vaults/{vault_id}/upload",
+                web::post().to(upload_file_query),
+            )
             // Routes for static files (images, CSS, JS, etc.)
             .service(Files::new("/static", "../static").show_files_listing()) // Serve static content
-            .service(Files::new("/", "../templates").index_file("index.html")) // Serve templates, with a default file
+            .service(Files::new("/", "../templates").index_file("index.html"))
     })
     .bind_rustls("0.0.0.0:443", Arc::try_unwrap(rustls_config).unwrap())? // Use SSL with Rustls
     .workers(8) // Number of workers (threads) to improve performance

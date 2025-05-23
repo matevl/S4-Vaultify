@@ -1,11 +1,12 @@
 use crate::backend::aes_keys::keys_password::{derive_key, generate_salt_from_login};
 use crate::backend::server_manager::global_manager::{
-    get_user_from_cookie, CONNECTION, EMAIL_TO_SESSION_KEY, ROOT, SESSION_CACHE,
+    get_user_from_cookie, CONNECTION, EMAIL_TO_SESSION_KEY, PENDING_SHARE_CACHE, ROOT,
+    SESSION_CACHE,
 };
-use crate::backend::server_manager::vault_manager::VaultInfo;
+use crate::backend::server_manager::vault_manager::{create_vault, VaultInfo};
 use crate::backend::{VAULTS_DATA, VAULT_USERS_DIR};
-use actix_web::cookie::time::Duration as Dudu;
-use actix_web::cookie::Cookie;
+use actix_web::cookie::time::{Duration as Dudu, Duration, OffsetDateTime};
+use actix_web::cookie::{Cookie, SameSite};
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use rusqlite::{params, Connection, Result};
@@ -284,10 +285,20 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
             );
 
             EMAIL_TO_SESSION_KEY.insert(email.clone(), session_id.clone());
+
+            if let Some(pending) = PENDING_SHARE_CACHE.get(&email) {
+                let mut pending = pending.lock().unwrap();
+                for (vault_info, vault_key) in pending.drain(..) {
+                    vault_info
+                        .save_key(vault_key.as_slice(), user_key.as_slice(), user_id)
+                        .unwrap();
+                    create_vault(&conn, &vault_info, user_id).unwrap();
+                }
+            }
+
             session_id
         }
     };
-
     let jwt = JWT::new(&session_key, user_id, &email);
 
     let cookie = Cookie::build("user_token", serde_json::to_string(&jwt).unwrap())
@@ -304,23 +315,19 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
     }))
 }
 
-/**
- * Endpoint to get the list of vaults for a user.
- *
- * @param user - The JWT containing the user information.
- * @return An HTTP response containing the list of vaults.
- */
-pub async fn get_vaults_list_query(req: HttpRequest) -> HttpResponse {
-    if let Some(jwt) = get_user_from_cookie(&req) {
-        let conn = CONNECTION.lock().unwrap();
-        if let Ok(vaults) = get_user_vaults(&conn, jwt.id) {
-            HttpResponse::Ok().json(vaults)
-        } else {
-            HttpResponse::Unauthorized().finish()
-        }
-    } else {
-        HttpResponse::Unauthorized().finish()
-    }
+pub async fn logout_user_query(req: HttpRequest) -> impl Responder {
+    let expired_cookie = Cookie::build("user_token", "")
+        .path("/")
+        .http_only(true)
+        .secure(true)
+        .same_site(SameSite::Lax)
+        .expires(OffsetDateTime::now_utc() - Duration::days(1)) // important
+        .max_age(Duration::seconds(0)) // important aussi
+        .finish();
+
+    HttpResponse::Ok()
+        .cookie(expired_cookie)
+        .json(json!({ "success": true }))
 }
 
 #[derive(Deserialize)]

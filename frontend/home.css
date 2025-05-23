@@ -118,7 +118,7 @@
 
 .vaultify-title {
     position: relative;
-    font-size: 3.5rem;
+    font-size: 3rem;
     font-weight: 700;
     background: linear-gradient(
             115deg,
@@ -202,7 +202,7 @@
 
 .main-content {
     flex: 1;
-    padding: 2rem;
+    padding: 1rem;
     overflow-y: auto;
 }
 
@@ -220,7 +220,7 @@
 
 .vaults-embed {
     width: 100%;
-    height: 200px;
+    height: 500px;
     overflow: hidden;
     margin-top: 1rem;
 }
@@ -310,3 +310,96 @@
     10%, 90% { opacity: 1; transform: translateY(0); }
     100% { opacity: 0; transform: translateY(-10px); }
 }
+
+.header-buttons {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    position: relative;
+}
+
+/* Reset du bouton pour n’avoir que l’icône cliquable */
+.icon-button {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    position: relative; /* si tu veux positionner le SVG absolument */
+}
+
+/* Style de base de ton SVG (ici .size-10) */
+.icon-button .size-10 {
+    stroke: #ffffff;
+    /* transition placée ici pour fonctionner sur stroke et filter */
+    transition: stroke 0.3s ease, filter 0.3s ease;
+    /* pour que l’icône ne capte pas les events et laisse le bouton gérer le hover */
+    pointer-events: none;
+    /* pas de glow par défaut */
+    filter: drop-shadow(0 0 0 transparent);
+}
+
+/* Effet au survol */
+.icon-button:hover .size-10 {
+    stroke: #818cf8;
+}
+
+/* Popover container */
+.popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.5rem;
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(10px);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  z-index: 1000;
+  min-width: 120px;
+}
+
+/* Flèche du popover */
+.popover::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  right: 12px;
+  width: 12px;
+  height: 12px;
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(10px);
+  transform: rotate(45deg);
+  z-index: -1;
+}
+
+.logout-btn {
+  display: block;
+  width: 100%;
+  padding: 0.5rem;
+  background: transparent;
+  border: 1px solid red;
+  border-radius: 6px;
+  color: red;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.logout-btn:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.dashboard-logo {
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dashboard-logo img {
+    height: 100%;
+    display: block;
+}
+
+

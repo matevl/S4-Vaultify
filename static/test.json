@@ -1,0 +1,49 @@
+{
+  "name": "root",
+  "files": {
+    "document.pdf": {
+      "File": {
+        "file_name": "document.pdf",
+        "file_type": "pdf"
+      }
+    },
+    "photo.jpeg": {
+      "File": {
+        "file_name": "photo.jpeg",
+        "file_type": "jpeg"
+      }
+    },
+    "images": {
+      "Dir": {
+        "name": "images",
+        "files": {
+          "logo.png": {
+            "File": {
+              "file_name": "logo.png",
+              "file_type": "png"
+            }
+          },
+          "background.jpg": {
+            "File": {
+              "file_name": "background.jpg",
+              "file_type": "jpg"
+            }
+          }
+        }
+      }
+    },
+    "docs": {
+      "Dir": {
+        "name": "docs",
+        "files": {
+          "resume.pdf": {
+            "File": {
+              "file_name": "resume.pdf",
+              "file_type": "pdf"
+            }
+          }
+        }
+      }
+    }
+  }
+}
