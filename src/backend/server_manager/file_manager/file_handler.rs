@@ -1,8 +1,17 @@
+use crate::backend::aes_keys::crypted_key::encrypt;
+use crate::backend::server_manager::account_manager::Perms;
 use crate::backend::server_manager::file_manager::file_tree::*;
 use crate::backend::server_manager::global_manager::{get_user_from_cookie, VAULTS_CACHE};
 use crate::backend::server_manager::vault_manager::{load_vault, VaultInfo, VaultsCache};
 use actix_web::{test, web, HttpRequest, HttpResponse, Responder};
+use futures_util::StreamExt;
+use rand::distr::Alphanumeric;
+use rand::Rng;
 use serde::Deserialize;
+use std::fs;
+use std::io::Write;
+
+const BUFFER_SIZE: usize = 4096;
 
 pub async fn get_file_tree_query(
     req: HttpRequest,
@@ -240,4 +249,100 @@ pub async fn remove_file_query(
         Ok(_) => HttpResponse::Ok().json(parent_dir.to_public()),
         Err(e) => HttpResponse::InternalServerError().body(e),
     }
+}
+
+/// send files to the server
+pub async fn send_file_query(
+    req: HttpRequest,
+    vault_info: web::Json<VaultInfo>,
+    mut payload: web::Payload,
+) -> impl Responder {
+    let jwt = match get_user_from_cookie(&req) {
+        Some(jwt) => jwt,
+        None => return HttpResponse::Unauthorized().body("Unauthorized"),
+    };
+
+    let vault_info = vault_info.into_inner();
+    if load_vault(req, web::Json(vault_info.clone()))
+        .await
+        .is_err()
+    {
+        return HttpResponse::Unauthorized().body("Unauthorized");
+    }
+
+    let vault_cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
+        Some(cache) => cache,
+        None => return HttpResponse::Unauthorized().body("Unauthorized"),
+    };
+
+    let vault_key = {
+        let vault_cache = vault_cache.lock().unwrap();
+        if vault_cache.vault_key.is_empty() {
+            return HttpResponse::Unauthorized().body("Unauthorized");
+        }
+        if !vault_cache.perms.contains_key(&jwt.id)
+            || vault_cache.perms.get(&jwt.id).unwrap() < &Perms::Write
+        {
+            return HttpResponse::Unauthorized().body("Unauthorized");
+        }
+        vault_cache.vault_key.clone()
+    };
+
+    let vault_path = vault_info.get_path();
+    let file_path = loop {
+        let file_name: Vec<u8> = rand::rng().sample_iter(&Alphanumeric).take(16).collect();
+        let name = String::from_utf8(file_name).unwrap();
+        if !std::path::Path::new(&vault_path).exists() {
+            return HttpResponse::NotFound().body("File not found");
+        }
+        if !std::path::Path::new(&vault_path).exists() {
+            return HttpResponse::NotFound().body("File not found");
+        }
+
+        let file_path = format!("{}{}", vault_path, name);
+        if !std::path::Path::new(&file_path).exists() {
+            break file_path;
+        }
+    };
+
+    let mut file = match fs::File::create(&file_path) {
+        Ok(file) => file,
+        Err(_) => return HttpResponse::InternalServerError().body("Internal server error"),
+    };
+
+    let mut buffer = Vec::with_capacity(BUFFER_SIZE);
+
+    while let Some(chunk) = payload.next().await {
+        let data = chunk.unwrap();
+
+        for byte in data {
+            buffer.push(byte);
+            if buffer.len() == BUFFER_SIZE {
+                let encrypted_content = encrypt(buffer.as_slice(), &vault_key);
+
+                match file.write_all(&encrypted_content) {
+                    Ok(_) => (),
+                    Err(_) => {
+                        fs::remove_file(&file_path).unwrap();
+                        return HttpResponse::InternalServerError().body("Internal server error");
+                    }
+                }
+
+                buffer.clear();
+            }
+        }
+    }
+
+    if !buffer.is_empty() {
+        let encrypted_content = encrypt(buffer.as_slice(), &vault_key);
+        match file.write_all(&encrypted_content) {
+            Ok(_) => (),
+            Err(_) => {
+                fs::remove_file(&file_path).unwrap();
+                return HttpResponse::InternalServerError().body("Internal server error");
+            }
+        }
+    }
+
+    HttpResponse::Ok().body("")
 }
