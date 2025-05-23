@@ -167,25 +167,25 @@ pub async fn rename_item_query(
 
 /// Payload for removing a folder (virtual only)
 #[derive(Deserialize)]
-pub struct RemoveFolderPayload {
-    /// Path to the parent directory
-    path: String,
-    /// Name of the folder to remove
-    folder_name: String,
+pub struct RemoveFolderRequest {
+    pub vault_info: VaultInfo,
+    pub path: String,
+    pub folder_name: String,
 }
+
 
 /// Handler to remove a folder (recursively)
 pub async fn remove_folder_query(
     req: HttpRequest,
-    vault_info: web::Json<VaultInfo>,
-    payload: web::Json<RemoveFolderPayload>,
+    payload: web::Json<RemoveFolderRequest>,
 ) -> impl Responder {
-    let jwt = match get_user_from_cookie(&req) {
+    let vault_info = payload.vault_info.clone();
+
+    let _jwt = match get_user_from_cookie(&req) {
         Some(_) => (),
         None => return HttpResponse::Unauthorized().body("Unauthorized"),
     };
 
-    let vault_info = vault_info.into_inner();
     if load_vault(req, web::Json(vault_info.clone()))
         .await
         .is_err()
@@ -224,25 +224,25 @@ pub async fn remove_folder_query(
 
 /// Payload for removing a file
 #[derive(Deserialize)]
-pub struct RemoveFilePayload {
-    /// Path to the parent directory
-    path: String,
-    /// Name of the file to remove
-    file_name: String,
+pub struct RemoveFileRequest {
+    pub vault_info: VaultInfo,
+    pub path: String,
+    pub file_name: String,
 }
 
 /// Handler to remove a file
+
 pub async fn remove_file_query(
     req: HttpRequest,
-    vault_info: web::Json<VaultInfo>,
-    payload: web::Json<RemoveFilePayload>,
+    payload: web::Json<RemoveFileRequest>,
 ) -> impl Responder {
-    let jwt = match get_user_from_cookie(&req) {
+    let vault_info = payload.vault_info.clone();
+
+    let _jwt = match get_user_from_cookie(&req) {
         Some(_) => (),
         None => return HttpResponse::Unauthorized().body("Unauthorized"),
     };
 
-    let vault_info = vault_info.into_inner();
     if load_vault(req, web::Json(vault_info.clone()))
         .await
         .is_err()
