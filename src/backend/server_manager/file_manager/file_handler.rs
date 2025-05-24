@@ -284,16 +284,21 @@ pub async fn remove_file_query(
 pub async fn upload_file_query(req: HttpRequest, mut payload: Multipart) -> impl Responder {
     use futures_util::TryStreamExt;
     use serde_json;
+    use std::io::Write;
 
     let mut vault_info_opt: Option<VaultInfo> = None;
     let mut upload_path = String::new();
     let mut upload_file_name = String::new();
-    let mut file_bytes = Vec::new();
 
-    // Lecture du contenu du multipart/form-data
+    let mut file: Option<fs::File> = None;
+    let mut vault_key: Vec<u8> = Vec::new();
+    const BUFFER_SIZE: usize = 4 * 1024 * 1024; // 4 Mo
+    let mut buffer: Vec<u8> = Vec::with_capacity(BUFFER_SIZE);
+
     while let Ok(Some(mut field)) = payload.try_next().await {
         let content_disposition = field.content_disposition();
         let name = content_disposition.get_name().unwrap_or("");
+
         if name == "vault_info" {
             let mut buf = Vec::new();
             while let Some(chunk) = field.next().await {
@@ -310,106 +315,114 @@ pub async fn upload_file_query(req: HttpRequest, mut payload: Multipart) -> impl
             if let Some(filename) = content_disposition.get_filename() {
                 upload_file_name = filename.to_string();
             }
-            while let Some(chunk) = field.next().await {
-                file_bytes.extend_from_slice(&chunk.unwrap());
+
+            let vault_info = match vault_info_opt.clone() {
+                Some(v) => v,
+                None => return HttpResponse::BadRequest().body("Missing vault_info"),
+            };
+
+            let jwt = match get_user_from_cookie(&req) {
+                Some(jwt) => jwt,
+                None => return HttpResponse::Unauthorized().body("Unauthorized"),
+            };
+
+            if load_vault(req.clone(), web::Json(vault_info.clone())).await.is_err() {
+                return HttpResponse::Unauthorized().body("Unauthorized");
             }
-        }
-    }
 
-    let vault_info = match vault_info_opt {
-        Some(v) => v,
-        None => return HttpResponse::BadRequest().body("Missing vault_info"),
-    };
+            let vault_cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
+                Some(cache) => cache,
+                None => return HttpResponse::Unauthorized().body("Unauthorized"),
+            };
 
-    // Authentification
-    let jwt = match get_user_from_cookie(&req) {
-        Some(jwt) => jwt,
-        None => return HttpResponse::Unauthorized().body("Unauthorized"),
-    };
+            {
+                let vault_cache_locked = vault_cache.lock().unwrap();
+                if vault_cache_locked.vault_key.is_empty() {
+                    return HttpResponse::Unauthorized().body("Unauthorized");
+                }
+                if !vault_cache_locked.perms.contains_key(&jwt.id)
+                    || vault_cache_locked.perms.get(&jwt.id).unwrap() < &Perms::Write
+                {
+                    return HttpResponse::Unauthorized().body("Unauthorized");
+                }
+                vault_key = vault_cache_locked.vault_key.clone();
+            }
 
-    if load_vault(req, web::Json(vault_info.clone()))
-        .await
-        .is_err()
-    {
-        return HttpResponse::Unauthorized().body("Unauthorized");
-    }
-    let vault_cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
-        Some(cache) => cache,
-        None => return HttpResponse::Unauthorized().body("Unauthorized"),
-    };
+            let mut full_path = vault_info.get_path();
+            if !upload_path.is_empty() {
+                full_path = format!(
+                    "{}/{}",
+                    full_path.trim_end_matches('/'),
+                    upload_path.trim_start_matches('/')
+                );
+            }
+            let file_path = format!("{}/{}", full_path.trim_end_matches('/'), upload_file_name);
 
-    let vault_key = {
-        let vault_cache = vault_cache.lock().unwrap();
-        if vault_cache.vault_key.is_empty() {
-            return HttpResponse::Unauthorized().body("Unauthorized");
-        }
-        if !vault_cache.perms.contains_key(&jwt.id)
-            || vault_cache.perms.get(&jwt.id).unwrap() < &Perms::Write
-        {
-            return HttpResponse::Unauthorized().body("Unauthorized");
-        }
-        vault_cache.vault_key.clone()
-    };
+            if let Some(parent) = std::path::Path::new(&file_path).parent() {
+                if let Err(e) = fs::create_dir_all(parent) {
+                    return HttpResponse::InternalServerError()
+                        .body(format!("Failed to create parent dir: {e}"));
+                }
+            }
 
-    // Génération du chemin du fichier cible
-    let mut full_path = vault_info.get_path();
-    if !upload_path.is_empty() {
-        full_path = format!(
-            "{}/{}",
-            full_path.trim_end_matches('/'),
-            upload_path.trim_start_matches('/')
-        );
-    }
-    let file_path = format!("{}/{}", full_path.trim_end_matches('/'), upload_file_name);
+            file = match fs::File::create(&file_path) {
+                Ok(f) => Some(f),
+                Err(_) => return HttpResponse::InternalServerError().body("Internal server error"),
+            };
 
-    // Création récursive des dossiers si nécessaire
-    if let Some(parent) = std::path::Path::new(&file_path).parent() {
-        if let Err(e) = fs::create_dir_all(parent) {
-            return HttpResponse::InternalServerError()
-                .body(format!("Failed to create parent dir: {e}"));
-        }
-    }
+            while let Some(chunk) = field.next().await {
+                let chunk = chunk.unwrap();
+                buffer.extend_from_slice(&chunk);
 
-    // Ecriture du fichier chiffré
-    let mut file = match fs::File::create(&file_path) {
-        Ok(f) => f,
-        Err(_) => return HttpResponse::InternalServerError().body("Internal server error"),
-    };
+                if buffer.len() >= BUFFER_SIZE {
+                    let encrypted = encrypt(&buffer, &vault_key);
+                    if let Err(_) = file.as_mut().unwrap().write_all(&encrypted) {
+                        let _ = fs::remove_file(&file_path);
+                        return HttpResponse::InternalServerError().body("Write failed");
+                    }
+                    buffer.clear();
+                }
+            }
 
-    let encrypted_content = encrypt(&file_bytes, &vault_key);
-    if let Err(_) = file.write_all(&encrypted_content) {
-        let _ = fs::remove_file(&file_path);
-        return HttpResponse::InternalServerError().body("Internal server error");
-    }
+            // Flush final data
+            if !buffer.is_empty() {
+                let encrypted = encrypt(&buffer, &vault_key);
+                if let Err(_) = file.as_mut().unwrap().write_all(&encrypted) {
+                    let _ = fs::remove_file(&file_path);
+                    return HttpResponse::InternalServerError().body("Write failed");
+                }
+            }
 
-    // Ajout dans le file tree virtuel
-    {
-        let mut vault_cache = vault_cache.lock().unwrap();
-        // Gère le cas racine (si jamais le path est vide)
-        let path_in_tree = if upload_path.trim().is_empty() {
-            ""
-        } else {
-            upload_path.trim_matches('/')
-        };
-        let parent_dir = match vault_cache
-            .vault_file_tree
-            .get_mut_directory_from_path(path_in_tree)
-        {
-            Ok(dir) => dir,
-            Err(_) => return HttpResponse::NotFound().body("Invalid path in tree"),
-        };
-        parent_dir.add_file(
-            &upload_file_name,
-            upload_file_name.clone(),
-            "File".to_string(),
-        );
-        if let Err(_) = vault_info.save_file_tree(
-            vault_cache.vault_key.as_slice(),
-            vault_cache.vault_file_tree.clone(),
-        ) {
-            return HttpResponse::InternalServerError().body("Failed to save file tree");
+            // Ajout au file tree
+            {
+                let mut vault_cache = vault_cache.lock().unwrap();
+                let path_in_tree = if upload_path.trim().is_empty() {
+                    ""
+                } else {
+                    upload_path.trim_matches('/')
+                };
+                let parent_dir = match vault_cache
+                    .vault_file_tree
+                    .get_mut_directory_from_path(path_in_tree)
+                {
+                    Ok(dir) => dir,
+                    Err(_) => return HttpResponse::NotFound().body("Invalid path in tree"),
+                };
+                parent_dir.add_file(
+                    &upload_file_name,
+                    upload_file_name.clone(),
+                    "File".to_string(),
+                );
+                if let Err(_) = vault_info.save_file_tree(
+                    vault_cache.vault_key.as_slice(),
+                    vault_cache.vault_file_tree.clone(),
+                ) {
+                    return HttpResponse::InternalServerError().body("Failed to save file tree");
+                }
+            }
         }
     }
 
     HttpResponse::Ok().body("")
 }
+
