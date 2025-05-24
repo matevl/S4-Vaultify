@@ -95,13 +95,12 @@
 </head>
 
 
-
+<body>
 <div class="button-group">
     <button onclick="window.location.href='/vaults'">Go Back to Vaults</button>
     <button onclick="triggerUpload()">Upload to DST</button>
     <button onclick="triggerDownload()">Download from DST</button>
 
-    <body>
     <button class="btn btn-primary" onclick="openSharePopup()" style="display: flex; align-items: center; gap: 0.5rem;">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="20" height="20">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
@@ -119,6 +118,15 @@
                  a1.5 1.5 0 0 1-1.06-.44Z" />
         </svg>
         New Folder
+    </button>
+
+
+
+    <button class="btn btn-primary" onclick="openUploadModal()" style="display:flex;align-items:center;gap:0.5rem;">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" width="20" height="20">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+        </svg>
+        Add
     </button>
 </div>
 
@@ -141,6 +149,27 @@
     </div>
 </div>
 
+<div id="uploadModal" class="modal">
+    <div class="modal-content"
+         ondragover="event.preventDefault(); this.classList.add('drop-target')"
+         ondragleave="event.preventDefault(); this.classList.remove('drop-target')"
+         ondrop="handleDrop(event)">
+        <h3>Upload a file or folder</h3>
+        <input type="file" id="fileInput" style="display:none" multiple webkitdirectory directory />
+        <div style="margin-bottom:1rem;">
+            <button class="btn btn-secondary" onclick="document.getElementById('fileInput').click()">Choose files...</button>
+            <span id="uploadFileNames" style="color:#c7d2fe;margin-left:1rem;"></span>
+        </div>
+        <div style="margin-bottom:1rem; text-align:center; border:2px dashed #6366f1; border-radius:8px; padding:1.5rem; background:rgba(99,102,241,0.08); color:#a5b4fc; cursor:pointer;"
+             onclick="document.getElementById('fileInput').click()">
+            Drag & drop files or folders here
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-primary" onclick="uploadSelectedFiles()">Upload</button>
+            <button class="btn btn-secondary" onclick="closeUploadModal()">Cancel</button>
+        </div>
+    </div>
+</div>
 
 <!-- Modale de suppression -->
 <div id="deleteModal" class="modal">
@@ -224,6 +253,67 @@
 </div>
 
 <script>
+
+    let uploadFiles = [];
+
+    function openUploadModal() {
+        document.getElementById('uploadModal').style.display = 'flex';
+        uploadFiles = [];
+        document.getElementById('uploadFileNames').textContent = '';
+        document.getElementById('fileInput').value = '';
+    }
+
+    function closeUploadModal() {
+        document.getElementById('uploadModal').style.display = 'none';
+        uploadFiles = [];
+    }
+
+    document.getElementById('fileInput').addEventListener('change', (e) => {
+        uploadFiles = Array.from(e.target.files);
+        document.getElementById('uploadFileNames').textContent = uploadFiles.map(f => f.webkitRelativePath || f.name).join(', ');
+    });
+
+    function handleDrop(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        document.getElementById('uploadModal').querySelector('.modal-content').classList.remove('drop-target');
+        if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+            uploadFiles = Array.from(e.dataTransfer.files);
+            document.getElementById('uploadFileNames').textContent = uploadFiles.map(f => f.webkitRelativePath || f.name).join(', ');
+        }
+    }
+
+    async function uploadSelectedFiles() {
+        if (!uploadFiles.length) return showToast('Select a file!', 'error');
+
+        const vaultId = location.pathname.split('/').pop();
+        const vaultInfo = JSON.parse(localStorage.getItem('vault_info'));
+        const currentVaultPath = currentPath.join('/'); // dans l'arborescence (ex: Documents/Work)
+
+        for (let file of uploadFiles) {
+            let formData = new FormData();
+            formData.append('vault_info', new Blob([JSON.stringify(vaultInfo)], { type: "application/json" }));
+            // On ajoute aussi le chemin relatif pour placer le fichier au bon endroit dans l'arborescence !
+            formData.append('path', currentVaultPath);
+            formData.append('file', file, file.webkitRelativePath || file.name);
+
+            try {
+                const res = await fetch(`/vaults/${vaultId}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!res.ok) throw new Error();
+            } catch {
+                showToast(`Upload failed: ${file.name}`, 'error');
+                closeUploadModal();
+                return;
+            }
+        }
+
+        showToast('Upload finished!', 'success');
+        closeUploadModal();
+        loadFileTree();
+    }
     function triggerUpload() {
         document.getElementById("uploadInput").click();
     }
@@ -630,8 +720,8 @@
         } else {
             showToast("Rename failed!", "error");
         }
-        closeRenameModal();
-    }
+        closeRenameModal();}
+
 
 </script>
 </body>

@@ -3,6 +3,7 @@ use crate::backend::server_manager::account_manager::Perms;
 use crate::backend::server_manager::file_manager::file_tree::*;
 use crate::backend::server_manager::global_manager::{get_user_from_cookie, VAULTS_CACHE};
 use crate::backend::server_manager::vault_manager::{load_vault, VaultInfo, VaultsCache};
+use actix_multipart::Multipart;
 use actix_web::{test, web, HttpRequest, HttpResponse, Responder};
 use futures_util::StreamExt;
 use rand::distr::Alphanumeric;
@@ -10,6 +11,7 @@ use rand::Rng;
 use serde::Deserialize;
 use std::fs;
 use std::io::Write;
+use std::path::Path;
 
 const BUFFER_SIZE: usize = 4096;
 
@@ -173,7 +175,6 @@ pub struct RemoveFolderRequest {
     pub folder_name: String,
 }
 
-
 /// Handler to remove a folder (recursively)
 pub async fn remove_folder_query(
     req: HttpRequest,
@@ -280,24 +281,58 @@ pub async fn remove_file_query(
 }
 
 /// upload files to the server
-pub async fn upload_file_query(
-    req: HttpRequest,
-    vault_info: web::Json<VaultInfo>,
-    mut payload: web::Payload,
-) -> impl Responder {
+pub async fn upload_file_query(req: HttpRequest, mut payload: Multipart) -> impl Responder {
+    use futures_util::TryStreamExt;
+    use serde_json;
+
+    let mut vault_info_opt: Option<VaultInfo> = None;
+    let mut upload_path = String::new();
+    let mut upload_file_name = String::new();
+    let mut file_bytes = Vec::new();
+
+    // Lecture du contenu du multipart/form-data
+    while let Ok(Some(mut field)) = payload.try_next().await {
+        let content_disposition = field.content_disposition();
+        let name = content_disposition.get_name().unwrap_or("");
+        if name == "vault_info" {
+            let mut buf = Vec::new();
+            while let Some(chunk) = field.next().await {
+                buf.extend_from_slice(&chunk.unwrap());
+            }
+            vault_info_opt = serde_json::from_slice::<VaultInfo>(&buf).ok();
+        } else if name == "path" {
+            let mut buf = Vec::new();
+            while let Some(chunk) = field.next().await {
+                buf.extend_from_slice(&chunk.unwrap());
+            }
+            upload_path = String::from_utf8(buf).unwrap_or_default();
+        } else if name == "file" {
+            if let Some(filename) = content_disposition.get_filename() {
+                upload_file_name = filename.to_string();
+            }
+            while let Some(chunk) = field.next().await {
+                file_bytes.extend_from_slice(&chunk.unwrap());
+            }
+        }
+    }
+
+    let vault_info = match vault_info_opt {
+        Some(v) => v,
+        None => return HttpResponse::BadRequest().body("Missing vault_info"),
+    };
+
+    // Authentification
     let jwt = match get_user_from_cookie(&req) {
         Some(jwt) => jwt,
         None => return HttpResponse::Unauthorized().body("Unauthorized"),
     };
 
-    let vault_info = vault_info.into_inner();
     if load_vault(req, web::Json(vault_info.clone()))
         .await
         .is_err()
     {
         return HttpResponse::Unauthorized().body("Unauthorized");
     }
-
     let vault_cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
         Some(cache) => cache,
         None => return HttpResponse::Unauthorized().body("Unauthorized"),
@@ -316,59 +351,63 @@ pub async fn upload_file_query(
         vault_cache.vault_key.clone()
     };
 
-    let vault_path = vault_info.get_path();
-    let file_path = loop {
-        let file_name: Vec<u8> = rand::rng().sample_iter(&Alphanumeric).take(16).collect();
-        let name = String::from_utf8(file_name).unwrap();
-        if !std::path::Path::new(&vault_path).exists() {
-            return HttpResponse::NotFound().body("File not found");
-        }
-        if !std::path::Path::new(&vault_path).exists() {
-            return HttpResponse::NotFound().body("File not found");
-        }
+    // Génération du chemin du fichier cible
+    let mut full_path = vault_info.get_path();
+    if !upload_path.is_empty() {
+        full_path = format!(
+            "{}/{}",
+            full_path.trim_end_matches('/'),
+            upload_path.trim_start_matches('/')
+        );
+    }
+    let file_path = format!("{}/{}", full_path.trim_end_matches('/'), upload_file_name);
 
-        let file_path = format!("{}{}", vault_path, name);
-        if !std::path::Path::new(&file_path).exists() {
-            break file_path;
-        }
-    };
-
-    let mut file = match fs::File::create(&file_path) {
-        Ok(file) => file,
-        Err(_) => return HttpResponse::InternalServerError().body("Internal server error"),
-    };
-
-    let mut buffer = Vec::with_capacity(BUFFER_SIZE);
-
-    while let Some(chunk) = payload.next().await {
-        let data = chunk.unwrap();
-
-        for byte in data {
-            buffer.push(byte);
-            if buffer.len() == BUFFER_SIZE {
-                let encrypted_content = encrypt(buffer.as_slice(), &vault_key);
-
-                match file.write_all(&encrypted_content) {
-                    Ok(_) => (),
-                    Err(_) => {
-                        fs::remove_file(&file_path).unwrap();
-                        return HttpResponse::InternalServerError().body("Internal server error");
-                    }
-                }
-
-                buffer.clear();
-            }
+    // Création récursive des dossiers si nécessaire
+    if let Some(parent) = std::path::Path::new(&file_path).parent() {
+        if let Err(e) = fs::create_dir_all(parent) {
+            return HttpResponse::InternalServerError()
+                .body(format!("Failed to create parent dir: {e}"));
         }
     }
 
-    if !buffer.is_empty() {
-        let encrypted_content = encrypt(buffer.as_slice(), &vault_key);
-        match file.write_all(&encrypted_content) {
-            Ok(_) => (),
-            Err(_) => {
-                fs::remove_file(&file_path).unwrap();
-                return HttpResponse::InternalServerError().body("Internal server error");
-            }
+    // Ecriture du fichier chiffré
+    let mut file = match fs::File::create(&file_path) {
+        Ok(f) => f,
+        Err(_) => return HttpResponse::InternalServerError().body("Internal server error"),
+    };
+
+    let encrypted_content = encrypt(&file_bytes, &vault_key);
+    if let Err(_) = file.write_all(&encrypted_content) {
+        let _ = fs::remove_file(&file_path);
+        return HttpResponse::InternalServerError().body("Internal server error");
+    }
+
+    // Ajout dans le file tree virtuel
+    {
+        let mut vault_cache = vault_cache.lock().unwrap();
+        // Gère le cas racine (si jamais le path est vide)
+        let path_in_tree = if upload_path.trim().is_empty() {
+            ""
+        } else {
+            upload_path.trim_matches('/')
+        };
+        let parent_dir = match vault_cache
+            .vault_file_tree
+            .get_mut_directory_from_path(path_in_tree)
+        {
+            Ok(dir) => dir,
+            Err(_) => return HttpResponse::NotFound().body("Invalid path in tree"),
+        };
+        parent_dir.add_file(
+            &upload_file_name,
+            upload_file_name.clone(),
+            "File".to_string(),
+        );
+        if let Err(_) = vault_info.save_file_tree(
+            vault_cache.vault_key.as_slice(),
+            vault_cache.vault_file_tree.clone(),
+        ) {
+            return HttpResponse::InternalServerError().body("Failed to save file tree");
         }
     }
 
