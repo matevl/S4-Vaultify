@@ -28,6 +28,7 @@ askama = "0.12"
 tera = "1.19.0"
 moka = "0.10"
 futures-util = "0.3.31"
+actix-multipart = "0.6"
 
 [profile.wasm-dev]
 inherits = "dev"

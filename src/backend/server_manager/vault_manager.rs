@@ -53,7 +53,7 @@ impl VaultInfo {
     /// Constructs the full path to the vault's root directory.
     pub fn get_path(&self) -> String {
         format!(
-            "{}/{}{}/.json",
+            "{}/{}{}/",
             ROOT.to_str().unwrap(),
             VAULTS_DATA,
             self.get_name(),
