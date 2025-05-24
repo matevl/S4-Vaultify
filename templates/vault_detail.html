@@ -382,15 +382,32 @@
         const container = document.createElement("div");
 
         if (path.length > 0) {
-            const back = document.createElement("div");
-            back.textContent = "⬅️ Retour";
-            back.style.cursor = "pointer";
-            back.style.marginBottom = "1rem";
-            back.onclick = () => {
+            const backBtn = document.createElement("button");
+            backBtn.className = "btn btn-primary";
+            backBtn.style.display = "flex";
+            backBtn.style.alignItems = "center";
+            backBtn.style.justifyContent = "center";
+            backBtn.style.marginBottom = "1rem";
+            backBtn.style.width = "40px";
+            backBtn.style.height = "40px";
+            backBtn.style.padding = "0"; // pour garder le bouton carré
+
+            backBtn.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none"
+             viewBox="0 0 24 24"
+             stroke-width="1.5"
+             stroke="currentColor"
+             width="24" height="24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M15.75 19.5 8.25 12l7.5-7.5" />
+        </svg>
+    `;
+
+            backBtn.onclick = () => {
                 currentPath.pop();
                 renderMap(fileTreeMap, currentPath);
             };
-            container.appendChild(back);
+            container.appendChild(backBtn);
         }
 
         const currentMap = path.reduce((acc, key) => acc.get(key)?.content, map);
