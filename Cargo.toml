@@ -29,6 +29,7 @@ tera = "1.19.0"
 moka = "0.10"
 futures-util = "0.3.31"
 actix-multipart = "0.6"
+mime_guess = "2.0.5"
 
 [profile.wasm-dev]
 inherits = "dev"
