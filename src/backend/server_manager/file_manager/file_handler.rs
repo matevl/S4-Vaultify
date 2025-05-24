@@ -438,8 +438,8 @@ pub async fn upload_file_query(req: HttpRequest, mut payload: Multipart) -> impl
                     Err(_) => return HttpResponse::NotFound().body("Invalid path in tree"),
                 };
                 parent_dir.add_file(
-                    &secure_file_name,
-                    upload_file_name.clone(),
+                    &upload_file_name,
+                    secure_file_name.clone(),
                     "File".to_string(),
                 );
                 if let Err(_) = vault_info.save_file_tree(
