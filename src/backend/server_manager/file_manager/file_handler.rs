@@ -9,11 +9,10 @@ use futures_util::StreamExt;
 use rand::distr::Alphanumeric;
 use rand::Rng;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
-
-const BUFFER_SIZE: usize = 4096;
 
 pub async fn get_file_tree_query(req: HttpRequest, path: web::Path<String>) -> impl Responder {
     let _jwt = match get_user_from_cookie(&req) {
@@ -54,7 +53,7 @@ pub async fn create_folder_query(
     req: HttpRequest,
     data: web::Json<CreateFolderRequest>,
 ) -> impl Responder {
-    let _jwt = match get_user_from_cookie(&req) {
+    let jwt = match get_user_from_cookie(&req) {
         Some(jwt) => jwt,
         None => return HttpResponse::Unauthorized().body("Unauthorized"),
     };
@@ -73,6 +72,12 @@ pub async fn create_folder_query(
         None => return HttpResponse::Unauthorized().body("Unauthorized"),
     };
     let mut vault_cache = cache.lock().unwrap();
+
+    if !vault_cache.perms.contains_key(&jwt.id)
+        || vault_cache.perms.get(&jwt.id).unwrap() < &Perms::Write
+    {
+        return HttpResponse::Unauthorized().body("Unauthorized");
+    }
 
     let target_dir = match vault_cache
         .vault_file_tree
@@ -118,7 +123,7 @@ pub async fn rename_item_query(
     payload: web::Json<RenameRequest>,
 ) -> impl Responder {
     // Authenticate user
-    let _jwt = match get_user_from_cookie(&req) {
+    let jwt = match get_user_from_cookie(&req) {
         Some(jwt) => jwt,
         None => return HttpResponse::Unauthorized().body("Unauthorized"),
     };
@@ -141,6 +146,12 @@ pub async fn rename_item_query(
     };
 
     let mut vault_cache = cache.lock().unwrap();
+
+    if !vault_cache.perms.contains_key(&jwt.id)
+        || vault_cache.perms.get(&jwt.id).unwrap() < &Perms::Write
+    {
+        return HttpResponse::Unauthorized().body("Unauthorized");
+    }
 
     // Trouve le dossier parent contenant l'élément à renommer
     let target_dir = match vault_cache
@@ -182,8 +193,8 @@ pub async fn remove_folder_query(
 ) -> impl Responder {
     let vault_info = payload.vault_info.clone();
 
-    let _jwt = match get_user_from_cookie(&req) {
-        Some(_) => (),
+    let jwt = match get_user_from_cookie(&req) {
+        Some(jwt) => jwt,
         None => return HttpResponse::Unauthorized().body("Unauthorized"),
     };
 
@@ -200,6 +211,12 @@ pub async fn remove_folder_query(
     };
 
     let mut vault_cache = cache.lock().unwrap();
+
+    if !vault_cache.perms.contains_key(&jwt.id)
+        || vault_cache.perms.get(&jwt.id).unwrap() < &Perms::Write
+    {
+        return HttpResponse::Unauthorized().body("Unauthorized");
+    }
 
     let parent_dir = match vault_cache
         .vault_file_tree
@@ -239,8 +256,8 @@ pub async fn remove_file_query(
 ) -> impl Responder {
     let vault_info = payload.vault_info.clone();
 
-    let _jwt = match get_user_from_cookie(&req) {
-        Some(_) => (),
+    let jwt = match get_user_from_cookie(&req) {
+        Some(jwt) => jwt,
         None => return HttpResponse::Unauthorized().body("Unauthorized"),
     };
 
@@ -257,6 +274,12 @@ pub async fn remove_file_query(
     };
 
     let mut vault_cache = cache.lock().unwrap();
+
+    if !vault_cache.perms.contains_key(&jwt.id)
+        || vault_cache.perms.get(&jwt.id).unwrap() < &Perms::Write
+    {
+        return HttpResponse::Unauthorized().body("Unauthorized");
+    }
 
     let parent_dir = match vault_cache
         .vault_file_tree
@@ -280,7 +303,7 @@ pub async fn remove_file_query(
     }
 }
 
-/// upload files to the server
+/// upload files to the serve
 pub async fn upload_file_query(req: HttpRequest, mut payload: Multipart) -> impl Responder {
     use futures_util::TryStreamExt;
     use serde_json;
@@ -288,11 +311,12 @@ pub async fn upload_file_query(req: HttpRequest, mut payload: Multipart) -> impl
 
     let mut vault_info_opt: Option<VaultInfo> = None;
     let mut upload_path = String::new();
-    let mut upload_file_name = String::new();
+    let mut upload_file_name = String::new(); // Nom d’origine
+    let mut secure_file_name = String::new(); // Nom sécurisé
 
     let mut file: Option<fs::File> = None;
     let mut vault_key: Vec<u8> = Vec::new();
-    const BUFFER_SIZE: usize = 4 * 1024 * 1024; // 4 Mo
+    const BUFFER_SIZE: usize = 4 * 1024 * 1024;
     let mut buffer: Vec<u8> = Vec::with_capacity(BUFFER_SIZE);
 
     while let Ok(Some(mut field)) = payload.try_next().await {
@@ -326,7 +350,10 @@ pub async fn upload_file_query(req: HttpRequest, mut payload: Multipart) -> impl
                 None => return HttpResponse::Unauthorized().body("Unauthorized"),
             };
 
-            if load_vault(req.clone(), web::Json(vault_info.clone())).await.is_err() {
+            if load_vault(req.clone(), web::Json(vault_info.clone()))
+                .await
+                .is_err()
+            {
                 return HttpResponse::Unauthorized().body("Unauthorized");
             }
 
@@ -348,6 +375,9 @@ pub async fn upload_file_query(req: HttpRequest, mut payload: Multipart) -> impl
                 vault_key = vault_cache_locked.vault_key.clone();
             }
 
+            // NOM SÉCURISÉ
+            secure_file_name = generate_secure_filename(&upload_file_name, &jwt.id.to_string());
+
             let mut full_path = vault_info.get_path();
             if !upload_path.is_empty() {
                 full_path = format!(
@@ -356,7 +386,7 @@ pub async fn upload_file_query(req: HttpRequest, mut payload: Multipart) -> impl
                     upload_path.trim_start_matches('/')
                 );
             }
-            let file_path = format!("{}/{}", full_path.trim_end_matches('/'), upload_file_name);
+            let file_path = format!("{}/{}", full_path.trim_end_matches('/'), secure_file_name);
 
             if let Some(parent) = std::path::Path::new(&file_path).parent() {
                 if let Err(e) = fs::create_dir_all(parent) {
@@ -384,7 +414,6 @@ pub async fn upload_file_query(req: HttpRequest, mut payload: Multipart) -> impl
                 }
             }
 
-            // Flush final data
             if !buffer.is_empty() {
                 let encrypted = encrypt(&buffer, &vault_key);
                 if let Err(_) = file.as_mut().unwrap().write_all(&encrypted) {
@@ -393,7 +422,7 @@ pub async fn upload_file_query(req: HttpRequest, mut payload: Multipart) -> impl
                 }
             }
 
-            // Ajout au file tree
+            // File tree update (on garde le nom *original* ici)
             {
                 let mut vault_cache = vault_cache.lock().unwrap();
                 let path_in_tree = if upload_path.trim().is_empty() {
@@ -409,7 +438,7 @@ pub async fn upload_file_query(req: HttpRequest, mut payload: Multipart) -> impl
                     Err(_) => return HttpResponse::NotFound().body("Invalid path in tree"),
                 };
                 parent_dir.add_file(
-                    &upload_file_name,
+                    &secure_file_name,
                     upload_file_name.clone(),
                     "File".to_string(),
                 );
@@ -426,3 +455,10 @@ pub async fn upload_file_query(req: HttpRequest, mut payload: Multipart) -> impl
     HttpResponse::Ok().body("")
 }
 
+fn generate_secure_filename(original_name: &str, user_id: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(original_name.as_bytes());
+    hasher.update(user_id.as_bytes());
+    let hash = hasher.finalize();
+    format!("{:x}.bin", hash)
+}
