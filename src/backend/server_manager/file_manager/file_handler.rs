@@ -386,7 +386,7 @@ pub async fn upload_file_query(req: HttpRequest, mut payload: Multipart) -> impl
                     upload_path.trim_start_matches('/')
                 );
             }
-            let file_path = format!("{}/{}", full_path.trim_end_matches('/'), secure_file_name);
+            let file_path = format!("{}{}", vault_info.get_path(), secure_file_name);
 
             if let Some(parent) = std::path::Path::new(&file_path).parent() {
                 if let Err(e) = fs::create_dir_all(parent) {
