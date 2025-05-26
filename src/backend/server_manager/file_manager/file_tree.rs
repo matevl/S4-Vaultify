@@ -11,10 +11,10 @@ pub const FILE_TREE_FILE_NAME: &str = "file_tree.json";
 ///
 /// @file_type - .jpeg, .png, .pdf ...
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct FileNode {
-    file_name: String,
-    binary_file_name: String,
-    file_type: String,
+pub struct FileNode {
+    pub file_name: String,
+    pub binary_file_name: String,
+    pub file_type: String,
 }
 
 impl FileNode {
@@ -34,7 +34,7 @@ impl FileNode {
 
 /// A FileType can be either a File or a Directory
 #[derive(Serialize, Deserialize, Debug, Clone)]
-enum FileType {
+pub enum FileType {
     File(FileNode),
     Dir(Directory),
 }
@@ -47,7 +47,7 @@ enum FileType {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Directory {
     name: String,
-    files: HashMap<String, FileType>,
+    pub(crate) files: HashMap<String, FileType>,
 }
 
 impl Directory {
@@ -121,6 +121,33 @@ impl Directory {
 
         for part in path.split('/') {
             match current_dir.files.get_mut(part) {
+                Some(FileType::Dir(sub_dir)) => {
+                    current_dir = sub_dir;
+                }
+                Some(_) => {
+                    return Err(format!(
+                        "Path component '{}' is a file, not a directory",
+                        part
+                    ));
+                }
+                None => {
+                    return Err(format!("Directory '{}' not found in path", part));
+                }
+            }
+        }
+
+        Ok(current_dir)
+    }
+
+    pub fn get_directory_from_path(&self, path: &str) -> Result<&Directory, String> {
+        let mut current_dir = self;
+
+        if path.is_empty() {
+            return Ok(current_dir);
+        }
+
+        for part in path.split('/') {
+            match current_dir.files.get(part) {
                 Some(FileType::Dir(sub_dir)) => {
                     current_dir = sub_dir;
                 }
@@ -224,7 +251,7 @@ pub fn remove_directory_recursively(
                             return Err(format!("Failed to delete file '{}': {}", disk_path, err));
                         }
                     }
-                    Some(FileType::Dir(mut sub_dir)) => {
+                    Some(FileType::Dir(_)) => {
                         // Recursive call on the subdirectory
                         remove_directory_recursively(&mut dir, &child_name, vault_path)?;
                     }

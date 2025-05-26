@@ -1,18 +1,21 @@
 use crate::backend::aes_keys::crypted_key::encrypt;
+use crate::backend::aes_keys::decrypted_key::decrypt;
 use crate::backend::server_manager::account_manager::Perms;
+use crate::backend::server_manager::file_manager::file_tree::FileType;
 use crate::backend::server_manager::file_manager::file_tree::*;
 use crate::backend::server_manager::global_manager::{get_user_from_cookie, VAULTS_CACHE};
 use crate::backend::server_manager::vault_manager::{load_vault, VaultInfo, VaultsCache};
 use actix_multipart::Multipart;
-use actix_web::{test, web, HttpRequest, HttpResponse, Responder};
-use futures_util::StreamExt;
-use rand::distr::Alphanumeric;
-use rand::Rng;
+use actix_web::web::Bytes;
+use actix_web::{web, HttpRequest, HttpResponse, Responder};
+use futures_util::{stream, StreamExt};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::Write;
-use std::path::Path;
+use std::fs::File;
+use std::io::{BufReader, Read};
+
+const BUFFER_SIZE: usize = 4 * 1024 * 1024;
 
 pub async fn get_file_tree_query(req: HttpRequest, path: web::Path<String>) -> impl Responder {
     let _jwt = match get_user_from_cookie(&req) {
@@ -316,7 +319,6 @@ pub async fn upload_file_query(req: HttpRequest, mut payload: Multipart) -> impl
 
     let mut file: Option<fs::File> = None;
     let mut vault_key: Vec<u8> = Vec::new();
-    const BUFFER_SIZE: usize = 4 * 1024 * 1024;
     let mut buffer: Vec<u8> = Vec::with_capacity(BUFFER_SIZE);
 
     while let Ok(Some(mut field)) = payload.try_next().await {
@@ -461,4 +463,100 @@ fn generate_secure_filename(original_name: &str, user_id: &str) -> String {
     hasher.update(user_id.as_bytes());
     let hash = hasher.finalize();
     format!("{:x}.bin", hash)
+}
+
+#[derive(Deserialize)]
+pub struct DownloadFileQuery {
+    vault_info: VaultInfo,
+    path: String,
+    file_name: String,
+}
+
+/// Endpoint for downloading an encrypted file
+pub async fn download_file_query(
+    req: HttpRequest,
+    json: web::Json<DownloadFileQuery>,
+) -> impl Responder {
+    let vault_info = json.vault_info.clone();
+    let file_name = json.file_name.clone();
+    let path = json.path.clone();
+
+    // Authenticate the user
+    let jwt = match get_user_from_cookie(&req) {
+        Some(jwt) => jwt,
+        None => return HttpResponse::Unauthorized().finish(),
+    };
+
+    // Authenticate the user
+    if load_vault(req, web::Json(vault_info.clone()))
+        .await
+        .is_err()
+    {
+        return HttpResponse::Unauthorized().finish();
+    }
+
+    // Get vault cache
+    let cache = match VAULTS_CACHE.get(&vault_info.get_name()) {
+        Some(c) => c,
+        None => return HttpResponse::NotFound().finish(),
+    };
+
+    // Get file node from enum variant
+    let (binary_file_name, original_file_name, vault_key) = {
+        let vault_cache = cache.lock().unwrap();
+
+        let dir = match vault_cache.vault_file_tree.get_directory_from_path(&path) {
+            Ok(d) => d,
+            Err(_) => return HttpResponse::NotFound().body("Invalid path"),
+        };
+
+        let file_node = match dir.files.get(&file_name) {
+            Some(FileType::File(node)) => node,
+            _ => return HttpResponse::NotFound().body("File not found"),
+        };
+
+        (
+            file_node.binary_file_name.clone(),
+            file_node.file_name.clone(),
+            vault_cache.vault_key.clone(),
+        )
+    };
+
+    // Construct the full disk path
+    let full_path = format!(
+        "{}/{}/{}",
+        vault_info.get_path(),
+        path.trim_matches('/'),
+        binary_file_name
+    );
+
+    let mut file = match std::fs::File::open(&full_path) {
+        Ok(f) => f,
+        Err(_) => return HttpResponse::NotFound().body("Failed to open file"),
+    };
+
+    let mut encrypted_contents = Vec::new();
+    if let Err(_) = file.read_to_end(&mut encrypted_contents) {
+        return HttpResponse::InternalServerError().body("Failed to read file");
+    }
+
+    let decrypted = match decrypt(encrypted_contents.as_slice(), vault_key.as_slice()) {
+        Ok(data) => data,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to decrypt"),
+    };
+
+    HttpResponse::Ok()
+        .content_type(get_mime_type_or_bin(&original_file_name))
+        .insert_header((
+            "Content-Disposition",
+            format!("attachment; filename=\"{}\"", original_file_name),
+        ))
+        .body(decrypted)
+}
+
+fn get_mime_type_or_bin(filename: &str) -> String {
+    mime_guess::from_path(filename)
+        .first_raw()
+        .unwrap_or("application/octet-stream")
+        .to_string()
 }

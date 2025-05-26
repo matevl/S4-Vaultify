@@ -7,7 +7,7 @@
     <title>Vault Detail</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; background: #021433; color: #e5e7eb; }
-        .button-group { margin-bottom: 20px; }
+        .button-group { display: flex; margin-bottom: 20px; gap:1rem; flex-direction: row; }
         button { padding: 10px 20px; margin-right: 10px; cursor: pointer; }
         .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; background-color: #ccc; color: #000; font-size: 1rem; margin-right: 10px; }
         .btn-primary { background-color: #6366f1; color: white; }
@@ -97,16 +97,10 @@
 
 <body>
 <div class="button-group">
-    <button onclick="window.location.href='/vaults'">Go Back to Vaults</button>
-    <button onclick="triggerUpload()">Upload to DST</button>
-    <button onclick="triggerDownload()">Download from DST</button>
+    <button onclick="window.location.href='/vaults'" class="btn btn-secondary" style="display: flex; align-items: center; gap: 0.5rem;">Go Back to Vaults</button>
+    <!--<button onclick="triggerUpload()">Upload to DST</button>
+    <button onclick="triggerDownload()">Download from DST</button>-->
 
-    <button class="btn btn-primary" onclick="openSharePopup()" style="display: flex; align-items: center; gap: 0.5rem;">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="20" height="20">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
-        </svg>
-        Share
-    </button>
 
     <button onclick="openNewFolderModal()" class="btn btn-primary" style="display:flex;align-items:center;gap:0.5rem;">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -127,6 +121,13 @@
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
         </svg>
         Add
+    </button>
+
+    <button class="btn btn-primary" onclick="openSharePopup()" style="display: flex; align-items: center; gap: 0.5rem;">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="20" height="20">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
+        </svg>
+        Share
     </button>
 </div>
 
@@ -434,7 +435,6 @@
             label.style.wordBreak = "break-word";
             card.appendChild(label);
 
-            // === Ajout du bouton menu ===
             const menuBtn = document.createElement("button");
             menuBtn.className = "menu-btn";
             menuBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="white" width="24" height="24" style="display:block;">
@@ -445,7 +445,15 @@
             const dropdown = document.createElement("div");
             dropdown.className = "dropdown-menu";
 
-// Actions du menu
+            const downloadBtn = document.createElement("button");
+            downloadBtn.textContent = "Download";
+            downloadBtn.onclick = (e) => {
+                e.stopPropagation();
+                dropdown.style.display = "none";
+                selectedItem = { name, type: item.type, fullPath: path.concat(name) };
+                downloadFile(selectedItem);
+            };
+
             const renameBtn = document.createElement("button");
             renameBtn.textContent = "Rename";
             renameBtn.onclick = (e) => {
@@ -465,6 +473,7 @@
                 openDeleteModal(selectedItem);
             };
 
+            dropdown.appendChild(downloadBtn);
             dropdown.appendChild(renameBtn);
             dropdown.appendChild(deleteBtn);
 
@@ -738,6 +747,55 @@
             showToast("Rename failed!", "error");
         }
         closeRenameModal();}
+
+    async function downloadFile(item) {
+        const vaultInfo = JSON.parse(localStorage.getItem('vault_info'));
+        const path = item.fullPath.slice(0, -1).join('/');
+        const file_name = item.name;
+
+        const body = {
+            vault_info: vaultInfo,
+            path,
+            file_name
+        };
+
+        try {
+            const response = await fetch(`/vaults/${vaultInfo.name}/download`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                showToast('Download failed', 'error');
+                return;
+            }
+
+            const disposition = response.headers.get('Content-Disposition');
+            let filename = file_name;
+            if (disposition && disposition.includes('filename=')) {
+                filename = disposition.split('filename=')[1].replace(/[";]/g, '');
+            }
+
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(blobUrl);
+
+            showToast('Download started', 'success');
+        } catch (e) {
+            console.error(e);
+            showToast('Download failed', 'error');
+        }
+    }
 
 
 </script>
