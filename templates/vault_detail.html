@@ -435,7 +435,6 @@
             label.style.wordBreak = "break-word";
             card.appendChild(label);
 
-            // === Ajout du bouton menu ===
             const menuBtn = document.createElement("button");
             menuBtn.className = "menu-btn";
             menuBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="white" width="24" height="24" style="display:block;">
@@ -446,7 +445,15 @@
             const dropdown = document.createElement("div");
             dropdown.className = "dropdown-menu";
 
-// Actions du menu
+            const downloadBtn = document.createElement("button");
+            downloadBtn.textContent = "Download";
+            downloadBtn.onclick = (e) => {
+                e.stopPropagation();
+                dropdown.style.display = "none";
+                selectedItem = { name, type: item.type, fullPath: path.concat(name) };
+                downloadFile(selectedItem);
+            };
+
             const renameBtn = document.createElement("button");
             renameBtn.textContent = "Rename";
             renameBtn.onclick = (e) => {
@@ -466,6 +473,7 @@
                 openDeleteModal(selectedItem);
             };
 
+            dropdown.appendChild(downloadBtn);
             dropdown.appendChild(renameBtn);
             dropdown.appendChild(deleteBtn);
 
@@ -739,6 +747,56 @@
             showToast("Rename failed!", "error");
         }
         closeRenameModal();}
+
+    async function downloadFile(item) {
+        // Récupère les infos du vault
+        const vaultInfo = JSON.parse(localStorage.getItem('vault_info'));
+        const vaultId = vaultInfo.name || vaultInfo.vault_id || location.pathname.split('/').pop(); // adapte si besoin
+        const path = item.fullPath.slice(0, -1).join('/'); // dossier parent
+        const file_name = item.name; // nom du fichier visible dans l’arbre
+
+        const params = new URLSearchParams({
+            creator_id: vaultInfo.creator_id,
+            name: vaultInfo.name,
+            date: vaultInfo.date,
+            path,
+            file_name
+        });
+        const url = `/vaults/${vaultInfo.name}/download?` + params.toString();
+
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                credentials: 'include'
+            });
+
+            if (!response.ok) {
+                showToast('Download failed', 'error');
+                return;
+            }
+
+            const disposition = response.headers.get('Content-Disposition');
+            let filename = file_name;
+            if (disposition && disposition.includes('filename=')) {
+                filename = disposition.split('filename=')[1].replace(/[";]/g, '');
+            }
+
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(blobUrl);
+
+            showToast('Download started', 'success');
+        } catch (e) {
+            console.error(e);
+            showToast('Download failed', 'error');
+        }
+    }
 
 
 </script>
