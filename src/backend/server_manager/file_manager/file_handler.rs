@@ -1,4 +1,5 @@
 use crate::backend::aes_keys::crypted_key::encrypt;
+use crate::backend::aes_keys::decrypted_key::decrypt;
 use crate::backend::server_manager::account_manager::Perms;
 use crate::backend::server_manager::file_manager::file_tree::FileType;
 use crate::backend::server_manager::file_manager::file_tree::*;
@@ -467,18 +468,18 @@ fn generate_secure_filename(original_name: &str, user_id: &str) -> String {
 #[derive(Deserialize)]
 pub struct DownloadFileQuery {
     vault_info: VaultInfo,
-    path: String,      // Directory path (e.g., "Documents/Projects")
-    file_name: String, // Original file name as stored in the tree
+    path: String,
+    file_name: String,
 }
 
 /// Endpoint for downloading an encrypted file
 pub async fn download_file_query(
     req: HttpRequest,
-    query: web::Query<DownloadFileQuery>,
+    json: web::Json<DownloadFileQuery>,
 ) -> impl Responder {
-    let vault_info = query.vault_info.clone();
-    let file_name = query.file_name.clone();
-    let path = query.path.clone();
+    let vault_info = json.vault_info.clone();
+    let file_name = json.file_name.clone();
+    let path = json.path.clone();
 
     // Authenticate the user
     let jwt = match get_user_from_cookie(&req) {
@@ -486,7 +487,7 @@ pub async fn download_file_query(
         None => return HttpResponse::Unauthorized().finish(),
     };
 
-    // Load vault
+    // Authenticate the user
     if load_vault(req, web::Json(vault_info.clone()))
         .await
         .is_err()
@@ -500,48 +501,57 @@ pub async fn download_file_query(
         None => return HttpResponse::NotFound().finish(),
     };
 
-    let mut vault_cache = cache.lock().unwrap();
-
-    // Traverse the file tree
-    let dir = match vault_cache
-        .vault_file_tree
-        .get_mut_directory_from_path(&path)
-    {
-        Ok(d) => d,
-        Err(_) => return HttpResponse::NotFound().body("Invalid path"),
-    };
-
     // Get file node from enum variant
-    let file_node = match dir.files.get(&file_name) {
-        Some(FileType::File(node)) => node,
-        _ => return HttpResponse::NotFound().body("File not found"),
+    let (binary_file_name, original_file_name, vault_key) = {
+        let vault_cache = cache.lock().unwrap();
+
+        let dir = match vault_cache.vault_file_tree.get_directory_from_path(&path) {
+            Ok(d) => d,
+            Err(_) => return HttpResponse::NotFound().body("Invalid path"),
+        };
+
+        let file_node = match dir.files.get(&file_name) {
+            Some(FileType::File(node)) => node,
+            _ => return HttpResponse::NotFound().body("File not found"),
+        };
+
+        (
+            file_node.binary_file_name.clone(),
+            file_node.file_name.clone(),
+            vault_cache.vault_key.clone(),
+        )
     };
 
     // Construct the full disk path
-    let file_path = format!(
+    let full_path = format!(
         "{}/{}/{}",
         vault_info.get_path(),
         path.trim_matches('/'),
-        file_node.binary_file_name
+        binary_file_name
     );
 
-    let mut file = match File::open(&file_path) {
+    let mut file = match std::fs::File::open(&full_path) {
         Ok(f) => f,
         Err(_) => return HttpResponse::NotFound().body("Failed to open file"),
     };
 
-    let mut contents = Vec::new();
-    if let Err(_) = file.read_to_end(&mut contents) {
+    let mut encrypted_contents = Vec::new();
+    if let Err(_) = file.read_to_end(&mut encrypted_contents) {
         return HttpResponse::InternalServerError().body("Failed to read file");
     }
 
+    let decrypted = match decrypt(encrypted_contents.as_slice(), vault_key.as_slice()) {
+        Ok(data) => data,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to decrypt"),
+    };
+
     HttpResponse::Ok()
-        .content_type(get_mime_type_or_bin(&file_node.file_name))
+        .content_type(get_mime_type_or_bin(&original_file_name))
         .insert_header((
             "Content-Disposition",
-            format!("attachment; filename=\"{}\"", file_node.file_name),
+            format!("attachment; filename=\"{}\"", original_file_name),
         ))
-        .body(contents)
+        .body(decrypted)
 }
 
 fn get_mime_type_or_bin(filename: &str) -> String {

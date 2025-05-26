@@ -749,25 +749,24 @@
         closeRenameModal();}
 
     async function downloadFile(item) {
-        // Récupère les infos du vault
         const vaultInfo = JSON.parse(localStorage.getItem('vault_info'));
-        const vaultId = vaultInfo.name || vaultInfo.vault_id || location.pathname.split('/').pop(); // adapte si besoin
-        const path = item.fullPath.slice(0, -1).join('/'); // dossier parent
-        const file_name = item.name; // nom du fichier visible dans l’arbre
+        const path = item.fullPath.slice(0, -1).join('/');
+        const file_name = item.name;
 
-        const params = new URLSearchParams({
-            creator_id: vaultInfo.creator_id,
-            name: vaultInfo.name,
-            date: vaultInfo.date,
+        const body = {
+            vault_info: vaultInfo,
             path,
             file_name
-        });
-        const url = `/vaults/${vaultInfo.name}/download?` + params.toString();
+        };
 
         try {
-            const response = await fetch(url, {
-                method: 'GET',
-                credentials: 'include'
+            const response = await fetch(`/vaults/${vaultInfo.name}/download`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
             });
 
             if (!response.ok) {

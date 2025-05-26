@@ -138,6 +138,33 @@ impl Directory {
 
         Ok(current_dir)
     }
+
+    pub fn get_directory_from_path(&self, path: &str) -> Result<&Directory, String> {
+        let mut current_dir = self;
+
+        if path.is_empty() {
+            return Ok(current_dir);
+        }
+
+        for part in path.split('/') {
+            match current_dir.files.get(part) {
+                Some(FileType::Dir(sub_dir)) => {
+                    current_dir = sub_dir;
+                }
+                Some(_) => {
+                    return Err(format!(
+                        "Path component '{}' is a file, not a directory",
+                        part
+                    ));
+                }
+                None => {
+                    return Err(format!("Directory '{}' not found in path", part));
+                }
+            }
+        }
+
+        Ok(current_dir)
+    }
 }
 
 /// Public Node in the File Tree
