@@ -13,9 +13,12 @@ use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use uuid::Uuid;
+use crate::backend::auth::email::*;
+use lazy_static::lazy_static;
 
 /**
  * Enum representing user permissions.
@@ -257,7 +260,6 @@ pub async fn create_user_query(form: web::Json<CreateUserForm>) -> HttpResponse 
  * @param form - The form data containing the username and password.
  * @return An HTTP response containing the JWT if the login is successful.
  */
-
 pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
     let conn = CONNECTION.lock().unwrap();
 
@@ -273,46 +275,75 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
         return HttpResponse::Unauthorized().json("invalid email or password");
     }
 
-    let session_key = match EMAIL_TO_SESSION_KEY.get(&email) {
-        Some(session_key) => session_key,
-        None => {
-            let session_id = generate_session_id();
-            let user_key = derive_key(&pw, &generate_salt_from_login(&email), 10000);
+    // Stocker le mot de passe de l'utilisateur dans le cache
+    USER_PASSWORD_CACHE.lock().unwrap().insert(email.clone(), pw);
 
-            SESSION_CACHE.insert(
-                session_id.clone(),
-                Arc::new(Mutex::new(Session::new(user_id, &hash_pw, &user_key))),
-            );
+    // Envoyer le code de vérification par email
+    let _ = final_send(&email);
 
-            EMAIL_TO_SESSION_KEY.insert(email.clone(), session_id.clone());
-
-            if let Some(pending) = PENDING_SHARE_CACHE.get(&email) {
-                let mut pending = pending.lock().unwrap();
-                for (vault_info, vault_key) in pending.drain(..) {
-                    vault_info
-                        .save_key(vault_key.as_slice(), user_key.as_slice(), user_id)
-                        .unwrap();
-                    create_vault(&conn, &vault_info, user_id).unwrap();
-                }
-            }
-
-            session_id
-        }
-    };
-    let jwt = JWT::new(&session_key, user_id, &email);
-
-    let cookie = Cookie::build("user_token", serde_json::to_string(&jwt).unwrap())
-        .http_only(true)
-        .secure(true) // Use secure(true) if you are in production (HTTPS)
-        .path("/")
-        .max_age(Dudu::days(7)) // The cookie expires after 7 days
-        .finish();
-
-    // Display the JWT to see if it is generated correctly
-    HttpResponse::Ok().cookie(cookie).json(json!({
+    HttpResponse::Ok().json(json!({
         "success": true,
-        "message": "Successful connection"
+        "message": "Verification code sent"
     }))
+}
+
+#[derive(serde::Deserialize, Debug)]
+pub struct VerifyCodeForm {
+    email: String,
+    code: String,
+}
+
+pub async fn verify_code_query(form: web::Json<VerifyCodeForm>) -> impl Responder {
+    let email = form.email.clone();
+    let code = form.code.clone();
+
+    // Récupérer le code de vérification stocké pour cet email
+    let stored_code = get_stored_code(&email).unwrap();
+
+    if stored_code == code {
+        // Le code est valide, vous pouvez maintenant créer une session pour l'utilisateur
+        let conn = CONNECTION.lock().unwrap();
+        let (user_id, hash_pw) = get_user_by_email(&conn, &email).unwrap().unwrap();
+
+        // Récupérer le mot de passe de l'utilisateur depuis le cache
+        let pw = USER_PASSWORD_CACHE.lock().unwrap().remove(&email).unwrap();
+
+        let session_id = generate_session_id();
+        let user_key = derive_key(&pw, &generate_salt_from_login(&email), 10000);
+
+        SESSION_CACHE.insert(
+            session_id.clone(),
+            Arc::new(Mutex::new(Session::new(user_id, &hash_pw, &user_key))),
+        );
+
+        EMAIL_TO_SESSION_KEY.insert(email.clone(), session_id.clone());
+
+        if let Some(pending) = PENDING_SHARE_CACHE.get(&email) {
+            let mut pending = pending.lock().unwrap();
+            for (vault_info, vault_key) in pending.drain(..) {
+                vault_info
+                    .save_key(vault_key.as_slice(), user_key.as_slice(), user_id)
+                    .unwrap();
+                create_vault(&conn, &vault_info, user_id).unwrap();
+            }
+        }
+
+        let jwt = JWT::new(&session_id, user_id, &email);
+
+        let cookie = Cookie::build("user_token", serde_json::to_string(&jwt).unwrap())
+            .http_only(true)
+            .secure(true) // Use secure(true) if you are in production (HTTPS)
+            .path("/")
+            .max_age(Dudu::days(7)) // The cookie expires after 7 days
+            .finish();
+
+        HttpResponse::Ok().cookie(cookie).json(json!({
+            "success": true,
+            "message": "Successful connection"
+        }))
+    } else {
+        HttpResponse::Unauthorized().json("Invalid verification code")
+    }
 }
 
 pub async fn logout_user_query(req: HttpRequest) -> impl Responder {
@@ -333,4 +364,8 @@ pub async fn logout_user_query(req: HttpRequest) -> impl Responder {
 #[derive(Deserialize)]
 pub struct VaultForm {
     pub(crate) name: String, // The name must match the `name` attribute of the HTML form
+}
+
+lazy_static! {
+    static ref USER_PASSWORD_CACHE: Mutex<HashMap<String, String>> = Mutex::new(HashMap::new());
 }

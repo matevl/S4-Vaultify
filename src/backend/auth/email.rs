@@ -80,3 +80,10 @@ pub fn final_send(email_address: &str) -> Result<Timecode, Box<dyn std::error::E
         Ok(Timecode::new(code, email_address.to_string()))
     }
 }
+
+// Function to retrieve the stored verification code for an email
+pub fn get_stored_code(email: &str) -> Option<String> {
+    // Implement this function to retrieve the stored verification code for the given email
+    // For example, you can use a HashMap or a database to store and retrieve the codes
+    None
+}
