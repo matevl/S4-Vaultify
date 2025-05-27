@@ -1,11 +1,18 @@
 use crate::backend::aes_keys::keys_password::{derive_key, generate_salt_from_login};
-use crate::backend::server_manager::global_manager::{get_user_from_cookie, CONNECTION, EMAIL_TO_SESSION_KEY, PENDING_SHARE_CACHE, ROOT, SESSION_CACHE, USER_CODE_CACHE, USER_PASSWORD_CACHE};
+use crate::backend::auth::email::*;
+use crate::backend::server_manager::global_manager::{
+    get_user_from_cookie, CONNECTION, EMAIL_TO_SESSION_KEY, PENDING_SHARE_CACHE, ROOT,
+    SESSION_CACHE, USER_CODE_CACHE, USER_PASSWORD_CACHE,
+};
 use crate::backend::server_manager::vault_manager::{create_vault, VaultInfo};
 use crate::backend::{VAULTS_DATA, VAULT_USERS_DIR};
 use actix_web::cookie::time::{Duration as Dudu, Duration, OffsetDateTime};
 use actix_web::cookie::{Cookie, SameSite};
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
+use lazy_static::lazy_static;
+use moka::sync::Cache;
+use rusqlite::fallible_iterator::FallibleIterator;
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -14,10 +21,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use uuid::Uuid;
-use crate::backend::auth::email::*;
-use lazy_static::lazy_static;
-use moka::sync::Cache;
-use rusqlite::fallible_iterator::FallibleIterator;
 
 /**
  * Enum representing user permissions.
@@ -276,7 +279,7 @@ pub async fn login_user_query(form: web::Json<LoginForm>) -> impl Responder {
 
     USER_PASSWORD_CACHE.insert(email.clone(), pw);
     let _ = final_send(&email);
-    
+
     HttpResponse::Ok().json(json!({
         "success": true,
         "message": "Verification code sent"
@@ -293,60 +296,75 @@ pub async fn verify_code_query(form: web::Json<VerifyCodeForm>) -> impl Responde
     let email = form.email.clone();
     let code = form.code.clone();
 
-
-    let stored_code = match USER_CODE_CACHE.get(&email){
-        Some(code) => code,
+    let stored_code = match USER_CODE_CACHE.get(&email) {
+        Some(c) => c,
         None => return HttpResponse::Unauthorized().json("Invalid verification code"),
     };
 
     if stored_code != code {
-        return HttpResponse::Unauthorized().json("Invalid verification code")
+        return HttpResponse::Unauthorized().json("Invalid verification code");
     }
-    
-    
-    let conn = CONNECTION.lock().unwrap();
-    let (user_id, hash_pw) = get_user_by_email(&conn, &email).unwrap().unwrap();
 
+    USER_CODE_CACHE.invalidate(&email);
 
-    let pw = match USER_PASSWORD_CACHE.get(&email) {
-        Some(pw) => pw,
-        None => return HttpResponse::Unauthorized().json("Invalid verification code"),
-    };
-    USER_PASSWORD_CACHE.invalidate(&email);
+    let session_id = match EMAIL_TO_SESSION_KEY.get(&email) {
+        Some(session_id) => session_id.clone(),
+        None => {
+            let conn = CONNECTION.lock().unwrap();
 
-    let session_id = generate_session_id();
-    let user_key = derive_key(&pw, &generate_salt_from_login(&email), 10000);
+            let (user_id, hash_pw) = match get_user_by_email(&conn, &email).unwrap() {
+                Some(user_data) => user_data,
+                None => return HttpResponse::Unauthorized().json("Invalid verification code"),
+            };
 
-    SESSION_CACHE.insert(
-        session_id.clone(),
-        Arc::new(Mutex::new(Session::new(user_id, &hash_pw, &user_key))),
-    );
+            let pw = match USER_PASSWORD_CACHE.get(&email) {
+                Some(pw) => pw,
+                None => return HttpResponse::Unauthorized().json("Invalid verification code"),
+            };
 
-    EMAIL_TO_SESSION_KEY.insert(email.clone(), session_id.clone());
+            USER_PASSWORD_CACHE.invalidate(&email);
 
-    if let Some(pending) = PENDING_SHARE_CACHE.get(&email) {
-        let mut pending = pending.lock().unwrap();
-        for (vault_info, vault_key) in pending.drain(..) {
-            vault_info
-                .save_key(vault_key.as_slice(), user_key.as_slice(), user_id)
-                .unwrap();
-            create_vault(&conn, &vault_info, user_id).unwrap();
+            let session_id = generate_session_id();
+            let user_key = derive_key(&pw, &generate_salt_from_login(&email), 10000);
+
+            SESSION_CACHE.insert(
+                session_id.clone(),
+                Arc::new(Mutex::new(Session::new(user_id, &hash_pw, &user_key))),
+            );
+
+            EMAIL_TO_SESSION_KEY.insert(email.clone(), session_id.clone());
+
+            if let Some(pending) = PENDING_SHARE_CACHE.get(&email) {
+                let mut pending = pending.lock().unwrap();
+                for (vault_info, vault_key) in pending.drain(..) {
+                    vault_info
+                        .save_key(vault_key.as_slice(), user_key.as_slice(), user_id)
+                        .unwrap();
+                    create_vault(&conn, &vault_info, user_id).unwrap();
+                }
+            }
+
+            session_id
         }
-    }
+    };
+
+    let session = SESSION_CACHE.get(&session_id).unwrap();
+    let session = session.lock().unwrap();
+    let user_id = session.user_id;
 
     let jwt = JWT::new(&session_id, user_id, &email);
 
     let cookie = Cookie::build("user_token", serde_json::to_string(&jwt).unwrap())
         .http_only(true)
-        .secure(true) // Use secure(true) if you are in production (HTTPS)
+        .secure(true)
         .path("/")
-        .max_age(Dudu::days(7)) // The cookie expires after 7 days
+        .max_age(Dudu::days(7))
         .finish();
 
     HttpResponse::Ok().cookie(cookie).json(json!({
-            "success": true,
-            "message": "Successful connection"
-        }))
+        "success": true,
+        "message": "Successful connection"
+    }))
 }
 
 pub async fn logout_user_query(req: HttpRequest) -> impl Responder {

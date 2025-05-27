@@ -1,8 +1,8 @@
+use crate::backend::server_manager::global_manager::USER_CODE_CACHE;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
 use rand::Rng; // For handling current date and time
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use crate::backend::server_manager::global_manager::USER_CODE_CACHE;
 
 pub struct Timecode {
     pub code: String,
