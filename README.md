@@ -7,7 +7,15 @@ In addition to its standalone capabilities, Vaultify can be deployed as a server
 
 Keep your secrets secure in the digital age with Vaultify.
 
-# Lib to compile the project on Debian based Server
+# Compile the frontend 
+
+```shell
+npm install
+
+npm run build
+```
+
+# Lib to compile the backend of the project on Debian based Server
 ```shell
 sudo apt-get update
           sudo apt-get install -y \
