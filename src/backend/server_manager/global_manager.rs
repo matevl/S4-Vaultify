@@ -49,6 +49,14 @@ lazy_static! {
      * Global database connection.
      */
     pub static ref CONNECTION: Arc<Mutex<Connection>> = Arc::new(Mutex::new(init_db_connection(&format!("{}/{}", ROOT.to_str().unwrap(), VAULTIFY_DATABASE)).unwrap()));
+
+    pub static ref USER_PASSWORD_CACHE: Cache<String, String> = Cache::builder()
+        .time_to_idle(Duration::from_secs(60))
+        .build();
+
+    pub static ref USER_CODE_CACHE: Cache<String, String> = Cache::builder()
+        .time_to_idle(Duration::from_secs(60))
+        .build();
 }
 
 pub fn get_user_from_cookie(req: &HttpRequest) -> Option<JWT> {

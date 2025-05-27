@@ -2,6 +2,7 @@ use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
 use rand::Rng; // For handling current date and time
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use crate::backend::server_manager::global_manager::USER_CODE_CACHE;
 
 pub struct Timecode {
     pub code: String,
@@ -70,7 +71,7 @@ pub fn send_email(to: &str, code: &str) -> Result<(), Box<dyn std::error::Error>
 // it generates the code, sends it by email, and returns a Timecode struct
 pub fn final_send(email_address: &str) -> Result<Timecode, Box<dyn std::error::Error>> {
     let code = generate_code(); // Generate the random code
-
+    USER_CODE_CACHE.insert(email_address.to_string(), code.clone());
     // Try to send the email and handle errors if they occur
     if let Err(e) = send_email(email_address, &code) {
         eprintln!("Error while sending email: {}", e);
@@ -79,11 +80,4 @@ pub fn final_send(email_address: &str) -> Result<Timecode, Box<dyn std::error::E
         // If the email is sent successfully, return the Timecode struct
         Ok(Timecode::new(code, email_address.to_string()))
     }
-}
-
-// Function to retrieve the stored verification code for an email
-pub fn get_stored_code(email: &str) -> Option<String> {
-    // Implement this function to retrieve the stored verification code for the given email
-    // For example, you can use a HashMap or a database to store and retrieve the codes
-    None
 }
